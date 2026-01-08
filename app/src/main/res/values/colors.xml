@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Colors - Warm and friendly for children -->
+    <color name="primary">#FF6B6B</color>
+    <color name="primary_dark">#EE5A5A</color>
+    <color name="primary_light">#FF8A8A</color>
+    
+    <!-- Secondary Colors - Playful accent -->
+    <color name="secondary">#4ECDC4</color>
+    <color name="secondary_dark">#3DBDB5</color>
+    <color name="secondary_light">#6EDDD5</color>
+    
+    <!-- Accent Colors - Fun highlights -->
+    <color name="accent_yellow">#FFE66D</color>
+    <color name="accent_purple">#A78BFA</color>
+    <color name="accent_orange">#FB923C</color>
+    <color name="accent_green">#34D399</color>
+    <color name="accent_blue">#60A5FA</color>
+    
+    <!-- Background Colors -->
+    <color name="background">#FFF5F5</color>
+    <color name="background_card">#FFFFFF</color>
+    <color name="background_gradient_start">#FFE5E5</color>
+    <color name="background_gradient_end">#E5F4FF</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#2D3748</color>
+    <color name="text_secondary">#718096</color>
+    <color name="text_hint">#A0AEC0</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    
+    <!-- Status Colors -->
+    <color name="success">#48BB78</color>
+    <color name="warning">#ECC94B</color>
+    <color name="error">#F56565</color>
+    
+    <!-- Shadow/Overlay -->
+    <color name="shadow">#1A000000</color>
+    <color name="overlay">#80000000</color>
+    
+    <!-- Story Card Gradient Colors -->
+    <color name="card_gradient_1">#FFE5EC</color>
+    <color name="card_gradient_2">#E5F0FF</color>
+    <color name="card_gradient_3">#E5FFE5</color>
+    <color name="card_gradient_4">#FFF5E5</color>
+    
+    <!-- TTS Button Colors -->
+    <color name="tts_play">#4ECDC4</color>
+    <color name="tts_pause">#FFE66D</color>
+    <color name="tts_stop">#FF6B6B</color>
+</resources>
