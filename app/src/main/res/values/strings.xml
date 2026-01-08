@@ -21,11 +21,11 @@
     
     <!-- Story Detail -->
     <string name="story_detail_title">Chi Tiết Truyện</string>
-    <string name="btn_read_story">🔊 Đọc Truyện</string>
-    <string name="btn_pause">⏸️ Tạm Dừng</string>
-    <string name="btn_resume">▶️ Đọc Tiếp</string>
-    <string name="btn_stop">⏹️ Dừng</string>
-    <string name="btn_stop_reading">⏹️ Dừng đọc</string>
+    <string name="btn_read_story">PHÁT</string>
+    <string name="btn_pause">DỪNG</string>
+    <string name="btn_resume">TIẾP</string>
+    <string name="btn_stop">DỪNG</string>
+    <string name="btn_stop_reading">DỪNG</string>
     <string name="tts_reading">Đang đọc truyện...</string>
     <string name="tts_paused">Đã tạm dừng</string>
     <string name="tts_stopped">Đã dừng</string>
