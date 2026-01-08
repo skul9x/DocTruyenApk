@@ -55,11 +55,12 @@
             android:id="@+id/tvStoryTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="64dp"
             android:padding="16dp"
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:maxLines="2"
+            android:lines="2"
             android:ellipsize="end"
             android:gravity="center"
             tools:text="Cô Bé Quàng Khăn Đỏ" />

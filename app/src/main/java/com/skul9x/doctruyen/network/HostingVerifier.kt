@@ -5,10 +5,10 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.view.Window
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import com.skul9x.doctruyen.R
 
 /**
@@ -16,8 +16,8 @@ import com.skul9x.doctruyen.R
  * Pattern adapted from LocateShare-main
  * 
  * free.nf uses cookie-based verification, this class handles:
- * 1. Opens a WebView to load the hosting URL
- * 2. Waits for the __test cookie to be set
+ * 1. Opens a hidden WebView to load the hosting URL
+ * 2. Waits for the __test cookie to be set (silently)
  * 3. Stores the cookie for subsequent API requests
  */
 object HostingVerifier {
@@ -31,10 +31,16 @@ object HostingVerifier {
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.setCancelable(false)
         
+        // Make dialog invisible to user - 1x1 pixel, no dim
+        dialog.window?.apply {
+            setLayout(1, 1)
+            setDimAmount(0f)
+            addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+        }
+        
         val webView = dialog.findViewById<WebView>(R.id.webView)
         
         if (webView == null) {
-            Toast.makeText(context, "Lỗi: Không tìm thấy WebView!", Toast.LENGTH_SHORT).show()
             onResult(false)
             return
         }
@@ -51,9 +57,6 @@ object HostingVerifier {
             useWideViewPort = true
         }
         
-        // DO NOT Clear cookies - we want to keep them if they exist
-        // CookieManager.getInstance().removeAllCookies(null)
-        
         webView.webViewClient = object : WebViewClient() {
             var verificationAttempts = 0
             
@@ -65,23 +68,16 @@ object HostingVerifier {
                 com.skul9x.doctruyen.utils.DebugLogger.log("HostingVerifier", "Page Loaded: $loadedUrl\nCookies: $cookies", com.skul9x.doctruyen.utils.LogType.INFO)
 
                 if (cookies != null && cookies.contains("__test")) {
-                    // Successfully verified!
+                    // Successfully verified - silently
                     RetrofitClient.cookie = cookies
-                    Toast.makeText(context, "✅ Xác thực thành công!", Toast.LENGTH_SHORT).show()
                     dialog.dismiss()
                     onResult(true)
-                } else if (verificationAttempts < 3) {
-                    // Give it a moment for JS to run and reload
-                    // The aes.js script redirects, so we might just wait for the next onPageFinished
-                    Toast.makeText(context, "⏳ Đang chờ xác thực...", Toast.LENGTH_SHORT).show()
-                } else {
-                    // Failed after attempts
-                    if (verificationAttempts >= 5) { // Timeout
-                         dialog.dismiss()
-                         onResult(false)
-                         Toast.makeText(context, "⚠️ Không thể xác thực hosting!", Toast.LENGTH_LONG).show()
-                    }
+                } else if (verificationAttempts >= 5) {
+                    // Timeout - silent failure
+                    dialog.dismiss()
+                    onResult(false)
                 }
+                // Otherwise wait for next page load
             }
             
             override fun onReceivedError(
@@ -91,7 +87,6 @@ object HostingVerifier {
                 failingUrl: String?
             ) {
                 super.onReceivedError(view, errorCode, description, failingUrl)
-                Toast.makeText(context, "❌ Lỗi kết nối: $description", Toast.LENGTH_LONG).show()
                 dialog.dismiss()
                 onResult(false)
             }
@@ -99,6 +94,5 @@ object HostingVerifier {
         
         webView.loadUrl(url)
         dialog.show()
-        Toast.makeText(context, "🔄 Đang xác thực hosting...", Toast.LENGTH_LONG).show()
     }
 }

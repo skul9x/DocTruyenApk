@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Kho Truyện Bé</string>
+    <string name="app_name">Truyện cho Minh Khôi</string>
     
     <!-- Navigation -->
     <string name="nav_home">Trang Chủ</string>
@@ -9,8 +9,8 @@
     <string name="nav_sort">Sắp Xếp</string>
     
     <!-- Home Screen -->
-    <string name="home_title">🌟 Kho Truyện Bé 🌟</string>
-    <string name="home_subtitle">Khám phá thế giới truyện cổ tích</string>
+    <string name="home_title">Truyện cho Minh Khôi</string>
+    <string name="home_subtitle">Những câu chuyện hay dành cho con</string>
     <string name="search_hint">🔍 Tìm truyện yêu thích...</string>
     <string name="random_story">🎲 Truyện Ngẫu Nhiên</string>
     <string name="stories_count">%d truyện</string>

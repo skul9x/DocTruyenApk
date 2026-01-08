@@ -31,6 +31,7 @@ class ReadingService : Service() {
     
     // State callbacks for UI
     private var stateCallback: ((TTSManager.TTSState) -> Unit)? = null
+    private var progressCallback: ((Int) -> Unit)? = null
     var currentState = TTSManager.TTSState.IDLE
         private set
         
@@ -52,33 +53,41 @@ class ReadingService : Service() {
 
     private fun initTTS() {
         android.util.Log.d("ReadingService", "🔧 initTTS: Creating TTSManager")
-        ttsManager = TTSManager(this) { state ->
-            android.util.Log.d("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState")
-            val previousState = currentState
-            currentState = state
-            
-            // Only update notification for relevant states
-            if (state == TTSManager.TTSState.PLAYING || state == TTSManager.TTSState.PAUSED) {
-                updateNotification(state)
-            } else if (state == TTSManager.TTSState.READY || state == TTSManager.TTSState.IDLE) {
-                // Determine if we finished playing naturally
-                if (previousState == TTSManager.TTSState.PLAYING) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } else {
-                     // Just remove notification if it exists (e.g. from Stop button)
-                     // But wait, stopReading already calls stopForeground.
-                     // The issue is updateNotification might have reposted it.
-                     // Here we DON'T repost notification.
-                     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                     manager.cancel(NOTIFICATION_ID)
+        ttsManager = TTSManager(
+            context = this,
+            onStateChange = { state ->
+                android.util.Log.d("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState")
+                val previousState = currentState
+                currentState = state
+                
+                // Only update notification for relevant states
+                if (state == TTSManager.TTSState.PLAYING || state == TTSManager.TTSState.PAUSED) {
+                    updateNotification(state)
+                } else if (state == TTSManager.TTSState.READY || state == TTSManager.TTSState.IDLE) {
+                    // Determine if we finished playing naturally
+                    if (previousState == TTSManager.TTSState.PLAYING) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                         // Just remove notification if it exists (e.g. from Stop button)
+                         // But wait, stopReading already calls stopForeground.
+                         // The issue is updateNotification might have reposted it.
+                         // Here we DON'T repost notification.
+                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                         manager.cancel(NOTIFICATION_ID)
+                    }
+                    // Reset progress when stopped/ready
+                    progressCallback?.invoke(0)
+                } else if (state == TTSManager.TTSState.ERROR) {
+                     stopForeground(STOP_FOREGROUND_REMOVE)
                 }
-            } else if (state == TTSManager.TTSState.ERROR) {
-                 stopForeground(STOP_FOREGROUND_REMOVE)
+                
+                android.util.Log.d("ReadingService", "📤 Forwarding to stateCallback: callback=${stateCallback != null}, state=$state")
+                stateCallback?.invoke(state)
+            },
+            onProgressChange = { progress ->
+                progressCallback?.invoke(progress)
             }
-            
-            android.util.Log.d("ReadingService", "📤 Forwarding to stateCallback: callback=${stateCallback != null}, state=$state")
-            stateCallback?.invoke(state)
-        }
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -100,8 +109,13 @@ class ReadingService : Service() {
         callback(currentState)
     }
     
+    fun setProgressCallback(callback: (Int) -> Unit) {
+        progressCallback = callback
+    }
+    
     fun removeStateCallback() {
         stateCallback = null
+        progressCallback = null
     }
 
     fun startReading(storyId: Int, title: String, content: String) {

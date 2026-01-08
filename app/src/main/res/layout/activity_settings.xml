@@ -158,12 +158,28 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
                     
                     <!-- Pitch Slider -->
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="@string/settings_pitch"
-                        android:textColor="@color/text_secondary" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_pitch"
+                            android:textColor="@color/text_secondary" />
+                            
+                        <TextView
+                            android:id="@+id/tvPitchValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/primary"
+                            android:textStyle="bold"
+                            android:text="1.0x" />
+                    </LinearLayout>
                         
                     <com.google.android.material.slider.Slider
                         android:id="@+id/sliderPitch"
@@ -175,12 +191,28 @@
                         android:stepSize="0.1" />
 
                     <!-- Speed Slider -->
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/settings_speed"
-                        android:textColor="@color/text_secondary" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_speed"
+                            android:textColor="@color/text_secondary" />
+                            
+                        <TextView
+                            android:id="@+id/tvSpeedValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/primary"
+                            android:textStyle="bold"
+                            android:text="1.0x" />
+                    </LinearLayout>
                         
                     <com.google.android.material.slider.Slider
                         android:id="@+id/sliderSpeed"

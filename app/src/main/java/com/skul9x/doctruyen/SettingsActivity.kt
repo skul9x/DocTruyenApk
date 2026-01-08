@@ -41,20 +41,27 @@ class SettingsActivity : AppCompatActivity() {
         // Initialize TTS Sliders
         val sliderPitch = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPitch)
         val sliderSpeed = findViewById<com.google.android.material.slider.Slider>(R.id.sliderSpeed)
+        val tvPitchValue = findViewById<android.widget.TextView>(R.id.tvPitchValue)
+        val tvSpeedValue = findViewById<android.widget.TextView>(R.id.tvSpeedValue)
+        
+        // Helper to format slider value
+        fun formatSliderValue(value: Float): String = String.format("%.1fx", value)
         
         sliderPitch.value = UserConfig.getTtsPitch(this)
         sliderSpeed.value = UserConfig.getTtsSpeed(this)
         
+        // Set initial values
+        tvPitchValue.text = formatSliderValue(sliderPitch.value)
+        tvSpeedValue.text = formatSliderValue(sliderSpeed.value)
+        
         sliderPitch.addOnChangeListener { _, value, _ ->
             UserConfig.setTtsPitch(this, value)
+            tvPitchValue.text = formatSliderValue(value)
         }
         
         sliderSpeed.addOnChangeListener { _, value, _ ->
             UserConfig.setTtsSpeed(this, value)
-        }
-
-        sliderSpeed.addOnChangeListener { _, value, _ ->
-            UserConfig.setTtsSpeed(this, value)
+            tvSpeedValue.text = formatSliderValue(value)
         }
         
         // Voice Selection Logic

@@ -158,6 +158,20 @@
                     tools:text="Đang đọc truyện..."
                     tools:visibility="visible" />
 
+                <!-- TTS Progress Indicator -->
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/progressTts"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginHorizontal="32dp"
+                    app:indicatorColor="@color/primary"
+                    app:trackColor="@color/primary_light"
+                    app:trackCornerRadius="4dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
                 <!-- Loading Indicator -->
                 <LinearLayout
                     android:id="@+id/loadingContainer"

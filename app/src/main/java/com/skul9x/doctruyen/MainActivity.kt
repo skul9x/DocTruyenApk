@@ -7,7 +7,6 @@ import android.text.TextWatcher
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -40,13 +39,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorState: LinearLayout
     private lateinit var errorText: TextView
     private lateinit var searchEditText: EditText
-    private lateinit var btnClearSearch: ImageButton
+    private lateinit var btnClearSearch: android.widget.ImageButton
     private lateinit var btnRandomStory: MaterialButton
     private lateinit var btnRetry: MaterialButton
     private lateinit var btnErrorRetry: MaterialButton
     
-    private lateinit var btnSettings: ImageButton
-    private lateinit var btnSort: ImageButton
+    private lateinit var btnSettings: MaterialButton
+    private lateinit var btnSort: MaterialButton
     
     private lateinit var adapter: StoryAdapter
     private var currentPage = 1
@@ -168,6 +167,9 @@ class MainActivity : AppCompatActivity() {
                 currentPage = 1
                 adapter.resetAnimations()
                 loadStories()
+                
+                // Hide keyboard to show results
+                hideKeyboard()
                 true
             } else false
         }
@@ -207,7 +209,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showSortDialog() {
-        val sortOptions = arrayOf("Mới nhất", "Cũ nhất", "Tên A-Z", "Tên Z-A")
+        val sortOptions = arrayOf("🕐 Mới nhất", "📅 Cũ nhất", "🔤 Tên A-Z", "🔠 Tên Z-A")
         val sortValues = arrayOf("newest", "oldest", "a_z", "z_a")
         
         val currentSort = com.skul9x.doctruyen.utils.UserConfig.getSortOrder(this)
@@ -231,17 +233,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun verifyHosting() {
+        // Show loading indicator during verification
         progressBar.visibility = View.VISIBLE
+        
         // Use configured URL
         val url = com.skul9x.doctruyen.utils.UserConfig.getBaseUrl(this)
         
         HostingVerifier.verify(this, url) { success ->
             isVerified = success
-            if (success) {
-                adapter.resetAnimations()
-                loadStories(refresh = true) // Force reload with new URL if changed
-            } else {
-                runOnUiThread {
+            runOnUiThread {
+                if (success) {
+                    adapter.resetAnimations()
+                    loadStories(refresh = true) // Force reload with new URL if changed
+                } else {
                     progressBar.visibility = View.GONE
                     showError(getString(R.string.verify_failed))
                 }
@@ -294,6 +298,9 @@ class MainActivity : AppCompatActivity() {
                         showError(response.message ?: getString(R.string.error_server))
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Coroutine was cancelled (e.g., new search started), ignore silently
+                return@launch
             } catch (e: Exception) {
                 if (currentPage == 1) {
                     showError(e.message ?: getString(R.string.error_unknown))
@@ -352,5 +359,12 @@ class MainActivity : AppCompatActivity() {
         }
         startActivity(intent)
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
+    
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        currentFocus?.let { view ->
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
+        }
     }
 }

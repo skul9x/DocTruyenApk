@@ -17,7 +17,8 @@ import java.util.Locale
  */
 class TTSManager(
     context: Context,
-    private val onStateChange: (TTSState) -> Unit
+    private val onStateChange: (TTSState) -> Unit,
+    private val onProgressChange: ((Int) -> Unit)? = null // Progress 0-100
 ) {
     
     enum class TTSState {
@@ -167,6 +168,12 @@ class TTSManager(
                         0
                     }
                     currentCharPosition = chunkOffset + start
+                    
+                    // Report progress as percentage
+                    if (fullText.isNotEmpty()) {
+                        val progress = ((currentCharPosition.toFloat() / fullText.length) * 100).toInt().coerceIn(0, 100)
+                        onProgressChange?.invoke(progress)
+                    }
                 }
             }
             

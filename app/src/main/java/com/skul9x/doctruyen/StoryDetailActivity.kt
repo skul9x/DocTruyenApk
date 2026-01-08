@@ -100,6 +100,16 @@ class StoryDetailActivity : AppCompatActivity() {
                     }
                 }
             }
+            
+            // Connect to progress updates
+            val progressBar = findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.progressTts)
+            boundService.setProgressCallback { progress ->
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        progressBar.progress = progress
+                    }
+                }
+            }
         }
 
         override fun onServiceDisconnected(name: android.content.ComponentName?) {
@@ -374,6 +384,8 @@ class StoryDetailActivity : AppCompatActivity() {
     private fun updateTTSUI(state: TTSManager.TTSState) {
         DebugLogger.log(TAG, "🎨 updateTTSUI: state=$state", LogType.INFO)
         
+        val progressTts = findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.progressTts)
+        
         when (state) {
             TTSManager.TTSState.IDLE, TTSManager.TTSState.INITIALIZING, TTSManager.TTSState.READY, TTSManager.TTSState.ERROR -> {
                 // Button A: "Đọc truyện", Active
@@ -387,6 +399,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 btnStop.alpha = 0.5f // Dimmed
                 
                 tvTtsStatus.visibility = View.INVISIBLE
+                progressTts.visibility = View.GONE
             }
             TTSManager.TTSState.PLAYING -> {
                 // Button A: "Tạm dừng", Active
@@ -401,6 +414,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 
                 tvTtsStatus.text = getString(R.string.tts_reading)
                 tvTtsStatus.visibility = View.VISIBLE
+                progressTts.visibility = View.VISIBLE
             }
             TTSManager.TTSState.PAUSED -> {
                 // Button A: "Đọc tiếp", Active
@@ -415,6 +429,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 
                 tvTtsStatus.text = getString(R.string.tts_paused)
                 tvTtsStatus.visibility = View.VISIBLE
+                progressTts.visibility = View.VISIBLE
             }
         }
         
