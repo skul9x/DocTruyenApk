@@ -51,7 +51,9 @@ class ReadingService : Service() {
     }
 
     private fun initTTS() {
+        android.util.Log.d("ReadingService", "🔧 initTTS: Creating TTSManager")
         ttsManager = TTSManager(this) { state ->
+            android.util.Log.d("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState")
             val previousState = currentState
             currentState = state
             
@@ -74,6 +76,7 @@ class ReadingService : Service() {
                  stopForeground(STOP_FOREGROUND_REMOVE)
             }
             
+            android.util.Log.d("ReadingService", "📤 Forwarding to stateCallback: callback=${stateCallback != null}, state=$state")
             stateCallback?.invoke(state)
         }
     }
@@ -102,10 +105,13 @@ class ReadingService : Service() {
     }
 
     fun startReading(storyId: Int, title: String, content: String) {
+        android.util.Log.d("ReadingService", "🔊 startReading: storyId=$storyId, title='$title', contentLen=${content.length}")
         currentStoryId = storyId
         currentStoryTitle = title
         // Use speakWithTitlePause for natural 1s pause between title and content
+        android.util.Log.d("ReadingService", "📤 Calling ttsManager.speakWithTitlePause...")
         ttsManager?.speakWithTitlePause(title, content)
+        android.util.Log.d("ReadingService", "✅ After speakWithTitlePause, currentState=$currentState")
         startForeground(NOTIFICATION_ID, buildNotification(TTSManager.TTSState.PLAYING))
     }
 

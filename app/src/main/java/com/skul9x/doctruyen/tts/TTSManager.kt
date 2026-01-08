@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import java.lang.ref.WeakReference
 import java.util.Locale
 
 /**
@@ -18,7 +17,7 @@ import java.util.Locale
  */
 class TTSManager(
     context: Context,
-    onStateChange: (TTSState) -> Unit
+    private val onStateChange: (TTSState) -> Unit
 ) {
     
     enum class TTSState {
@@ -32,8 +31,6 @@ class TTSManager(
     
     // Use applicationContext to prevent Activity memory leak
     private val appContext: Context = context.applicationContext
-    // Use WeakReference for callback to prevent holding Activity reference
-    private var stateChangeCallback: WeakReference<(TTSState) -> Unit> = WeakReference(onStateChange)
     
     private var tts: TextToSpeech? = null
     private var currentState = TTSState.IDLE
@@ -54,12 +51,15 @@ class TTSManager(
     // Track if we're reading title or content
     private var isTitleRead: Boolean = false
     
+    // Flag to prevent onDone from resetting state when pausing
+    private var isPausedByUser: Boolean = false
+    
     init {
         initTTS()
     }
     
     private fun notifyStateChange(state: TTSState) {
-        stateChangeCallback.get()?.invoke(state)
+        onStateChange(state)
     }
     
     private fun initTTS() {
@@ -119,6 +119,13 @@ class TTSManager(
             }
             
             override fun onDone(utteranceId: String?) {
+                // IMPORTANT: Don't reset to READY if user paused
+                // tts.stop() from pause() triggers onDone, we must not override PAUSED state
+                if (isPausedByUser) {
+                    isPausedByUser = false
+                    return // Don't change state, stay PAUSED
+                }
+                
                 when {
                     // After title, play 1s silence then continue to content
                     utteranceId == "title_chunk" -> {
@@ -179,15 +186,18 @@ class TTSManager(
     /**
      * Start speaking the given text
      */
+    /**
+     * Start speaking the given text
+     */
     fun speak(text: String) {
         if (currentState == TTSState.INITIALIZING) {
             pendingText = text
             return
         }
         
-        if (currentState != TTSState.READY && currentState != TTSState.PAUSED) {
-            stop()
-        }
+        // Optimistically set playing state
+        currentState = TTSState.PLAYING
+        notifyStateChange(currentState)
         
         fullText = text
         storyTitle = ""
@@ -213,9 +223,9 @@ class TTSManager(
             return
         }
         
-        if (currentState != TTSState.READY && currentState != TTSState.PAUSED) {
-            stop()
-        }
+        // Optimistically set playing state
+        currentState = TTSState.PLAYING
+        notifyStateChange(currentState)
         
         storyTitle = title
         fullText = content
@@ -265,6 +275,8 @@ class TTSManager(
     }
     
     private fun splitIntoChunks(text: String, maxLength: Int): List<String> {
+        if (text.isEmpty()) return emptyList()
+        
         val chunks = mutableListOf<String>()
         var remaining = text
         
@@ -283,8 +295,16 @@ class TTSManager(
                 breakPoint = maxLength
             }
             
-            chunks.add(remaining.substring(0, breakPoint + 1))
-            remaining = remaining.substring(breakPoint + 1).trim()
+            // Ensure breakPoint doesn't exceed remaining length
+            val endIndex = minOf(breakPoint + 1, remaining.length)
+            chunks.add(remaining.substring(0, endIndex))
+            
+            // Safely get remaining text
+            remaining = if (endIndex < remaining.length) {
+                remaining.substring(endIndex).trim()
+            } else {
+                ""
+            }
         }
         
         return chunks
@@ -296,8 +316,10 @@ class TTSManager(
      */
     fun pause() {
         if (currentState == TTSState.PLAYING) {
-            tts?.stop()
+            // Set flag BEFORE tts.stop() to prevent onDone from resetting state
+            isPausedByUser = true
             currentState = TTSState.PAUSED
+            tts?.stop()
             notifyStateChange(currentState)
             // currentCharPosition is already updated by onRangeStart
         }
@@ -403,6 +425,8 @@ class TTSManager(
      * Stop the speech completely
      */
     fun stop() {
+        // Reset pause flag to prevent stuck state
+        isPausedByUser = false
         tts?.stop()
         resetReadingState()
         currentState = TTSState.READY

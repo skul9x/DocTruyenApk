@@ -1,168 +1,48 @@
-# 📚 DocTruyen - Kho Truyện Bé
+# DocTruyen - Android Story Reading App
 
-<p align="center">
-  <img src="app/src/main/ic_launcher-playstore.png" width="120" alt="DocTruyen Logo"/>
-</p>
+DocTruyen is an Android application designed for reading stories with integrated Text-to-Speech (TTS) capabilities. It allows users to browse stories, read them as text, or listen to them via an automated voice.
 
-<p align="center">
-  <strong>Ứng dụng đọc và nghe truyện cổ tích cho trẻ em</strong>
-</p>
+## Features
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android" alt="Platform"/>
-  <img src="https://img.shields.io/badge/Language-Kotlin-purple?style=flat-square&logo=kotlin" alt="Language"/>
-  <img src="https://img.shields.io/badge/Min%20SDK-24-blue?style=flat-square" alt="Min SDK"/>
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License"/>
-</p>
+-   **Story Browsing**: Browse a collection of stories fetched from a remote API.
+-   **Text-to-Speech (TTS)**: Listen to stories using high-quality TTS.
+    -   **Background Playback**: Continues reading even when the app is minimized or the screen is off.
+    -   **Media Controls**: Play, Pause, Resume, and Stop functionality.
+    -   **Notification Controls**: Control playback directly from the notification shade (Android 13+ support).
+-   **Smart Content Handling**:
+    -   **HTML Content**: proper rendering of story text.
+    -   **Image Loading**: Secure image loading with custom headers (Cookies, User-Agent) using Glide.
+-   **Debug Mode**: Built-in debug logging viewer for monitoring app performance and logic on the fly.
 
----
+## Technical Stack
 
-## ✨ Tính năng chính
+-   **Language**: Kotlin
+-   **Minimum SDK**: 24 (Android 7.0)
+-   **Target SDK**: 35 (Android 15)
+-   **Architecture**: MVVM / Service-based for Audio
+-   **Networking**: Retrofit 2, OkHttp 3, Gson
+-   **Image Loading**: Glide 4.x
+-   **Concurrency**: Kotlin Coroutines
+-   **UI Components**: Material Design 3, RecyclerView, CardView, SwipeRefreshLayout
 
-| Tính năng | Mô tả |
-|-----------|-------|
-| 📖 **Đọc truyện** | Hiển thị nội dung truyện với định dạng đẹp, dễ đọc |
-| 🔊 **Nghe truyện (TTS)** | Text-to-Speech với giọng đọc tiếng Việt tự nhiên |
-| 🎲 **Truyện ngẫu nhiên** | Khám phá truyện mới mỗi ngày |
-| 🔍 **Tìm kiếm** | Tìm nhanh truyện yêu thích với debounce search |
-| 🔄 **Sắp xếp** | Sắp xếp theo thời gian hoặc tên A-Z |
-| ⚙️ **Tùy chỉnh giọng đọc** | Điều chỉnh tốc độ, cao độ, chọn giọng đọc |
-| 🌙 **Giao diện đẹp** | Material Design 3 với màu sắc sinh động |
+## Permissions
 
----
+The app requires the following permissions:
+-   `INTERNET`: To fetch story data and images.
+-   `ACCESS_NETWORK_STATE`: To check connectivity.
+-   `FOREGROUND_SERVICE` & `FOREGROUND_SERVICE_MEDIA_PLAYBACK`: To run the TTS service in the background.
+-   `POST_NOTIFICATIONS`: To show media controls in the notification area (Android 13+).
 
-## 📱 Screenshots
+## Development Notes
 
-| Màn hình chính | Chi tiết truyện | Cài đặt |
-|:--------------:|:---------------:|:-------:|
-| *Danh sách truyện* | *Đọc & Nghe* | *Tùy chỉnh* |
+### TTS Logic
+The TTS engine is managed by `TTSManager` and exposed via `ReadingService`. The `StoryDetailActivity` binds to this service to update the UI (buttons, progress) based on the current playback state.
 
----
+### Debugging
+The app includes a custom `DebugLogger` utility. Logs can be viewed in Logcat or within the app's `DebugLogActivity`.
 
-## 🛠️ Công nghệ sử dụng
-
-- **Kotlin** - Ngôn ngữ chính
-- **Material Design 3** - UI Components
-- **Retrofit + OkHttp** - API Client với Cookie handling
-- **Glide** - Image loading với authentication
-- **Coroutines** - Async programming
-- **Android TTS** - Text-to-Speech engine
-- **Foreground Service** - Background playback
-
----
-
-## 🏗️ Kiến trúc
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Presentation Layer                      │
-│  ┌─────────────┐  ┌──────────────────┐  ┌────────────────┐  │
-│  │ MainActivity│  │StoryDetailActivity│  │SettingsActivity│  │
-│  └──────┬──────┘  └────────┬─────────┘  └───────┬────────┘  │
-└─────────┼──────────────────┼────────────────────┼───────────┘
-          │                  │                    │
-┌─────────┼──────────────────┼────────────────────┼───────────┐
-│         │          Service Layer                │           │
-│         │    ┌─────────────┴────────────┐       │           │
-│         │    │     ReadingService       │       │           │
-│         │    │  (Foreground + TTS)      │       │           │
-│         │    └─────────────┬────────────┘       │           │
-└─────────┼──────────────────┼────────────────────┼───────────┘
-          │                  │                    │
-┌─────────┼──────────────────┼────────────────────┼───────────┐
-│         │           Data Layer                  │           │
-│  ┌──────┴──────┐  ┌────────┴────────┐  ┌────────┴────────┐  │
-│  │RetrofitClient│  │  HostingVerifier │  │   UserConfig   │  │
-│  │  (API)      │  │  (Cookie Auth)   │  │ (SharedPrefs)  │  │
-│  └─────────────┘  └─────────────────┘  └─────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 Cài đặt & Chạy
-
-### Yêu cầu
-- Android Studio Arctic Fox trở lên
-- JDK 17+
-- Android SDK 24+
-
-### Bước thực hiện
-
+## Build
+To build the project, use standard Gradle commands:
 ```bash
-# 1. Clone repository
-git clone https://github.com/skul9x/doctruyen.git
-
-# 2. Mở project trong Android Studio
-
-# 3. Sync Gradle
-
-# 4. Build & Run
 ./gradlew assembleDebug
 ```
-
-### Cấu hình Server
-
-Trong file `UserConfig.kt`, cập nhật URL server mặc định:
-```kotlin
-private const val DEFAULT_URL = "https://your-server.com/truyen/"
-```
-
----
-
-## 📁 Cấu trúc thư mục
-
-Xem chi tiết tại [structure.md](structure.md)
-
----
-
-## 🔧 API Endpoints
-
-| Endpoint | Method | Mô tả |
-|----------|--------|-------|
-| `?action=list` | GET | Lấy danh sách truyện (pagination) |
-| `?action=detail&id=X` | GET | Lấy chi tiết truyện |
-| `?action=random` | GET | Lấy truyện ngẫu nhiên |
-
-### Request Headers (Bắt buộc)
-```
-X-Requested-With: com.skul9x.doctruyen
-Cookie: <từ HostingVerifier>
-```
-
----
-
-## 🐛 Debug
-
-Ứng dụng có tích hợp **Debug Logger** để theo dõi:
-- API requests/responses
-- Cookie handling
-- Error tracking
-
-Truy cập: **Cài đặt → Xem Nhật Ký Lỗi**
-
----
-
-## 📜 License
-
-```
-MIT License
-
-Copyright (c) 2024 skul9x
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction...
-```
-
----
-
-## 👨‍💻 Tác giả
-
-**skul9x** - *Developer*
-
----
-
-<p align="center">
-  Made with ❤️ for kids in Vietnam 🇻🇳
-</p>
