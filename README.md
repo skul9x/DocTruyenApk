@@ -1,48 +1,64 @@
-# DocTruyen - Android Story Reading App
+# DocTruyen - Ứng Dụng Đọc Truyện Android
 
-DocTruyen is an Android application designed for reading stories with integrated Text-to-Speech (TTS) capabilities. It allows users to browse stories, read them as text, or listen to them via an automated voice.
+**DocTruyen** là ứng dụng đọc truyện hiện đại trên nền tảng Android, mang đến trải nghiệm đọc và nghe truyện mượt mà. Ứng dụng tích hợp công nghệ **Text-to-Speech (TTS)** thông minh, cho phép người dùng nghe truyện mọi lúc mọi nơi, ngay cả khi tắt màn hình.
 
-## Features
+![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-0095D5?style=for-the-badge&logo=kotlin&logoColor=white)
 
--   **Story Browsing**: Browse a collection of stories fetched from a remote API.
--   **Text-to-Speech (TTS)**: Listen to stories using high-quality TTS.
-    -   **Background Playback**: Continues reading even when the app is minimized or the screen is off.
-    -   **Media Controls**: Play, Pause, Resume, and Stop functionality.
-    -   **Notification Controls**: Control playback directly from the notification shade (Android 13+ support).
--   **Smart Content Handling**:
-    -   **HTML Content**: proper rendering of story text.
-    -   **Image Loading**: Secure image loading with custom headers (Cookies, User-Agent) using Glide.
--   **Debug Mode**: Built-in debug logging viewer for monitoring app performance and logic on the fly.
+## ✨ Tính Năng Nổi Bật
 
-## Technical Stack
+### 📖 Trải Nghiệm Đọc
+-   **Kho truyện online**: Kết nối API để hiển thị danh sách truyện mới nhất.
+-   **Hiển thị tối ưu**: Hỗ trợ render nội dung HTML, hiển thị ảnh minh họa sắc nét ngay trong nội dung truyện.
+-   **Điều hướng dễ dàng**: Vuốt để tải lại (Swipe Refresh), cuộn vô tận (Infinite Scroll).
 
--   **Language**: Kotlin
--   **Minimum SDK**: 24 (Android 7.0)
+### 🎧 Text-to-Speech (TTS) - Nghe Truyện
+-   **Phát nền (Background Playback)**: Service đọc truyện chạy ngầm giúp bạn vừa nghe truyện vừa làm việc khác hoặc tắt màn hình tiết kiệm pin.
+-   **Điều khiển mạnh mẽ**:
+    -   Thanh điều khiển (Media Controls) đầy đủ: Play, Pause, Resume, Stop.
+    -   **Notification Controls**: Điều khiển trực tiếp từ thanh thông báo (Notification Panel) hỗ trợ Android 13+.
+    -   **Thông minh**: Tự động đánh dấu vị trí đang đọc dở để đọc tiếp chính xác (Resume).
+
+### 🔍 Tìm Kiếm & Tiện Ích
+-   **Tìm kiếm toàn diện**: Hỗ trợ tìm theo tên truyện và tìm sâu trong nội dung (Content Search).
+-   **Bảo mật hình ảnh**: Hệ thống `HostingVerifier` tự động xử lý request headers (Cookies, User-Agent) để tải được ảnh từ các nguồn chặn hotlink.
+-   **Công cụ cho Developer**: Tích hợp sẵn `DebugLogActivity` để xem log ứng dụng ngay trên điện thoại mà không cần kết nối máy tính.
+
+## 🛠 Tech Stack
+
+Dự án sử dụng các công nghệ và thư viện Android mới nhất:
+
+-   **Ngôn ngữ**: [Kotlin](https://kotlinlang.org/)
+-   **Kiến trúc**: MVVM (Model-View-ViewModel) + Service-based Architecture.
+-   **Giao diện**: XML Layouts, Material Design 3.
+-   **Bất đồng bộ**: Kotlin Coroutines & Flow.
+-   **Networking**:
+    -   [Retrofit 2](https://square.github.io/retrofit/): REST Client.
+    -   [OkHttp 3](https://square.github.io/okhttp/): HTTP Client.
+    -   [Gson](https://github.com/google/gson): JSON Parsing.
+-   **Image Loading**: [Glide 4.x](https://github.com/bumptech/glide) (Custom ModelLoader).
+-   **Logging**: Custom DebugLogger.
+
+## 📱 Cấu Hình Yêu Cầu
+
+-   **Min SDK**: 24 (Android 7.0 Nougat)
 -   **Target SDK**: 35 (Android 15)
--   **Architecture**: MVVM / Service-based for Audio
--   **Networking**: Retrofit 2, OkHttp 3, Gson
--   **Image Loading**: Glide 4.x
--   **Concurrency**: Kotlin Coroutines
--   **UI Components**: Material Design 3, RecyclerView, CardView, SwipeRefreshLayout
+-   **Quyền truy cập**:
+    -   `INTERNET`: Kết nối mạng.
+    -   `FOREGROUND_SERVICE`: Chạy trình đọc truyện ngầm.
+    -   `POST_NOTIFICATIONS`: Hiển thị thông báo điều khiển media.
 
-## Permissions
+## 🚀 Cài Đặt
 
-The app requires the following permissions:
--   `INTERNET`: To fetch story data and images.
--   `ACCESS_NETWORK_STATE`: To check connectivity.
--   `FOREGROUND_SERVICE` & `FOREGROUND_SERVICE_MEDIA_PLAYBACK`: To run the TTS service in the background.
--   `POST_NOTIFICATIONS`: To show media controls in the notification area (Android 13+).
+1.  Clone repository:
+    ```bash
+    git clone https://github.com/skul9x/DocTruyenApk.git
+    ```
+2.  Mở project bằng **Android Studio**.
+3.  Đợi Gradle sync hoàn tất các thư viện.
+4.  Kết nối thiết bị hoặc máy ảo và nhấn **Run** (Shift + F10).
 
-## Development Notes
+## 🤝 Đóng Góp
 
-### TTS Logic
-The TTS engine is managed by `TTSManager` and exposed via `ReadingService`. The `StoryDetailActivity` binds to this service to update the UI (buttons, progress) based on the current playback state.
-
-### Debugging
-The app includes a custom `DebugLogger` utility. Logs can be viewed in Logcat or within the app's `DebugLogActivity`.
-
-## Build
-To build the project, use standard Gradle commands:
-```bash
-./gradlew assembleDebug
-```
+Mọi đóng góp (Pull Requests) hoặc báo lỗi (Issues) đều được hoan nghênh.
+Sản phẩm được phát triển với mục đích học tập và chia sẻ.

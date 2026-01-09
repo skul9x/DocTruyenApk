@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle - Warm Orange/Coral -->
+  <circle cx="256" cy="256" r="256" fill="#FF6B6B"/>
+  
+  <!-- Inner circle glow -->
+  <circle cx="256" cy="256" r="220" fill="#FF8787"/>
+  
+  <!-- Open Book - Base -->
+  <path d="M100 320 L100 180 Q100 160 120 160 L240 160 Q256 160 256 180 L256 340 Q256 320 240 320 L120 320 Q100 320 100 320 Z" fill="#FFFFFF"/>
+  <path d="M412 320 L412 180 Q412 160 392 160 L272 160 Q256 160 256 180 L256 340 Q256 320 272 320 L392 320 Q412 320 412 320 Z" fill="#FFF5E6"/>
+  
+  <!-- Book Spine -->
+  <path d="M256 160 L256 340" stroke="#FFD93D" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Book Lines - Left Page -->
+  <line x1="130" y1="200" x2="230" y2="200" stroke="#FFB5B5" stroke-width="6" stroke-linecap="round"/>
+  <line x1="130" y1="230" x2="220" y2="230" stroke="#FFB5B5" stroke-width="6" stroke-linecap="round"/>
+  <line x1="130" y1="260" x2="225" y2="260" stroke="#FFB5B5" stroke-width="6" stroke-linecap="round"/>
+  <line x1="130" y1="290" x2="210" y2="290" stroke="#FFB5B5" stroke-width="6" stroke-linecap="round"/>
+  
+  <!-- Book Lines - Right Page -->
+  <line x1="282" y1="200" x2="382" y2="200" stroke="#FFD9A8" stroke-width="6" stroke-linecap="round"/>
+  <line x1="282" y1="230" x2="372" y2="230" stroke="#FFD9A8" stroke-width="6" stroke-linecap="round"/>
+  <line x1="282" y1="260" x2="377" y2="260" stroke="#FFD9A8" stroke-width="6" stroke-linecap="round"/>
+  <line x1="282" y1="290" x2="362" y2="290" stroke="#FFD9A8" stroke-width="6" stroke-linecap="round"/>
+  
+  <!-- Stars - Playful -->
+  <path d="M380 100 L390 130 L420 130 L395 150 L405 180 L380 160 L355 180 L365 150 L340 130 L370 130 Z" fill="#FFD93D"/>
+  <path d="M130 90 L137 110 L157 110 L142 123 L148 143 L130 130 L112 143 L118 123 L103 110 L123 110 Z" fill="#FFD93D"/>
+  <path d="M90 200 L95 215 L110 215 L98 225 L103 240 L90 230 L77 240 L82 225 L70 215 L85 215 Z" fill="#FFE066"/>
+  
+  <!-- Cute Character - Little Face peeking from book -->
+  <circle cx="256" cy="380" r="50" fill="#FFEAA7"/>
+  <circle cx="238" cy="370" r="8" fill="#2D3436"/>
+  <circle cx="274" cy="370" r="8" fill="#2D3436"/>
+  <circle cx="240" cy="368" r="3" fill="#FFFFFF"/>
+  <circle cx="276" cy="368" r="3" fill="#FFFFFF"/>
+  <path d="M246 390 Q256 400 266 390" stroke="#FF6B6B" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Rosy Cheeks -->
+  <circle cx="225" cy="385" r="10" fill="#FFB5B5" opacity="0.6"/>
+  <circle cx="287" cy="385" r="10" fill="#FFB5B5" opacity="0.6"/>
+  
+  <!-- Hair/Top -->
+  <path d="M210 350 Q220 320 256 325 Q292 320 302 350" fill="#A0522D" stroke="none"/>
+</svg>
