@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Open Book Left -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,70 L20,38 C20,34 24,34 24,34 L50,34 C54,34 54,38 54,38 L54,74 C54,70 50,70 50,70 L24,70 C20,70 20,70 20,70 Z"/>
+    
+    <!-- Open Book Right -->
+    <path
+        android:fillColor="#FFF5E6"
+        android:pathData="M88,70 L88,38 C88,34 84,34 84,34 L58,34 C54,34 54,38 54,38 L54,74 C54,70 58,70 58,70 L84,70 C88,70 88,70 88,70 Z"/>
+    
+    <!-- Book Spine -->
+    <path
+        android:fillColor="#FFD93D"
+        android:pathData="M52,34 L56,34 L56,74 L52,74 Z"/>
+    
+    <!-- Book Lines Left -->
+    <path
+        android:fillColor="#FFB5B5"
+        android:pathData="M26,41 L48,41 L48,43 L26,43 Z"/>
+    <path
+        android:fillColor="#FFB5B5"
+        android:pathData="M26,49 L46,49 L46,51 L26,51 Z"/>
+    <path
+        android:fillColor="#FFB5B5"
+        android:pathData="M26,57 L47,57 L47,59 L26,59 Z"/>
+    
+    <!-- Book Lines Right -->
+    <path
+        android:fillColor="#FFD9A8"
+        android:pathData="M60,41 L82,41 L82,43 L60,43 Z"/>
+    <path
+        android:fillColor="#FFD9A8"
+        android:pathData="M60,49 L80,49 L80,51 L60,51 Z"/>
+    <path
+        android:fillColor="#FFD9A8"
+        android:pathData="M60,57 L81,57 L81,59 L60,59 Z"/>
+    
+    <!-- Star 1 - Big -->
+    <path
+        android:fillColor="#FFD93D"
+        android:pathData="M82,22 L84,28 L90,28 L85,32 L87,38 L82,34 L77,38 L79,32 L74,28 L80,28 Z"/>
+    
+    <!-- Star 2 - Small -->
+    <path
+        android:fillColor="#FFD93D"
+        android:pathData="M26,18 L28,23 L33,23 L29,26 L31,31 L26,28 L21,31 L23,26 L19,23 L24,23 Z"/>
+    
+    <!-- Star 3 - Tiny -->
+    <path
+        android:fillColor="#FFE066"
+        android:pathData="M18,42 L19,45 L22,45 L20,47 L21,50 L18,48 L15,50 L16,47 L14,45 L17,45 Z"/>
+    
+    <!-- Cute Face Circle -->
+    <path
+        android:fillColor="#FFEAA7"
+        android:pathData="M54,82 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"/>
+    
+    <!-- Eyes -->
+    <path
+        android:fillColor="#2D3436"
+        android:pathData="M50,80 m-2.5,0 a2.5,2.5 0 1,1 5,0 a2.5,2.5 0 1,1 -5,0"/>
+    <path
+        android:fillColor="#2D3436"
+        android:pathData="M58,80 m-2.5,0 a2.5,2.5 0 1,1 5,0 a2.5,2.5 0 1,1 -5,0"/>
+    
+    <!-- Eye Highlights -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,79 m-1,0 a1,1 0 1,1 2,0 a1,1 0 1,1 -2,0"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M57,79 m-1,0 a1,1 0 1,1 2,0 a1,1 0 1,1 -2,0"/>
+    
+    <!-- Smile -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF6B6B"
+        android:strokeWidth="1.2"
+        android:pathData="M50,86 Q54,90 58,86"/>
+    
+    <!-- Cheeks -->
+    <path
+        android:fillColor="#FFAAAA"
+        android:pathData="M44,84 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0"/>
+    <path
+        android:fillColor="#FFAAAA"
+        android:pathData="M64,84 m-3,0 a3,3 0 1,1 6,0 a3,3 0 1,1 -6,0"/>
+</vector>
