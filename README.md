@@ -39,6 +39,18 @@ Dự án sử dụng các công nghệ và thư viện Android mới nhất:
 -   **Image Loading**: [Glide 4.x](https://github.com/bumptech/glide) (Custom ModelLoader).
 -   **Logging**: Custom DebugLogger.
 
+## 🔐 Host Authentication
+
+Ứng dụng kết nối với backend trên hosting `free.nf` có cơ chế bảo vệ bằng JavaScript cookie challenge. Luồng xác thực hoạt động như sau:
+
+1. **WebView ẩn (`HostingVerifier`)**: Tạo WebView 1x1 pixel để load trang backend, cho phép JavaScript chạy và set cookie `__test`
+2. **Lưu trữ cookie**: Cookie được lưu vào SharedPreferences (thông qua `UserConfig`) để tái sử dụng giữa các phiên
+3. **Đính kèm header**: Mọi API request đều được thêm header `Cookie` và `User-Agent` khớp với WebView
+4. **Phát hiện tự động (Reactive)**:
+   - Retrofit Interceptor kiểm tra response body
+   - Nếu response không phải JSON hợp lệ (server trả về trang Challenge) → Ném exception `FreeNfChallenge`
+   - Activity/ViewModel bắt exception → Xóa cookie cũ → Kích hoạt `HostingVerifier` → Retry request
+
 ## 📱 Cấu Hình Yêu Cầu
 
 -   **Min SDK**: 24 (Android 7.0 Nougat)
