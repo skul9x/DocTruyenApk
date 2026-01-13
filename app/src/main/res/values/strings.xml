@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Truyện cho Minh Khôi</string>
+    
+    <!-- Navigation -->
+    <string name="nav_home">Trang Chủ</string>
+    <string name="nav_favorites">Yêu Thích</string>
+    <string name="nav_settings">Cài Đặt</string>
+    <string name="nav_sort">Sắp Xếp</string>
+    
+    <!-- Home Screen -->
+    <string name="home_title">Truyện cho Minh Khôi</string>
+    <string name="home_subtitle">Những câu chuyện hay dành cho con</string>
+    <string name="search_hint">🔍 Tìm truyện yêu thích...</string>
+    <string name="random_story">🎲 Truyện Ngẫu Nhiên</string>
+    <string name="stories_count">%d truyện</string>
+    <string name="loading">Đang tải...</string>
+    <string name="no_stories">Chưa có truyện nào</string>
+    <string name="error_loading">Lỗi khi tải dữ liệu</string>
+    <string name="retry">Thử lại</string>
+    
+    <!-- Story Detail -->
+    <string name="story_detail_title">Chi Tiết Truyện</string>
+    <string name="btn_read_story">PHÁT</string>
+    <string name="btn_pause">DỪNG</string>
+    <string name="btn_resume">TIẾP</string>
+    <string name="btn_stop">DỪNG</string>
+    <string name="btn_stop_reading">DỪNG</string>
+    <string name="tts_reading">Đang đọc truyện...</string>
+    <string name="tts_paused">Đã tạm dừng</string>
+    <string name="tts_stopped">Đã dừng</string>
+    <string name="tts_finished">Đã đọc xong!</string>
+    <string name="tts_error">Lỗi giọng nói</string>
+    <string name="back">Quay lại</string>
+    
+    <!-- Host Verification -->
+    <string name="verifying_host">🔐 Xác thực kết nối</string>
+    <string name="verifying_message">Vui lòng đợi trong giây lát...</string>
+    <string name="verify_success">✅ Xác thực thành công!</string>
+    <string name="verify_failed">❌ Xác thực thất bại</string>
+    
+    <!-- Errors -->
+    <string name="error_network">Không thể kết nối mạng</string>
+    <string name="error_server">Lỗi máy chủ</string>
+    <string name="error_unknown">Đã xảy ra lỗi</string>
+    
+    <!-- Content Descriptions for Accessibility -->
+    <string name="cd_story_image">Hình ảnh truyện</string>
+    <string name="cd_play_button">Nút phát</string>
+    <string name="cd_pause_button">Nút tạm dừng</string>
+    <string name="cd_stop_button">Nút dừng</string>
+    <string name="cd_back_button">Nút quay lại</string>
+    <string name="cd_search">Nhập tên truyện</string>
+    <string name="cd_random_story">Chọn truyện ngẫu nhiên</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_title">Cài Đặt</string>
+    <string name="settings_connection_title">📡 Kết nối máy chủ</string>
+    <string name="settings_connection_desc">Nhập địa chỉ website chứa API (ví dụ: truyen.free.nf)</string>
+    <string name="settings_url_hint">Địa chỉ URL</string>
+    <string name="settings_save_btn">Lưu &amp; Kiểm tra kết nối</string>
+    <string name="settings_view_logs">Xem Nhật Ký Lỗi (Debug)</string>
+    <string name="settings_voice_title">🗣️ Cài đặt giọng đọc</string>
+    <string name="settings_voice_current">Giọng đọc: %s</string>
+    <string name="settings_voice_default">Mặc định</string>
+    <string name="settings_select_voice_btn">Chọn Giọng Đọc</string>
+    <string name="settings_pitch">Cao độ (Giọng trầm/bổng)</string>
+    <string name="settings_speed">Tốc độ đọc</string>
+    <string name="settings_voice_none">Không tìm thấy giọng đọc nào</string>
+    <string name="settings_voice_custom">Tùy chỉnh</string>
+    <string name="settings_voice_person">Người đọc</string>
+    <string name="settings_checking">Đang kiểm tra...</string>
+    <string name="settings_success">✅ Đã lưu và kết nối thành công!</string>
+    <string name="settings_failed">❌ Kết nối thất bại. Vui lòng kiểm tra lại URL.</string>
+    <string name="settings_select_voice_dialog">Chọn Giọng Đọc</string>
+    <string name="cancel">Hủy</string>
+    <string name="msg_enter_url">Vui lòng nhập URL!</string>
+    <string name="app_version">DocTruyen v1.0</string>
+</resources>
