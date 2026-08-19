@@ -120,13 +120,13 @@ jobs:
 
       # Upload lên GitHub Release
       - name: Create GitHub Release & Upload APK
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          name: Release ${{ steps.version.outputs.VERSION }}
-          files: ${{ steps.prepare_apk.outputs.APK_PATH }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          APK_PATH: ${{ steps.prepare_apk.outputs.APK_PATH }}
+        run: |
+          echo "Publishing release $VERSION with asset $APK_PATH"
+          ls -lh "$APK_PATH"
+          gh release create "$VERSION" "$APK_PATH" \
+            --title "Release $VERSION" \
+            --generate-notes
