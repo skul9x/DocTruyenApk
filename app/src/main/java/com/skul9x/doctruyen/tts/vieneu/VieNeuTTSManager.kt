@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -55,6 +56,9 @@ class VieNeuTTSManager(
 
     private var pendingTitle: String? = null
     private var pendingContent: String? = null
+    private var pendingStoryId: Int = 0
+
+    private var prewarmJob: kotlinx.coroutines.Job? = null
 
     init {
         initManager()
@@ -174,13 +178,17 @@ class VieNeuTTSManager(
         if (pendingTitle != null && pendingContent != null) {
             val title = pendingTitle!!
             val content = pendingContent!!
+            val storyId = pendingStoryId
             pendingTitle = null
             pendingContent = null
-            speakWithTitlePause(title, content)
+            pendingStoryId = 0
+            speakWithTitlePause(title, content, storyId = storyId)
         } else if (pendingContent != null) {
             val content = pendingContent!!
+            val storyId = pendingStoryId
             pendingContent = null
-            speakContent(content)
+            pendingStoryId = 0
+            speakContent(content, storyId = storyId)
         }
     }
 
@@ -194,14 +202,99 @@ class VieNeuTTSManager(
     }
 
     /**
-     * Start speaking text content.
+     * Proactively pre-warm story synthesis in background.
+     * Pre-synthesizes the first 2 chunks (Title + Opening sentence) into PrewarmedChunkCache
+     * for instant playback with 0ms starvation latency when play is pressed.
      */
-    fun speak(text: String) = speakContent(text)
+    fun prepareStory(
+        storyId: Int,
+        title: String,
+        content: String,
+        voice: String = voiceName,
+        pauseConfig: PauseConfig = getLoadedPauseConfig()
+    ) {
+        if (isUsingFallback) return
+
+        // Cancel previous pre-warm job if running
+        cancelPrewarm()
+
+        // Clear cache for previous stories if different storyId
+        PrewarmedChunkCache.clearPreviousStory(storyId)
+
+        val eng = engine ?: return
+
+        prewarmJob = scope.launch(Dispatchers.Default) {
+            try {
+                Log.d(TAG, "🔥 Starting pre-warming for story $storyId (voice: $voice)")
+                val chunks = SmartTextSegmenter.segmentStory(title, content, pauseConfig = pauseConfig)
+                val prewarmCount = minOf(2, chunks.size)
+
+                for (i in 0 until prewarmCount) {
+                    if (!isActive) break
+                    if (PrewarmedChunkCache.contains(storyId, voice, i)) continue
+
+                    val chunk = chunks[i]
+                    val g2pStart = System.currentTimeMillis()
+                    val phonemes = SeaG2P.phonemize(chunk.text)
+                    val g2pDuration = System.currentTimeMillis() - g2pStart
+                    if (!isActive) break
+
+                    val inferStart = System.currentTimeMillis()
+                    val pcmFloat = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        eng.infer(phonemes = phonemes, voiceName = voice)
+                    }
+                    val inferDuration = System.currentTimeMillis() - inferStart
+                    if (!isActive) break
+
+                    val rawPcm16 = PcmUtils.floatToShort(pcmFloat)
+                    val speechPcm = PcmUtils.applyMicroFade(rawPcm16)
+                    val pauseMs = chunk.pauseDurationMs.toLong()
+
+                    val combinedPcm = if (pauseMs > 0L) {
+                        val silencePcm = PcmUtils.generateSilence(chunk.pauseDurationMs)
+                        if (silencePcm.isNotEmpty()) {
+                            val combined = ShortArray(speechPcm.size + silencePcm.size)
+                            System.arraycopy(speechPcm, 0, combined, 0, speechPcm.size)
+                            System.arraycopy(silencePcm, 0, combined, speechPcm.size, silencePcm.size)
+                            combined
+                        } else {
+                            speechPcm
+                        }
+                    } else {
+                        speechPcm
+                    }
+
+                    PrewarmedChunkCache.put(storyId, voice, i, combinedPcm)
+                    Log.d(TAG, "⚡ Pre-warmed chunk $i/$prewarmCount for story $storyId (G2P: ${g2pDuration}ms, Infer: ${inferDuration}ms)")
+                }
+                Log.d(TAG, "✅ Finished pre-warming story $storyId")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                Log.d(TAG, "⏹️ Pre-warming cancelled for story $storyId")
+            } catch (e: Throwable) {
+                Log.w(TAG, "⚠️ Pre-warming failed for story $storyId: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Cancel any active background pre-warm job.
+     */
+    fun cancelPrewarm() {
+        prewarmJob?.cancel()
+        prewarmJob = null
+    }
 
     /**
      * Start speaking text content.
      */
-    fun speakContent(content: String, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+    fun speak(text: String, storyId: Int = 0) = speakContent(text, storyId = storyId)
+
+    /**
+     * Start speaking text content.
+     */
+    fun speakContent(content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+        cancelPrewarm()
+
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speak(content)
             return
@@ -210,6 +303,7 @@ class VieNeuTTSManager(
         if (currentState == TTSState.INITIALIZING) {
             pendingTitle = null
             pendingContent = content
+            pendingStoryId = storyId
             return
         }
 
@@ -224,6 +318,7 @@ class VieNeuTTSManager(
         pipe.voiceName = voiceName
         pipe.startReading(
             text = content,
+            storyId = storyId,
             onStateChange = { pipeState ->
                 handlePipelineState(pipeState)
             },
@@ -235,7 +330,9 @@ class VieNeuTTSManager(
     /**
      * Speak story title, pause 1 second, then speak content.
      */
-    fun speakWithTitlePause(title: String, content: String, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+    fun speakWithTitlePause(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+        cancelPrewarm()
+
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speakWithTitlePause(title, content)
             return
@@ -244,6 +341,7 @@ class VieNeuTTSManager(
         if (currentState == TTSState.INITIALIZING) {
             pendingTitle = title
             pendingContent = content
+            pendingStoryId = storyId
             return
         }
 
@@ -259,6 +357,7 @@ class VieNeuTTSManager(
         pipe.startReadingWithTitlePause(
             title = title,
             content = content,
+            storyId = storyId,
             onStateChange = { pipeState ->
                 handlePipelineState(pipeState)
             },
@@ -271,6 +370,9 @@ class VieNeuTTSManager(
         when (pipeState) {
             is TTSAudioPipeline.PipelineState.Idle -> {
                 notifyStateChange(TTSState.READY)
+            }
+            is TTSAudioPipeline.PipelineState.Buffering -> {
+                notifyStateChange(TTSState.PLAYING)
             }
             is TTSAudioPipeline.PipelineState.Synthesizing -> {
                 notifyStateChange(TTSState.PLAYING)
@@ -369,6 +471,7 @@ class VieNeuTTSManager(
      * Release all TTS resources and ONNX engine sessions.
      */
     fun shutdown() {
+        cancelPrewarm()
         scope.cancel()
         pipeline?.release()
         pipeline = null

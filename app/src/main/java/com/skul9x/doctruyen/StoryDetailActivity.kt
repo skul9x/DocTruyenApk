@@ -58,6 +58,9 @@ class StoryDetailActivity : AppCompatActivity() {
         }
     }
     
+    // Pre-warming state
+    private var isPrewarmTriggered = false
+    
     private val serviceConnection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
             DebugLogger.log(TAG, "✅ Service connected", LogType.INFO)
@@ -74,6 +77,9 @@ class StoryDetailActivity : AppCompatActivity() {
             isBound = true
             
             DebugLogger.log(TAG, "Service bound: isBound=$isBound, currentStoryId=$storyId", LogType.INFO)
+            
+            // Trigger queued prewarm if story content was already loaded before service connected
+            triggerPrewarmIfReady()
             
             // Connect to state updates
             boundService.setStateCallback { state ->
@@ -287,12 +293,29 @@ class StoryDetailActivity : AppCompatActivity() {
                     
                     // Show content
                     showContentState()
+
+                    // Proactively trigger background pre-warming for instant playback
+                    triggerPrewarmIfReady()
                 } else {
                     showErrorState("Không thể tải nội dung truyện")
                 }
             } catch (e: Exception) {
                 showErrorState(getString(R.string.error_loading))
             }
+        }
+    }
+
+    /**
+     * Proactively triggers background TTS pre-warming if story content and service are both ready.
+     * Queued calls from onServiceConnected or loadStoryContent will safely resolve here.
+     */
+    private fun triggerPrewarmIfReady() {
+        val service = readingService
+        if (service != null && isBound && storyContent.isNotEmpty() && !isPrewarmTriggered) {
+            val title = tvTitle.text.toString()
+            DebugLogger.log(TAG, "🔥 Proactively pre-warming story $storyId '$title' (${storyContent.length} chars)", LogType.INFO)
+            isPrewarmTriggered = true
+            service.prepareStory(storyId, title, storyContent)
         }
     }
     
@@ -372,6 +395,8 @@ class StoryDetailActivity : AppCompatActivity() {
                 if (storyContent.isNotEmpty()) {
                     val title = tvTitle.text.toString()
                     DebugLogger.log(TAG, "🔊 Action: START reading story $storyId '$title'", LogType.INFO)
+                    // Visual transition: update UI immediately to Playing for seamless responsive feel
+                    updateTTSUI(VieNeuTTSManager.TTSState.PLAYING)
                     service.startReading(storyId, title, storyContent)
                 } else {
                     DebugLogger.logError(TAG, "⚠️ Cannot start: storyContent is EMPTY!")
@@ -447,11 +472,22 @@ class StoryDetailActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        // No TTS shutdown here, handled by service
+        // Promptly cancel background pre-warming job if active and service is not currently playing
+        val service = readingService
+        if (service != null && isBound && service.currentState != VieNeuTTSManager.TTSState.PLAYING) {
+            DebugLogger.log(TAG, "🧹 onDestroy: Cancelling active pre-warm", LogType.INFO)
+            service.cancelPrewarm()
+        }
     }
     
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        // Cancel active pre-warming when user navigates back
+        val service = readingService
+        if (service != null && isBound && service.currentState != VieNeuTTSManager.TTSState.PLAYING) {
+            DebugLogger.log(TAG, "🧹 onBackPressed: Cancelling active pre-warm", LogType.INFO)
+            service.cancelPrewarm()
+        }
         super.onBackPressed()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }

@@ -28,7 +28,8 @@ class ReadingService : Service() {
         const val EXTRA_VOICE_NAME = "extra_voice_name"
     }
 
-    private var ttsManager: VieNeuTTSManager? = null
+    var ttsManager: VieNeuTTSManager? = null
+        internal set
     private val binder = ReadingBinder()
     
     // State callbacks for UI
@@ -116,6 +117,19 @@ class ReadingService : Service() {
         progressCallback = null
     }
 
+    fun prepareStory(storyId: Int, title: String, content: String, voice: String? = null) {
+        android.util.Log.d("ReadingService", "🔥 prepareStory: storyId=$storyId, title='$title'")
+        if (!voice.isNullOrEmpty()) {
+            ttsManager?.setVoice(voice)
+        }
+        val currentVoice = voice ?: ttsManager?.voiceName ?: "Trúc Ly"
+        ttsManager?.prepareStory(storyId, title, content, voice = currentVoice)
+    }
+
+    fun cancelPrewarm() {
+        ttsManager?.cancelPrewarm()
+    }
+
     fun startReading(storyId: Int, title: String, content: String, voice: String? = null) {
         android.util.Log.d("ReadingService", "🔊 startReading: storyId=$storyId, title='$title', contentLen=${content.length}")
         currentStoryId = storyId
@@ -125,7 +139,7 @@ class ReadingService : Service() {
         }
         // Use speakWithTitlePause for natural 1s pause between title and content
         android.util.Log.d("ReadingService", "📤 Calling ttsManager.speakWithTitlePause...")
-        ttsManager?.speakWithTitlePause(title, content)
+        ttsManager?.speakWithTitlePause(title, content, storyId = storyId)
         android.util.Log.d("ReadingService", "✅ After speakWithTitlePause, currentState=$currentState")
         startForeground(NOTIFICATION_ID, buildNotification(VieNeuTTSManager.TTSState.PLAYING))
     }

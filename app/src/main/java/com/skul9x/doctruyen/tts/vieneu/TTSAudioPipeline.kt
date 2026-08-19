@@ -36,6 +36,7 @@ class TTSAudioPipeline(
 
     sealed class PipelineState {
         object Idle : PipelineState()
+        data class Buffering(val bufferedChunks: Int, val targetChunks: Int) : PipelineState()
         object Synthesizing : PipelineState()
         object Playing : PipelineState()
         object Paused : PipelineState()
@@ -97,6 +98,7 @@ class TTSAudioPipeline(
      */
     fun startReadingChunks(
         chunkList: List<TextChunk>,
+        storyId: Int = 0,
         onStateChange: ((PipelineState) -> Unit)? = null,
         onProgress: ((Int) -> Unit)? = null
     ) {
@@ -113,7 +115,7 @@ class TTSAudioPipeline(
         }
 
         requestAudioFocus()
-        startPipeline(startIndex = 0)
+        startPipeline(startIndex = 0, storyId = storyId)
     }
 
     /**
@@ -121,17 +123,18 @@ class TTSAudioPipeline(
      */
     fun startReading(
         text: String,
+        storyId: Int = 0,
         pauseConfig: PauseConfig = PauseConfig(),
         onStateChange: ((PipelineState) -> Unit)? = null
     ) {
-        startReading(text, onStateChange, null, pauseConfig)
+        startReading(text, storyId = storyId, onStateChange = onStateChange, onProgress = null, pauseConfig = pauseConfig)
     }
 
     fun startReading(
         text: String,
         onStateChange: (PipelineState) -> Unit
     ) {
-        startReading(text, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
+        startReading(text, storyId = 0, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
     }
 
     /**
@@ -139,12 +142,13 @@ class TTSAudioPipeline(
      */
     fun startReading(
         text: String,
+        storyId: Int = 0,
         onStateChange: ((PipelineState) -> Unit)?,
         onProgress: ((Int) -> Unit)?,
         pauseConfig: PauseConfig = PauseConfig()
     ) {
         val chunkList = SmartTextSegmenter.segment(text, pauseConfig = pauseConfig)
-        startReadingChunks(chunkList, onStateChange, onProgress)
+        startReadingChunks(chunkList, storyId = storyId, onStateChange = onStateChange, onProgress = onProgress)
     }
 
     /**
@@ -153,10 +157,11 @@ class TTSAudioPipeline(
     fun startReadingWithTitlePause(
         title: String,
         content: String,
+        storyId: Int = 0,
         pauseConfig: PauseConfig = PauseConfig(),
         onStateChange: ((PipelineState) -> Unit)? = null
     ) {
-        startReadingWithTitlePause(title, content, onStateChange, null, pauseConfig)
+        startReadingWithTitlePause(title, content, storyId = storyId, onStateChange = onStateChange, onProgress = null, pauseConfig = pauseConfig)
     }
 
     fun startReadingWithTitlePause(
@@ -164,7 +169,7 @@ class TTSAudioPipeline(
         content: String,
         onStateChange: (PipelineState) -> Unit
     ) {
-        startReadingWithTitlePause(title, content, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
+        startReadingWithTitlePause(title, content, storyId = 0, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
     }
 
     /**
@@ -173,12 +178,13 @@ class TTSAudioPipeline(
     fun startReadingWithTitlePause(
         title: String,
         content: String,
+        storyId: Int = 0,
         onStateChange: ((PipelineState) -> Unit)?,
         onProgress: ((Int) -> Unit)?,
         pauseConfig: PauseConfig = PauseConfig()
     ) {
         val chunkList = SmartTextSegmenter.segmentStory(title, content, pauseConfig = pauseConfig)
-        startReadingChunks(chunkList, onStateChange, onProgress)
+        startReadingChunks(chunkList, storyId = storyId, onStateChange = onStateChange, onProgress = onProgress)
     }
 
     /**
@@ -252,16 +258,38 @@ class TTSAudioPipeline(
         }
     }
 
-    private fun startPipeline(startIndex: Int) {
+    private fun startPipeline(startIndex: Int, storyId: Int = 0) {
         chunkQueue.clear()
         audioPlayer.init()
         audioPlayer.play()
         setState(PipelineState.Synthesizing)
+        TtsMetricsLogger.recordPreBufferingStart()
+
+        // Ingest any pre-warmed chunks into the queue
+        val cachedIndices = mutableSetOf<Int>()
+        if (startIndex == 0 && storyId != 0) {
+            val prewarmed = PrewarmedChunkCache.getChunksForStory(storyId, voiceName)
+            // Sort by chunk index to enqueue in proper playback order
+            prewarmed.toSortedMap().forEach { (chunkIdx, pcm) ->
+                if (chunkIdx in 0 until chunks.size) {
+                    chunkQueue.add(Pair(chunkIdx, pcm))
+                    cachedIndices.add(chunkIdx)
+                    Log.d(TAG, "⚡ Ingested pre-warmed chunk $chunkIdx into chunkQueue from cache")
+                }
+            }
+        }
 
         synthesisJob = scope.launch {
             try {
                 for (i in startIndex until chunks.size) {
                     if (!isActive) break
+
+                    // Skip synthesis if chunk was already loaded from pre-warmed cache
+                    if (cachedIndices.contains(i)) {
+                        Log.d(TAG, "⚡ Skipping synthesis for pre-warmed chunk $i")
+                        continue
+                    }
+
                     val chunk = chunks[i]
 
                     // 1. Probe phonemization latency
@@ -329,20 +357,27 @@ class TTSAudioPipeline(
                 var starvationStartTime = 0L
                 var isPreBuffering = true
 
+                // Adaptive pre-buffering thresholds
+                val remainingChunks = totalChunks - startIndex
+                val requiredChunks = if (startIndex == 0 && remainingChunks > 2) 2 else 1
+                val requiredDurationMs = if (startIndex == 0 && remainingChunks > 2) 6000L else 1500L
+
                 while (isActive && (playIndex < totalChunks || !chunkQueue.isEmpty())) {
-                    // Anti-starvation pre-buffering check
+                    // Anti-starvation adaptive pre-buffering check
                     if (isPreBuffering) {
                         val currentQueueSize = chunkQueue.size
                         val totalBufferedSamples = chunkQueue.sumOf { it.second.size.toLong() }
                         val bufferedDurationMs = (totalBufferedSamples * 1000L) / VieNeuConfig.SAMPLE_RATE
                         val isSynthDone = synthesisJob?.isActive != true
 
-                        val hasEnoughChunks = currentQueueSize >= minPreBufferChunks
-                        val hasEnoughDuration = bufferedDurationMs >= minPreBufferDurationMs
+                        val hasEnoughChunks = currentQueueSize >= requiredChunks
+                        val hasEnoughDuration = bufferedDurationMs >= requiredDurationMs
 
-                        if (isSynthDone || hasEnoughDuration || (hasEnoughChunks && totalChunks <= 2) || (currentQueueSize >= 2) || playIndex > 0) {
+                        if (isSynthDone || hasEnoughDuration || hasEnoughChunks) {
                             isPreBuffering = false
+                            TtsMetricsLogger.recordPreBufferingComplete(currentQueueSize, bufferedDurationMs)
                         } else {
+                            setState(PipelineState.Buffering(bufferedChunks = currentQueueSize, targetChunks = requiredChunks))
                             delay(20)
                             continue
                         }

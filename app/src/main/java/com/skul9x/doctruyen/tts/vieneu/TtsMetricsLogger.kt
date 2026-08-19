@@ -52,6 +52,8 @@ object TtsMetricsLogger {
         private set
 
     private var sessionStartTimeMs: Long = 0L
+    private var preBufferStartTimeMs: Long = 0L
+    private var preBufferDurationMs: Long = 0L
     private var firstAudioOutputTimeMs: Long = 0L
     private val chunkTimings = CopyOnWriteArrayList<TtsChunkTiming>()
     private val chunkQueueTimeMap = ConcurrentHashMap<Int, Long>()
@@ -60,6 +62,8 @@ object TtsMetricsLogger {
     @Synchronized
     fun startSession(storyId: String = "", storyTitle: String = "") {
         sessionStartTimeMs = System.currentTimeMillis()
+        preBufferStartTimeMs = sessionStartTimeMs
+        preBufferDurationMs = 0L
         firstAudioOutputTimeMs = 0L
         underrunCount = 0
         chunkTimings.clear()
@@ -69,6 +73,17 @@ object TtsMetricsLogger {
             storyTitle = storyTitle
         )
         val msg = "⏱️ [TTS Session Start] storyId='$storyId', title='$storyTitle'"
+        DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
+    }
+
+    fun recordPreBufferingStart() {
+        preBufferStartTimeMs = System.currentTimeMillis()
+    }
+
+    fun recordPreBufferingComplete(bufferedChunks: Int, bufferedDurationMs: Long) {
+        val now = System.currentTimeMillis()
+        preBufferDurationMs = if (preBufferStartTimeMs > 0L) now - preBufferStartTimeMs else 0L
+        val msg = "📦 [Pre-buffering Ready] chunks=$bufferedChunks, duration=${bufferedDurationMs}ms, waitTime=${preBufferDurationMs}ms"
         DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
     }
 
