@@ -82,16 +82,18 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > app/skul9x.jks
+          cp app/skul9x.jks skul9x.jks
 
       - name: Build & Sign Release APK
         env:
           STORE_FILE: skul9x.jks
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
         run: |
           if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::One or more signing secrets (STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) are missing. Please add them in Repository Settings -> Secrets and variables -> Actions."
+            echo "::error::One or more signing secrets (STORE_PASSWORD/KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) are missing. Please add them in Repository Settings -> Secrets and variables -> Actions."
             exit 1
           fi
           ./gradlew :app:assembleRelease

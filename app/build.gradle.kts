@@ -30,13 +30,19 @@ android {
                 storeFile = keystoreFile
             }
             storePassword = (project.findProperty("STORE_PASSWORD") as? String)
+                ?: (project.findProperty("KEYSTORE_PASSWORD") as? String)
                 ?: System.getenv("STORE_PASSWORD")
+                ?: System.getenv("KEYSTORE_PASSWORD")
                 ?: ""
             keyAlias = (project.findProperty("KEY_ALIAS") as? String)
                 ?: System.getenv("KEY_ALIAS")
                 ?: ""
             keyPassword = (project.findProperty("KEY_PASSWORD") as? String)
+                ?: (project.findProperty("STORE_PASSWORD") as? String)
+                ?: (project.findProperty("KEYSTORE_PASSWORD") as? String)
                 ?: System.getenv("KEY_PASSWORD")
+                ?: System.getenv("STORE_PASSWORD")
+                ?: System.getenv("KEYSTORE_PASSWORD")
                 ?: ""
         }
     }
