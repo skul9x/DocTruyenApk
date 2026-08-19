@@ -71,6 +71,31 @@ object UserConfig {
         getPrefs(context).edit().putString(KEY_COOKIE, cookie).apply()
     }
     
+    // TTS Engine preference
+    const val KEY_TTS_ENGINE = "tts_engine"
+    const val KEY_GOOGLE_TTS_VOICE = "google_tts_voice"
+
+    fun getTtsEngine(context: Context): com.skul9x.doctruyen.tts.ITTSManager.EngineType {
+        val str = getPrefs(context).getString(KEY_TTS_ENGINE, com.skul9x.doctruyen.tts.ITTSManager.EngineType.VIENEU.name)
+        return try {
+            com.skul9x.doctruyen.tts.ITTSManager.EngineType.valueOf(str ?: com.skul9x.doctruyen.tts.ITTSManager.EngineType.VIENEU.name)
+        } catch (e: Throwable) {
+            com.skul9x.doctruyen.tts.ITTSManager.EngineType.VIENEU
+        }
+    }
+
+    fun setTtsEngine(context: Context, engineType: com.skul9x.doctruyen.tts.ITTSManager.EngineType) {
+        getPrefs(context).edit().putString(KEY_TTS_ENGINE, engineType.name).apply()
+    }
+
+    fun getGoogleTtsVoice(context: Context): String? {
+        return getPrefs(context).getString(KEY_GOOGLE_TTS_VOICE, null)
+    }
+
+    fun setGoogleTtsVoice(context: Context, voiceId: String) {
+        getPrefs(context).edit().putString(KEY_GOOGLE_TTS_VOICE, voiceId).apply()
+    }
+
     // Voice preference
     private const val KEY_TTS_VOICE = "tts_voice"
     

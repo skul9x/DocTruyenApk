@@ -97,12 +97,11 @@ class StoryDetailActivity : AppCompatActivity() {
                     if (serviceStoryId == storyId && serviceStoryId != 0) {
                         DebugLogger.log(TAG, "✅ Updating UI for current story", LogType.INFO)
                         updateTTSUI(state)
-                    } else if (state == VieNeuTTSManager.TTSState.READY || 
-                               state == VieNeuTTSManager.TTSState.IDLE) {
-                        DebugLogger.log(TAG, "🔄 Service ready/idle, showing initial state", LogType.INFO)
-                        updateTTSUI(VieNeuTTSManager.TTSState.READY)
                     } else {
-                        DebugLogger.log(TAG, "⚠️ State mismatch: service reading story $serviceStoryId, viewing $storyId", LogType.INFO)
+                        // When viewing Story B while Service is reading Story A (or service is idle/ready),
+                        // show initial "Đọc truyện" state for Story B
+                        DebugLogger.log(TAG, "🔄 Story mismatch or idle: service reading story $serviceStoryId, viewing $storyId. Displaying ready state.", LogType.INFO)
+                        updateTTSUI(com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY)
                     }
                 }
             }
@@ -294,8 +293,14 @@ class StoryDetailActivity : AppCompatActivity() {
                     // Show content
                     showContentState()
 
-                    // Proactively trigger background pre-warming for instant playback
-                    triggerPrewarmIfReady()
+                    val autoPlay = intent.getBooleanExtra("auto_play", false)
+                    if (autoPlay) {
+                        DebugLogger.log(TAG, "⚡ auto_play flag is true: triggering immediate playback takeover", LogType.INFO)
+                        handlePlayPause()
+                    } else {
+                        // Proactively trigger background pre-warming for instant playback
+                        triggerPrewarmIfReady()
+                    }
                 } else {
                     showErrorState("Không thể tải nội dung truyện")
                 }
@@ -313,9 +318,11 @@ class StoryDetailActivity : AppCompatActivity() {
         val service = readingService
         if (service != null && isBound && storyContent.isNotEmpty() && !isPrewarmTriggered) {
             val title = tvTitle.text.toString()
-            DebugLogger.log(TAG, "🔥 Proactively pre-warming story $storyId '$title' (${storyContent.length} chars)", LogType.INFO)
+            val isGoogle = com.skul9x.doctruyen.utils.UserConfig.getTtsEngine(this) == com.skul9x.doctruyen.tts.ITTSManager.EngineType.GOOGLE_TTS
+            val voice = if (isGoogle) com.skul9x.doctruyen.utils.UserConfig.getGoogleTtsVoice(this) else com.skul9x.doctruyen.utils.UserConfig.getTtsVoice(this)
+            DebugLogger.log(TAG, "🔥 Proactively pre-warming story $storyId '$title' (${storyContent.length} chars, voice=$voice)", LogType.INFO)
             isPrewarmTriggered = true
-            service.prepareStory(storyId, title, storyContent)
+            service.prepareStory(storyId, title, storyContent, voice = voice)
         }
     }
     
@@ -381,12 +388,12 @@ class StoryDetailActivity : AppCompatActivity() {
         
         when {
             // Currently playing this story - pause it
-            state == VieNeuTTSManager.TTSState.PLAYING && serviceStoryId == storyId -> {
+            state == com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING && serviceStoryId == storyId -> {
                 DebugLogger.log(TAG, "⏸️ Action: PAUSE (playing this story)", LogType.INFO)
                 service.pauseReading()
             }
             // Paused on this story - resume it
-            state == VieNeuTTSManager.TTSState.PAUSED && serviceStoryId == storyId -> {
+            state == com.skul9x.doctruyen.tts.ITTSManager.TTSState.PAUSED && serviceStoryId == storyId -> {
                 DebugLogger.log(TAG, "▶️ Action: RESUME (paused on this story)", LogType.INFO)
                 service.resumeReading()
             }
@@ -396,7 +403,7 @@ class StoryDetailActivity : AppCompatActivity() {
                     val title = tvTitle.text.toString()
                     DebugLogger.log(TAG, "🔊 Action: START reading story $storyId '$title'", LogType.INFO)
                     // Visual transition: update UI immediately to Playing for seamless responsive feel
-                    updateTTSUI(VieNeuTTSManager.TTSState.PLAYING)
+                    updateTTSUI(com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING)
                     service.startReading(storyId, title, storyContent)
                 } else {
                     DebugLogger.logError(TAG, "⚠️ Cannot start: storyContent is EMPTY!")
@@ -406,13 +413,13 @@ class StoryDetailActivity : AppCompatActivity() {
         }
     }
     
-    private fun updateTTSUI(state: VieNeuTTSManager.TTSState) {
+    private fun updateTTSUI(state: com.skul9x.doctruyen.tts.ITTSManager.TTSState) {
         DebugLogger.log(TAG, "🎨 updateTTSUI: state=$state", LogType.INFO)
         
         val progressTts = findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.progressTts)
         
         when (state) {
-            VieNeuTTSManager.TTSState.IDLE, VieNeuTTSManager.TTSState.INITIALIZING, VieNeuTTSManager.TTSState.READY, VieNeuTTSManager.TTSState.ERROR -> {
+            com.skul9x.doctruyen.tts.ITTSManager.TTSState.IDLE, com.skul9x.doctruyen.tts.ITTSManager.TTSState.INITIALIZING, com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY, com.skul9x.doctruyen.tts.ITTSManager.TTSState.ERROR -> {
                 // Button A: "Đọc truyện", Active
                 btnPlayPause.text = getString(R.string.btn_read_story)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_play)
@@ -426,7 +433,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 tvTtsStatus.visibility = View.INVISIBLE
                 progressTts.visibility = View.GONE
             }
-            VieNeuTTSManager.TTSState.PLAYING -> {
+            com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING -> {
                 // Button A: "Tạm dừng", Active
                 btnPlayPause.text = getString(R.string.btn_pause)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_pause)
@@ -441,7 +448,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 tvTtsStatus.visibility = View.VISIBLE
                 progressTts.visibility = View.VISIBLE
             }
-            VieNeuTTSManager.TTSState.PAUSED -> {
+            com.skul9x.doctruyen.tts.ITTSManager.TTSState.PAUSED -> {
                 // Button A: "Đọc tiếp", Active
                 btnPlayPause.text = getString(R.string.btn_resume)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_play)
@@ -465,7 +472,7 @@ class StoryDetailActivity : AppCompatActivity() {
         """.trimMargin(), LogType.INFO)
         
         // Show error toast if needed, but UI resets to Ready state visually
-        if (state == VieNeuTTSManager.TTSState.ERROR) {
+        if (state == com.skul9x.doctruyen.tts.ITTSManager.TTSState.ERROR) {
             Toast.makeText(this, getString(R.string.tts_error), Toast.LENGTH_SHORT).show()
         }
     }
@@ -474,7 +481,7 @@ class StoryDetailActivity : AppCompatActivity() {
         super.onDestroy()
         // Promptly cancel background pre-warming job if active and service is not currently playing
         val service = readingService
-        if (service != null && isBound && service.currentState != VieNeuTTSManager.TTSState.PLAYING) {
+        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
             DebugLogger.log(TAG, "🧹 onDestroy: Cancelling active pre-warm", LogType.INFO)
             service.cancelPrewarm()
         }
@@ -484,7 +491,7 @@ class StoryDetailActivity : AppCompatActivity() {
     override fun onBackPressed() {
         // Cancel active pre-warming when user navigates back
         val service = readingService
-        if (service != null && isBound && service.currentState != VieNeuTTSManager.TTSState.PLAYING) {
+        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
             DebugLogger.log(TAG, "🧹 onBackPressed: Cancelling active pre-warm", LogType.INFO)
             service.cancelPrewarm()
         }

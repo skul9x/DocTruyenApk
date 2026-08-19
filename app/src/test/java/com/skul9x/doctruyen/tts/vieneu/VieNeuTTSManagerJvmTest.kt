@@ -91,20 +91,16 @@ class VieNeuTTSManagerJvmTest {
     @After
     fun teardown() {
         if (::manager.isInitialized) {
-            manager.shutdown()
-        } else {
-            if (::pipeline.isInitialized) {
-                pipeline.release()
-            }
-            if (::engine.isInitialized) {
-                engine.close()
-            }
+            manager.stop()
+        }
+        if (::pipeline.isInitialized) {
+            pipeline.stop()
         }
     }
 
     @Test
     fun testManagerInitializationAndVoices() {
-        val states = mutableListOf<VieNeuTTSManager.TTSState>()
+        val states = mutableListOf<com.skul9x.doctruyen.tts.ITTSManager.TTSState>()
         manager = VieNeuTTSManager(
             context = null,
             onStateChange = { states.add(it) },
@@ -112,13 +108,13 @@ class VieNeuTTSManagerJvmTest {
             customPipeline = pipeline
         )
 
-        assertTrue(states.contains(VieNeuTTSManager.TTSState.INITIALIZING))
-        assertTrue(states.contains(VieNeuTTSManager.TTSState.READY))
-        assertEquals(VieNeuTTSManager.TTSState.READY, manager.currentState)
+        assertTrue(states.contains(com.skul9x.doctruyen.tts.ITTSManager.TTSState.INITIALIZING))
+        assertTrue(states.contains(com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY))
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY, manager.currentState)
 
         val voices = manager.getAvailableVoices()
         assertTrue("Voices list should not be empty", voices.isNotEmpty())
-        assertTrue("Should contain Trúc Ly", voices.contains("Trúc Ly"))
+        assertTrue("Should contain Trúc Ly", voices.any { it.id == "Trúc Ly" })
 
         manager.setVoice("Minh Đức")
         assertEquals("Minh Đức", manager.voiceName)
@@ -126,52 +122,54 @@ class VieNeuTTSManagerJvmTest {
 
     @Test
     fun testManagerPlaybackControls() = runBlocking {
-        val states = mutableListOf<VieNeuTTSManager.TTSState>()
+        val states = mutableListOf<com.skul9x.doctruyen.tts.ITTSManager.TTSState>()
         val progressList = mutableListOf<Int>()
+        val testPipeline = TTSAudioPipeline(engine, voiceName = "Trúc Ly")
         manager = VieNeuTTSManager(
             context = null,
             onStateChange = { states.add(it) },
             onProgressChange = { progressList.add(it) },
             customEngine = engine,
-            customPipeline = pipeline
+            customPipeline = testPipeline
         )
 
         // Start speaking
         manager.speakContent("Xin chào bạn.")
-        assertEquals(VieNeuTTSManager.TTSState.PLAYING, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING, manager.currentState)
         assertTrue(manager.isPlaying())
         assertFalse(manager.isPaused())
 
         delay(50)
         // Pause
         manager.pause()
-        assertEquals(VieNeuTTSManager.TTSState.PAUSED, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.PAUSED, manager.currentState)
         assertTrue(manager.isPaused())
         assertFalse(manager.isPlaying())
 
         delay(50)
         // Resume
         manager.resume()
-        assertEquals(VieNeuTTSManager.TTSState.PLAYING, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING, manager.currentState)
 
         delay(50)
         // Stop
         manager.stop()
-        assertEquals(VieNeuTTSManager.TTSState.READY, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY, manager.currentState)
         assertFalse(manager.isPlaying())
         assertFalse(manager.isPaused())
     }
 
     @Test
     fun testSpeakWithTitlePauseControls() = runBlocking {
-        val states = mutableListOf<VieNeuTTSManager.TTSState>()
+        val states = mutableListOf<com.skul9x.doctruyen.tts.ITTSManager.TTSState>()
         val progressList = mutableListOf<Int>()
+        val testPipeline = TTSAudioPipeline(engine, voiceName = "Trúc Ly")
         manager = VieNeuTTSManager(
             context = null,
             onStateChange = { states.add(it) },
             onProgressChange = { progressList.add(it) },
             customEngine = engine,
-            customPipeline = pipeline
+            customPipeline = testPipeline
         )
 
         manager.speakWithTitlePause(
@@ -179,11 +177,11 @@ class VieNeuTTSManagerJvmTest {
             content = "Ngày xửa ngày xưa ở một ngôi làng nhỏ."
         )
 
-        assertEquals(VieNeuTTSManager.TTSState.PLAYING, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING, manager.currentState)
         assertTrue(manager.isPlaying())
 
         delay(50)
         manager.stop()
-        assertEquals(VieNeuTTSManager.TTSState.READY, manager.currentState)
+        assertEquals(com.skul9x.doctruyen.tts.ITTSManager.TTSState.READY, manager.currentState)
     }
 }

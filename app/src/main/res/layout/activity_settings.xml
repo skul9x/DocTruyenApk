@@ -8,7 +8,7 @@
     android:background="@color/background"
     tools:context=".SettingsActivity">
 
-    <!-- Header -->
+    <!-- Top Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -17,7 +17,8 @@
         android:paddingBottom="16dp"
         android:paddingHorizontal="16dp"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:elevation="4dp">
         
         <ImageButton
             android:id="@+id/btnBack"
@@ -32,146 +33,225 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/settings_title"
-            android:textSize="24sp"
+            android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="@color/text_on_primary"
-            android:layout_marginStart="16dp" />
+            android:layout_marginStart="12dp" />
             
     </LinearLayout>
     
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="20dp">
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:padding="16dp">
         
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
-            
-            <!-- Connection Card -->
+            android:orientation="vertical"
+            android:paddingBottom="32dp">
+
+            <!-- 1. TTS Engine Selector Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardTtsEngine"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="4dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
                 app:cardBackgroundColor="@color/background_card">
-                
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
-                    
+                    android:padding="16dp">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/settings_connection_title"
-                        android:textSize="18sp"
+                        android:text="@string/settings_engine_title"
+                        android:textSize="17sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
-                        
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/settings_connection_desc"
-                        android:textSize="14sp"
+                        android:text="@string/settings_engine_desc"
+                        android:textSize="13sp"
                         android:textColor="@color/text_secondary"
-                        android:layout_marginTop="8dp" />
-                        
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-                        
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etBaseUrl"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="@string/settings_url_hint"
-                            android:inputType="textUri" />
-                            
-                    </com.google.android.material.textfield.TextInputLayout>
-                    
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSave"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/settings_save_btn"
-                        android:textSize="16sp"
-                        app:cornerRadius="24dp" />
+                        android:layout_marginTop="4dp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnViewLogs"
+                    <!-- Toggle Button Group for Engine Selection -->
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/toggleEngineGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnEngineVieNeu"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_engine_vieneu"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnEngineGoogle"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_engine_google"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <!-- Engine Description / Badge -->
+                    <TextView
+                        android:id="@+id/tvEngineBadge"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/settings_view_logs"
-                        android:textSize="14sp"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:textColor="@color/error" />
+                        android:background="@drawable/badge_background"
+                        android:padding="8dp"
+                        android:text="@string/settings_engine_vieneu_badge"
+                        android:textSize="12sp"
+                        android:textColor="@color/primary"
+                        android:textStyle="italic" />
 
                 </LinearLayout>
-                
+
             </com.google.android.material.card.MaterialCardView>
-            
-            <!-- TTS Settings Card -->
+
+            <!-- 2. Voice Selection Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardVoiceSelection"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="4dp"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
                 app:cardBackgroundColor="@color/background_card">
-                
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
-                    
+                    android:padding="16dp">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_voice_title"
-                        android:textSize="18sp"
+                        android:textSize="17sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
-                        
-                    <!-- Voice Selection -->
+
                     <TextView
                         android:id="@+id/tvCurrentVoice"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/settings_voice_default"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/tvVoiceSubInfo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Giọng chuẩn • Bắc Bộ"
+                        android:textSize="12sp"
                         android:textColor="@color/text_secondary" />
-                        
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSelectVoice"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/settings_select_voice_btn"
+                        android:textSize="13sp"
+                        app:cornerRadius="16dp"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-                    
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 3. Voice Modulation Card (Pitch & Speed) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardVoiceModulation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/background_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_modulation_title"
+                            android:textSize="17sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnResetPitchSpeed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/settings_reset_pitch_speed"
+                            android:textSize="11sp"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:textColor="@color/primary"
+                            android:paddingHorizontal="4dp" />
+
+                    </LinearLayout>
+
                     <!-- Pitch Slider -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="8dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
-                        
+
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/settings_pitch"
+                            android:textSize="14sp"
                             android:textColor="@color/text_secondary" />
-                            
+
                         <TextView
                             android:id="@+id/tvPitchValue"
                             android:layout_width="wrap_content"
@@ -180,7 +260,7 @@
                             android:textStyle="bold"
                             android:text="1.0x" />
                     </LinearLayout>
-                        
+
                     <com.google.android.material.slider.Slider
                         android:id="@+id/sliderPitch"
                         android:layout_width="match_parent"
@@ -194,17 +274,18 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="4dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
-                        
+
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/settings_speed"
+                            android:textSize="14sp"
                             android:textColor="@color/text_secondary" />
-                            
+
                         <TextView
                             android:id="@+id/tvSpeedValue"
                             android:layout_width="wrap_content"
@@ -213,7 +294,7 @@
                             android:textStyle="bold"
                             android:text="1.0x" />
                     </LinearLayout>
-                        
+
                     <com.google.android.material.slider.Slider
                         android:id="@+id/sliderSpeed"
                         android:layout_width="match_parent"
@@ -222,31 +303,33 @@
                         android:valueTo="2.0"
                         android:value="1.0"
                         android:stepSize="0.1" />
-                        
+
                 </LinearLayout>
-                
+
             </com.google.android.material.card.MaterialCardView>
-            
-            <!-- Pause & Cadence Settings Card -->
+
+            <!-- 4. Reading Cadence & Natural Pauses Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardCadence"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="4dp"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
                 app:cardBackgroundColor="@color/background_card">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_cadence_title"
-                        android:textSize="18sp"
+                        android:textSize="17sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
 
@@ -256,23 +339,23 @@
                         android:text="@string/settings_cadence_desc"
                         android:textSize="13sp"
                         android:textColor="@color/text_secondary"
-                        android:layout_marginTop="6dp" />
+                        android:layout_marginTop="4dp" />
 
                     <!-- Presets Horizontal Buttons -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_cadence_presets"
-                        android:textSize="14sp"
+                        android:textSize="13sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary"
-                        android:layout_marginTop="16dp" />
+                        android:layout_marginTop="12dp" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:layout_marginTop="8dp">
+                        android:layout_marginTop="6dp">
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnPresetStandard"
@@ -282,6 +365,7 @@
                             android:text="@string/preset_standard"
                             android:textSize="11sp"
                             android:paddingHorizontal="4dp"
+                            app:cornerRadius="14dp"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
                         <com.google.android.material.button.MaterialButton
@@ -293,6 +377,7 @@
                             android:text="@string/preset_fast"
                             android:textSize="11sp"
                             android:paddingHorizontal="4dp"
+                            app:cornerRadius="14dp"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
                         <com.google.android.material.button.MaterialButton
@@ -304,6 +389,7 @@
                             android:text="@string/preset_emotional"
                             android:textSize="11sp"
                             android:paddingHorizontal="4dp"
+                            app:cornerRadius="14dp"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
                     </LinearLayout>
@@ -312,7 +398,7 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="14dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
 
@@ -321,7 +407,8 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/settings_pause_sentence"
-                            android:textColor="@color/text_secondary" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
 
                         <TextView
                             android:id="@+id/tvPauseSentenceValue"
@@ -345,7 +432,7 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="4dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
 
@@ -354,7 +441,8 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/settings_pause_paragraph"
-                            android:textColor="@color/text_secondary" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
 
                         <TextView
                             android:id="@+id/tvPauseParagraphValue"
@@ -378,7 +466,7 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="4dp"
                         android:orientation="horizontal"
                         android:gravity="center_vertical">
 
@@ -387,7 +475,8 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/settings_pause_clause"
-                            android:textColor="@color/text_secondary" />
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
 
                         <TextView
                             android:id="@+id/tvPauseClauseValue"
@@ -407,12 +496,102 @@
                         android:value="180"
                         android:stepSize="10" />
 
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 5. Server Connection Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardServerConnection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/background_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_connection_title"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_connection_desc"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etBaseUrl"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/settings_url_hint"
+                            android:inputType="textUri" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSave"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/settings_save_btn"
+                        android:textSize="15sp"
+                        app:cornerRadius="20dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 6. Diagnostics & Logging Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/background_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛠️ Nhật ký &amp; Chẩn đoán"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
                     <!-- Debug Logging Switch -->
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchDebugLogging"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="8dp"
                         android:text="@string/settings_debug_logging"
                         android:textColor="@color/text_primary"
                         android:checked="true" />
@@ -422,19 +601,31 @@
                         android:id="@+id/btnViewTimingLogs"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="8dp"
                         android:text="@string/settings_view_timing_logs"
-                        android:textSize="14sp"
+                        android:textSize="13sp"
+                        app:cornerRadius="16dp"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnViewLogs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/settings_view_logs"
+                        android:textSize="13sp"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:textColor="@color/error" />
 
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- App Version -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="20dp"
                 android:gravity="center"
                 android:orientation="vertical">
 
@@ -443,7 +634,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/app_version"
-                    android:textColor="@color/text_hint" />
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp" />
 
             </LinearLayout>
 

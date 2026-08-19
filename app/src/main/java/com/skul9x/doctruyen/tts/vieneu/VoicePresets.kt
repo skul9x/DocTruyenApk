@@ -17,6 +17,91 @@ data class VoicePreset(
     val speakerEmb: FloatArray,
     val codes: Array<IntArray>? = null
 ) {
+    val genderDisplay: String
+        get() = when (gender.trim().lowercase()) {
+            "female", "nữ", "nu" -> "Nữ"
+            "male", "nam" -> "Nam"
+            else -> {
+                if (description.contains("Nữ", ignoreCase = true)) "Nữ"
+                else if (description.contains("Nam", ignoreCase = true) && !description.contains("Miền Nam", ignoreCase = true) && !description.contains("· Nam", ignoreCase = true) && !description.contains("- Nam", ignoreCase = true)) "Nam"
+                else if (gender.isNotBlank() && gender != "unknown") gender
+                else ""
+            }
+        }
+
+    val regionDisplay: String
+        get() {
+            val r = region.trim()
+            val effectiveRegion = when {
+                r.isNotEmpty() && !r.equals("unknown", ignoreCase = true) -> r
+                description.contains("Miền Bắc", ignoreCase = true) || description.contains("Bắc", ignoreCase = true) -> "Bắc"
+                description.contains("Miền Nam", ignoreCase = true) || description.contains("Nam", ignoreCase = true) -> "Nam"
+                description.contains("Miền Trung", ignoreCase = true) || description.contains("Trung", ignoreCase = true) -> "Trung"
+                else -> ""
+            }
+
+            return when {
+                effectiveRegion.isEmpty() -> ""
+                effectiveRegion.startsWith("Giọng ", ignoreCase = true) -> effectiveRegion
+                effectiveRegion.startsWith("Miền ", ignoreCase = true) -> "Giọng $effectiveRegion"
+                effectiveRegion.equals("Bắc", ignoreCase = true) -> "Giọng Miền Bắc"
+                effectiveRegion.equals("Nam", ignoreCase = true) -> "Giọng Miền Nam"
+                effectiveRegion.equals("Trung", ignoreCase = true) -> "Giọng Miền Trung"
+                else -> "Giọng $effectiveRegion"
+            }
+        }
+
+    val styleDisplay: String
+        get() {
+            // First check if style or description contains specific style phrase
+            val descLower = description.lowercase()
+            if (descLower.contains("phong cách tin tức") || descLower.contains("tin tức")) {
+                return "Phong cách tin tức"
+            }
+            if (descLower.contains("phong cách kể chuyện") || descLower.contains("kể chuyện")) {
+                return "Phong cách kể chuyện"
+            }
+            if (descLower.contains("phong cách đọc truyện") || descLower.contains("đọc truyện")) {
+                return "Phong cách đọc truyện"
+            }
+            if (descLower.contains("giọng đọc tự nhiên")) {
+                return "Giọng đọc tự nhiên"
+            }
+            if (descLower.contains("phong cách tự nhiên") || descLower.contains("tự nhiên")) {
+                return "Phong cách tự nhiên"
+            }
+            if (descLower.contains("kiếm hiệp")) {
+                return "Phong cách kiếm hiệp"
+            }
+
+            val s = style.trim().lowercase()
+            return when {
+                s in listOf("tin_tuc", "tintuc", "news") -> "Phong cách tin tức"
+                s in listOf("doc_truyen", "doctruyen", "story", "kể chuyện", "ke_chuyen") -> "Phong cách kể chuyện"
+                s in listOf("tu_nhien", "tunhien", "natural") -> "Phong cách tự nhiên"
+                s in listOf("kiem_hiep", "kiemhiep") -> "Phong cách kiếm hiệp"
+                s.isNotEmpty() && s != "unknown" -> "Phong cách $s"
+                else -> "Phong cách tự nhiên"
+            }
+        }
+
+    fun getFormattedDescription(): String {
+        val parts = mutableListOf<String>()
+        if (genderDisplay.isNotEmpty()) parts.add(genderDisplay)
+        if (regionDisplay.isNotEmpty()) parts.add(regionDisplay)
+        if (styleDisplay.isNotEmpty()) parts.add(styleDisplay)
+        return parts.joinToString(" - ")
+    }
+
+    fun getFormattedDisplayName(): String {
+        val desc = getFormattedDescription()
+        return if (desc.isNotEmpty()) {
+            "$name - $desc"
+        } else {
+            name
+        }
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -46,6 +131,10 @@ object VoicePresets {
 
     fun getVoice(name: String): VoicePreset? {
         return presetsMap[name] ?: presetsMap[defaultVoiceName]
+    }
+
+    fun getVoicePresets(): List<VoicePreset> {
+        return presetsMap.values.toList()
     }
 
     fun getVoiceEmbedding(name: String): FloatArray? {

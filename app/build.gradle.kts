@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.skul9x.doctruyen"
     compileSdk = 35
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.skul9x.doctruyen"
@@ -56,6 +57,9 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

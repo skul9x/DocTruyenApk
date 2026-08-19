@@ -22,38 +22,49 @@
 
 ---
 
-## 🏛️ Kiến Trúc Hệ Thống
+## 🏛️ Kiến Trúc Hệ Thống (Dual TTS Engine)
+
+Hệ thống hỗ trợ chuyển đổi linh hoạt giữa **VieNeu Neural AI TTS** (On-Device Neural Model) và **Google TTS / Hệ Thống Android** thông qua interface thống nhất `ITTSManager` và `TTSManagerFactory`.
 
 ```mermaid
 flowchart TD
     subgraph UI_Service ["Giao diện & Dịch vụ Nền"]
         A[Novel Reader / Story Content] --> B[ReadingService - Foreground]
-        B --> C[VieNeuTTSManager]
+        B --> C{TTSManagerFactory}
+        C -->|Engine: VIENEU| D1[VieNeuTTSManager]
+        C -->|Engine: GOOGLE_TTS| D2[GoogleTTSManager]
     end
 
-    subgraph Text_Processing ["Xử lý Ngôn ngữ Tiếng Việt"]
-        C --> D[SmartTextSegmenter]
-        D -->|Text Normalization & Protected Terms| E[sea-g2p Phonemizer - Rust NDK]
-        E -->|Phoneme Token IDs| F[Chunk Queue with Pause Types]
+    subgraph VieNeu_Pipeline ["VieNeu Neural Engine Pipeline"]
+        D1 --> E[SmartTextSegmenter]
+        E -->|Text Normalization| F[sea-g2p Phonemizer - Rust NDK]
+        F -->|Token IDs| G[ONNX Runtime Acoustic & MOSS Codec]
+        G -->|48kHz PCM| H[PcmUtils & TTSAudioPipeline]
+        H --> I[AudioTrack Playback Thread]
     end
 
-    subgraph AI_Inference ["ONNX Runtime Engine (int8 CPU)"]
-        F --> G[Acoustic Prefill & Decode Step]
-        G --> H[MOSS Audio Tokenizer Nano Codec]
-        H --> I[48kHz 16-bit Mono Raw PCM]
-    end
-
-    subgraph Audio_Pipeline ["Audio Streaming & Pipeline"]
-        I --> J[PcmUtils: Micro-Fade & Atomic Silence Padding]
-        J --> K[Blocking Audio Queue / Dynamic Lookahead]
-        K --> L[AudioTrack Playback Thread]
+    subgraph Google_Pipeline ["Google TTS Engine Pipeline"]
+        D2 --> J[SmartTextSegmenter & Cadence Pauses]
+        D2 --> K[Android TextToSpeech API - com.google.android.tts]
     end
 
     subgraph Telemetry ["Telemetry & Metrics"]
-        L -.-> M[TtsMetricsLogger]
-        M -.-> N[DebugLogActivity / UI Dashboard]
+        I -.-> L[TtsMetricsLogger]
+        L -.-> M[DebugLogActivity / UI Dashboard]
     end
 ```
+
+---
+
+## 🎙️ Dual Engine: VieNeu AI & Google TTS
+
+| Đặc tính | VieNeu Neural AI TTS | Google TTS Engine |
+| :--- | :--- | :--- |
+| **Loại mô hình** | On-Device Neural Codec + Acoustic Transformer | Android System TextToSpeech (`com.google.android.tts`) |
+| **Chất lượng** | Giọng đọc tự nhiên, liền mạch, biểu cảm cao | Chuẩn ngữ điệu Google, tốc độ phản hồi cực nhanh |
+| **Giọng đọc có sẵn** | 8 giọng (Trúc Ly, Minh Đức, Phạm Tuyên, Thái Sơn,...) | Toàn bộ giọng Google Tiếng Việt (Offline & Online) |
+| **Cơ chế ngắt nghỉ** | Micro-fade & Atomic Chunk Silence theo ngữ nghĩa | SmartTextSegmenter silent utterance insertion |
+| **Chuyển đổi tức thời** | Toggle 1-chạm trong Cài Đặt (đồng bộ `ReadingService`) | Toggle 1-chạm trong Cài Đặt (đồng bộ `ReadingService`) |
 
 ---
 

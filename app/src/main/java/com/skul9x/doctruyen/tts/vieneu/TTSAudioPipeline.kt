@@ -250,6 +250,7 @@ class TTSAudioPipeline(
         synthesisJob = null
         playbackJob = null
         chunkQueue.clear()
+        audioPlayer.flush()
         audioPlayer.stop()
         if (resetIndex) {
             currentChunkIndex = 0

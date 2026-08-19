@@ -1,34 +1,44 @@
+# Built-in Android & Gradle
 *.iml
-.gradle
+.gradle/
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
 local.properties
-__pycache__
+.idea/
+.DS_Store
+/build/
+build/
+app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Kotlin & Python & Rust
+.kotlin/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
-.venv
-venv
-env
+.venv/
+venv/
+env/
 .env
-build
-dist
+dist/
 *.spec
 target/
 **/target/
-*.log
-*.jks
-*.keystore
-app/build/
-build/
 
+# Local logs & AI artifacts
+log.txt
+*.log
+.brain/
+
+# Excluded per user request
+1.md
+2.md
+test_phase01_setup.sh
+jdk21/
+/jdk21/

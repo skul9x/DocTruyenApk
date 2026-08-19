@@ -34,6 +34,29 @@ class VieNeuOnnxEngine(
     private val lock = ReentrantLock()
     private val env: OrtEnvironment get() = sessionManager.env
 
+    // Pre-allocated buffers for topKSample to eliminate per-call allocations
+    private var workingLogitsBuffer = FloatArray(1024)
+    private var topKIndicesBuffer = IntArray(256)
+    private var topKLogitsBuffer = FloatArray(256)
+    private var probsBuffer = DoubleArray(256)
+
+    // W2 optimization: Contiguous flattened audio embeddings per channel for cache locality
+    // shape: flatAudioEmbeddings[ch] has size (audioVocabSize * hiddenSize)
+    val flatAudioEmbeddings: Array<FloatArray> = Array(audioEmbeddings.size) { ch ->
+        val vSize = audioEmbeddings[ch].size
+        val hSize = config.hiddenSize
+        val flat = FloatArray(vSize * hSize)
+        for (v in 0 until vSize) {
+            val emb = audioEmbeddings[ch][v]
+            System.arraycopy(emb, 0, flat, v * hSize, hSize)
+        }
+        flat
+    }
+    // Pre-allocated channel logits buffer
+    private val channelLogitsBuffer: Array<FloatArray> = Array(audioEmbeddings.size) { ch ->
+        FloatArray(audioEmbeddings[ch].size)
+    }
+
     fun infer(
         phonemes: String,
         voiceName: String = "Trúc Ly",
@@ -121,6 +144,9 @@ class VieNeuOnnxEngine(
             null
         }
 
+        val nextKList = ArrayList<CacheTensor>(L)
+        val nextVList = ArrayList<CacheTensor>(L)
+
         for (t in 0 until maxNewFrames) {
             val (codes, eos) = acousticFrame(
                 h = h,
@@ -155,7 +181,7 @@ class VieNeuOnnxEngine(
             decodeInputs["inputs_embeds"] = seTensor
             decodeInputs["position_ids"] = posTensor
 
-            val createdCacheTensors = ArrayList<OnnxTensor>()
+            val createdCacheTensors = ArrayList<OnnxTensor>(2 * L)
             for (i in 0 until L) {
                 val kt = pastK[i].toOnnxTensor(env)
                 val vt = pastV[i].toOnnxTensor(env)
@@ -175,18 +201,34 @@ class VieNeuOnnxEngine(
                 h = FloatArray(H)
                 hiddenFb.get(h)
 
-                val newKList = ArrayList<CacheTensor>(L)
-                val newVList = ArrayList<CacheTensor>(L)
+                nextKList.clear()
+                nextVList.clear()
                 for (i in 0 until L) {
                     val kt = decResult.get(1 + i) as OnnxTensor
                     val vt = decResult.get(1 + L + i) as OnnxTensor
-                    newKList.add(CacheTensor.fromOnnxTensor(kt))
-                    newVList.add(CacheTensor.fromOnnxTensor(vt))
+                    nextKList.add(CacheTensor.fromOnnxTensor(kt))
+                    nextVList.add(CacheTensor.fromOnnxTensor(vt))
                 }
-                pastK = newKList
-                pastV = newVList
+
+                // C2 Fix: Recycle and clear old CacheTensors before replacement
+                for (i in 0 until L) {
+                    pastK[i].recycle()
+                    pastV[i].recycle()
+                }
+
+                pastK = ArrayList(nextKList)
+                pastV = ArrayList(nextVList)
+            }
+
+            // Periodic GC hint every 100 frames as a safety net
+            if ((t + 1) % 100 == 0) {
+                System.gc()
             }
         }
+
+        // Clean up last pastK/pastV after loop
+        for (ct in pastK) ct.recycle()
+        for (ct in pastV) ct.recycle()
 
         if (frames.isEmpty()) {
             return FloatArray(0)
@@ -296,21 +338,30 @@ class VieNeuOnnxEngine(
         }
 
         // Text logits for EOS check: slot0 @ text_emb.T
+        // W1 optimization: compute dot product for EOS token (token 6) and verify if it dominates vs other candidate tokens
+        val eosTokenId = config.speechGenerationEndTokenId
+        val eosEmb = textEmbeddings[eosTokenId]
+        var eosDot = 0f
+        for (h in 0 until H) {
+            eosDot += slot0[h] * eosEmb[h]
+        }
+
+        // Compare against all other text tokens with early exit if any token is higher
+        var isEos = true
         val textVocabSize = config.textVocabSize
-        var maxLogit = -Float.MAX_VALUE
-        var argmaxId = 0
         for (v in 0 until textVocabSize) {
+            if (v == eosTokenId) continue
             val emb = textEmbeddings[v]
             var dot = 0f
             for (h in 0 until H) {
                 dot += slot0[h] * emb[h]
             }
-            if (dot > maxLogit) {
-                maxLogit = dot
-                argmaxId = v
+            if (dot >= eosDot) {
+                isEos = false
+                break
             }
         }
-        val eos = (argmaxId == config.speechGenerationEndTokenId)
+        val eos = isEos
 
         return Pair(codes, eos)
     }
@@ -325,14 +376,16 @@ class VieNeuOnnxEngine(
         prev: Set<Int>?
     ): Int {
         val audioVocabSize = audioEmbeddings[ch].size // 1024
-        val logits = FloatArray(audioVocabSize)
+        val logits = channelLogitsBuffer[ch]
         val H = config.hiddenSize
+        val flatEmb = flatAudioEmbeddings[ch]
 
+        // W2 optimization: single loop with contiguous stride access for matrix-vector multiply
         for (v in 0 until audioVocabSize) {
-            val emb = audioEmbeddings[ch][v]
+            val offset = v * H
             var dot = 0f
             for (h in 0 until H) {
-                dot += vec[h] * emb[h]
+                dot += vec[h] * flatEmb[offset + h]
             }
             logits[v] = dot
         }
@@ -356,7 +409,11 @@ class VieNeuOnnxEngine(
         prevTokens: Set<Int>? = null
     ): Int {
         val V = logits.size
-        val workingLogits = logits.clone()
+        if (workingLogitsBuffer.size < V) {
+            workingLogitsBuffer = FloatArray(V)
+        }
+        val workingLogits = workingLogitsBuffer
+        System.arraycopy(logits, 0, workingLogits, 0, V)
 
         if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f && prevTokens != null && prevTokens.isNotEmpty()) {
             for (idx in prevTokens) {
@@ -379,29 +436,114 @@ class VieNeuOnnxEngine(
             return bestIdx
         }
 
+        val invTemp = 1.0f / temperature
         for (i in 0 until V) {
-            workingLogits[i] /= temperature
+            workingLogits[i] *= invTemp
         }
 
         val effK = if (k in 1 until V) k else V
-        // Find top-k indices
-        val indexed = Array(V) { i -> IndexedLogit(i, workingLogits[i]) }
-        // Partial sort / full sort top-k
-        indexed.sortByDescending { it.logit }
+        if (topKIndicesBuffer.size < effK) {
+            topKIndicesBuffer = IntArray(effK)
+            topKLogitsBuffer = FloatArray(effK)
+            probsBuffer = DoubleArray(effK)
+        }
+        val topIndices = topKIndicesBuffer
+        val topLogits = topKLogitsBuffer
+        val probs = probsBuffer
 
-        val topCandidates = Array(effK) { i -> indexed[i] }
+        // Partial selection: min-heap of size effK using primitive parallel arrays
+        // Heap tracks indices 0 until effK in topIndices, compared by workingLogits[idx]
+        var heapSize = 0
+        for (i in 0 until V) {
+            val logit = workingLogits[i]
+            if (heapSize < effK) {
+                // Insert into min-heap
+                var child = heapSize
+                topIndices[child] = i
+                heapSize++
+                while (child > 0) {
+                    val parent = (child - 1) shr 1
+                    if (workingLogits[topIndices[child]] < workingLogits[topIndices[parent]]) {
+                        val temp = topIndices[child]
+                        topIndices[child] = topIndices[parent]
+                        topIndices[parent] = temp
+                        child = parent
+                    } else {
+                        break
+                    }
+                }
+            } else if (logit > workingLogits[topIndices[0]]) {
+                // Replace root and sift down
+                topIndices[0] = i
+                var root = 0
+                while (true) {
+                    var smallest = root
+                    val left = (root shl 1) + 1
+                    val right = left + 1
+                    if (left < effK && workingLogits[topIndices[left]] < workingLogits[topIndices[smallest]]) {
+                        smallest = left
+                    }
+                    if (right < effK && workingLogits[topIndices[right]] < workingLogits[topIndices[smallest]]) {
+                        smallest = right
+                    }
+                    if (smallest != root) {
+                        val temp = topIndices[root]
+                        topIndices[root] = topIndices[smallest]
+                        topIndices[smallest] = temp
+                        root = smallest
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+
+        // Extract elements in descending order
+        // Sift down helper over heap of size `size`
+        var curSize = effK
+        for (pos in (effK - 1) downTo 0) {
+            val rootIdx = topIndices[0]
+            topLogits[pos] = workingLogits[rootIdx]
+            
+            // Move last element to root and sift down
+            curSize--
+            if (curSize > 0) {
+                topIndices[0] = topIndices[curSize]
+                var root = 0
+                while (true) {
+                    var smallest = root
+                    val left = (root shl 1) + 1
+                    val right = left + 1
+                    if (left < curSize && workingLogits[topIndices[left]] < workingLogits[topIndices[smallest]]) {
+                        smallest = left
+                    }
+                    if (right < curSize && workingLogits[topIndices[right]] < workingLogits[topIndices[smallest]]) {
+                        smallest = right
+                    }
+                    if (smallest != root) {
+                        val temp = topIndices[root]
+                        topIndices[root] = topIndices[smallest]
+                        topIndices[smallest] = temp
+                        root = smallest
+                    } else {
+                        break
+                    }
+                }
+            }
+            topIndices[pos] = rootIdx
+        }
 
         // Softmax over top-k
-        val maxLogit = topCandidates[0].logit
+        val maxLogit = topLogits[0]
         var sumExp = 0.0
-        val probs = DoubleArray(effK)
         for (i in 0 until effK) {
-            val p = exp((topCandidates[i].logit - maxLogit).toDouble())
+            val p = exp((topLogits[i] - maxLogit).toDouble())
             probs[i] = p
             sumExp += p
         }
+        val invSumExp = 1.0 / sumExp
         for (i in 0 until effK) {
-            probs[i] /= sumExp
+            probs[i] *= invSumExp
         }
 
         // Top-P Nucleus filtering
@@ -418,8 +560,9 @@ class VieNeuOnnxEngine(
                 }
             }
             if (pSum > 0.0) {
+                val invPSum = 1.0 / pSum
                 for (i in 0 until effK) {
-                    probs[i] /= pSum
+                    probs[i] *= invPSum
                 }
             }
         }
@@ -430,14 +573,12 @@ class VieNeuOnnxEngine(
         for (i in 0 until effK) {
             accum += probs[i]
             if (r <= accum || i == effK - 1) {
-                return topCandidates[i].index
+                return topIndices[i]
             }
         }
 
-        return topCandidates[0].index
+        return topIndices[0]
     }
-
-    private data class IndexedLogit(val index: Int, val logit: Float)
 
     private fun decodeCodes(frames: List<IntArray>): FloatArray {
         val tGen = frames.size
@@ -589,13 +730,18 @@ class VieNeuOnnxEngine(
                     }
                 }
             }
+        }
 
-            if (anchor != null) {
+        // Post-pass SIMD-friendly loop: add anchor to all rows in one pass
+        if (anchor != null) {
+            for (t in 0 until T) {
+                val offset = t * H
                 for (h in 0 until H) {
                     result[offset + h] += anchor[h]
                 }
             }
         }
+
         return result
     }
 
@@ -609,11 +755,49 @@ class VieNeuOnnxEngine(
      * Helper holder for float cache tensors (past_k / past_v).
      */
     data class CacheTensor(
-        val shape: LongArray,
-        val data: FloatArray
+        var shape: LongArray,
+        var data: FloatArray
     ) {
         fun toOnnxTensor(env: OrtEnvironment): OnnxTensor {
             return OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape)
+        }
+
+        fun recycle() {
+            Pool.release(this)
+        }
+
+        object Pool {
+            private const val MAX_POOL_SIZE = 48
+            private val pool = ArrayDeque<CacheTensor>(MAX_POOL_SIZE)
+
+            @Synchronized
+            fun obtain(shape: LongArray, data: FloatArray): CacheTensor {
+                val cached = if (pool.isNotEmpty()) pool.removeLast() else null
+                return if (cached != null) {
+                    cached.shape = shape
+                    cached.data = data
+                    cached
+                } else {
+                    CacheTensor(shape, data)
+                }
+            }
+
+            @Synchronized
+            fun release(tensor: CacheTensor) {
+                if (pool.size < MAX_POOL_SIZE) {
+                    tensor.data = FloatArray(0)
+                    tensor.shape = LongArray(0)
+                    pool.addLast(tensor)
+                } else {
+                    tensor.data = FloatArray(0)
+                    tensor.shape = LongArray(0)
+                }
+            }
+
+            @Synchronized
+            fun clear() {
+                pool.clear()
+            }
         }
 
         companion object {
@@ -622,7 +806,7 @@ class VieNeuOnnxEngine(
                 val fb = tensor.floatBuffer
                 val array = FloatArray(fb.remaining())
                 fb.get(array)
-                return CacheTensor(shape, array)
+                return Pool.obtain(shape, array)
             }
         }
 

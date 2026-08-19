@@ -89,4 +89,17 @@
     <string name="settings_pause_clause">Nghỉ ngắt ý (, ; : —)</string>
     <string name="settings_debug_logging">Bật ghi nhật ký đo đạc (Debug Logs)</string>
     <string name="settings_view_timing_logs">⏱️ Xem Nhật Ký Đo Thời Gian Đọc</string>
+
+    <!-- TTS Engine & Modern UI Resources -->
+    <string name="settings_engine_title">⚡ Bộ máy phát âm (TTS Engine)</string>
+    <string name="settings_engine_desc">Chọn công nghệ tạo giọng đọc tự nhiên phù hợp với thiết bị</string>
+    <string name="settings_engine_vieneu">VieNeu Neural TTS</string>
+    <string name="settings_engine_vieneu_badge">Offline AI • Giọng tự nhiên</string>
+    <string name="settings_engine_google">Google TTS</string>
+    <string name="settings_engine_google_badge">Google Cloud / Hệ thống • Tiết kiệm RAM</string>
+    <string name="settings_modulation_title">🎛️ Tốc độ &amp; Cao độ giọng đọc</string>
+    <string name="settings_reset_pitch_speed">Đặt lại mặc định</string>
+    <string name="settings_reset_pitch_speed_done">Đã đặt lại tốc độ &amp; cao độ về 1.0x</string>
+    <string name="settings_engine_switched">Đã chuyển sang %s</string>
+    <string name="settings_voice_active">Giọng hiện tại: %s</string>
 </resources>

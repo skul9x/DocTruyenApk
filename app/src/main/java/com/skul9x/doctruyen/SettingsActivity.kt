@@ -1,14 +1,27 @@
 package com.skul9x.doctruyen
 
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
+import android.widget.RadioButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.slider.Slider
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.skul9x.doctruyen.network.HostingVerifier
 import com.skul9x.doctruyen.network.RetrofitClient
+import com.skul9x.doctruyen.tts.GoogleTTSManager
+import com.skul9x.doctruyen.tts.ITTSManager
+import com.skul9x.doctruyen.tts.vieneu.VoicePresets
 import com.skul9x.doctruyen.utils.UserConfig
 
 class SettingsActivity : AppCompatActivity() {
@@ -16,110 +29,371 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnBack: ImageButton
     private lateinit var etBaseUrl: TextInputEditText
     private lateinit var btnSave: MaterialButton
+    private lateinit var toggleEngineGroup: MaterialButtonToggleGroup
+    private lateinit var btnEngineVieNeu: MaterialButton
+    private lateinit var btnEngineGoogle: MaterialButton
+    private lateinit var tvEngineBadge: TextView
+
+    private lateinit var tvCurrentVoice: TextView
+    private lateinit var tvVoiceSubInfo: TextView
+    private lateinit var btnSelectVoice: MaterialButton
+
+    private lateinit var sliderPitch: Slider
+    private lateinit var sliderSpeed: Slider
+    private lateinit var tvPitchValue: TextView
+    private lateinit var tvSpeedValue: TextView
+    private lateinit var btnResetPitchSpeed: MaterialButton
+
+    private lateinit var sliderPauseSentence: Slider
+    private lateinit var sliderPauseParagraph: Slider
+    private lateinit var sliderPauseClause: Slider
+    private lateinit var tvPauseSentenceValue: TextView
+    private lateinit var tvPauseParagraphValue: TextView
+    private lateinit var tvPauseClauseValue: TextView
+
+    private lateinit var btnPresetStandard: MaterialButton
+    private lateinit var btnPresetFast: MaterialButton
+    private lateinit var btnPresetEmotional: MaterialButton
+
+    private lateinit var switchDebugLogging: SwitchMaterial
+    private lateinit var btnViewTimingLogs: MaterialButton
+    private lateinit var btnViewLogs: MaterialButton
+
+    // Temporary GoogleTTS instance for querying system/Google voices if selected
+    private var tempGoogleTts: GoogleTTSManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_settings)
 
+        // Pre-initialize GoogleTTSManager early to bind async TTS engine before user opens dialog
+        tempGoogleTts = GoogleTTSManager(this, onStateChange = {
+            runOnUiThread {
+                updateActiveVoiceDisplay()
+            }
+        })
+
+        bindViews()
+        setupHeaderAndConnection()
+        setupEngineSelector()
+        setupVoiceSelection()
+        setupVoiceModulation()
+        setupCadenceAndPauses()
+        setupDiagnostics()
+    }
+
+    private fun bindViews() {
         btnBack = findViewById(R.id.btnBack)
         etBaseUrl = findViewById(R.id.etBaseUrl)
         btnSave = findViewById(R.id.btnSave)
 
-        // Load current URL
-        val currentUrl = UserConfig.getBaseUrl(this)
-        etBaseUrl.setText(currentUrl)
+        toggleEngineGroup = findViewById(R.id.toggleEngineGroup)
+        btnEngineVieNeu = findViewById(R.id.btnEngineVieNeu)
+        btnEngineGoogle = findViewById(R.id.btnEngineGoogle)
+        tvEngineBadge = findViewById(R.id.tvEngineBadge)
 
+        tvCurrentVoice = findViewById(R.id.tvCurrentVoice)
+        tvVoiceSubInfo = findViewById(R.id.tvVoiceSubInfo)
+        btnSelectVoice = findViewById(R.id.btnSelectVoice)
+
+        sliderPitch = findViewById(R.id.sliderPitch)
+        sliderSpeed = findViewById(R.id.sliderSpeed)
+        tvPitchValue = findViewById(R.id.tvPitchValue)
+        tvSpeedValue = findViewById(R.id.tvSpeedValue)
+        btnResetPitchSpeed = findViewById(R.id.btnResetPitchSpeed)
+
+        sliderPauseSentence = findViewById(R.id.sliderPauseSentence)
+        sliderPauseParagraph = findViewById(R.id.sliderPauseParagraph)
+        sliderPauseClause = findViewById(R.id.sliderPauseClause)
+        tvPauseSentenceValue = findViewById(R.id.tvPauseSentenceValue)
+        tvPauseParagraphValue = findViewById(R.id.tvPauseParagraphValue)
+        tvPauseClauseValue = findViewById(R.id.tvPauseClauseValue)
+
+        btnPresetStandard = findViewById(R.id.btnPresetStandard)
+        btnPresetFast = findViewById(R.id.btnPresetFast)
+        btnPresetEmotional = findViewById(R.id.btnPresetEmotional)
+
+        switchDebugLogging = findViewById(R.id.switchDebugLogging)
+        btnViewTimingLogs = findViewById(R.id.btnViewTimingLogs)
+        btnViewLogs = findViewById(R.id.btnViewLogs)
+    }
+
+    private fun setupHeaderAndConnection() {
         btnBack.setOnClickListener {
             finish()
         }
-        
-        findViewById<com.google.android.material.button.MaterialButton>(R.id.btnViewLogs).setOnClickListener {
-                startActivity(android.content.Intent(this, DebugLogActivity::class.java))
+
+        val currentUrl = UserConfig.getBaseUrl(this)
+        etBaseUrl.setText(currentUrl)
+
+        btnSave.setOnClickListener {
+            val newUrl = etBaseUrl.text.toString().trim()
+            if (newUrl.isEmpty()) {
+                Toast.makeText(this, getString(R.string.msg_enter_url), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            UserConfig.setBaseUrl(this, newUrl)
+            val formattedUrl = UserConfig.getBaseUrl(this)
+
+            btnSave.isEnabled = false
+            btnSave.text = getString(R.string.settings_checking)
+
+            HostingVerifier.verify(this, formattedUrl) { success ->
+                runOnUiThread {
+                    btnSave.isEnabled = true
+                    btnSave.text = getString(R.string.settings_save_btn)
+
+                    if (success) {
+                        RetrofitClient.resetClient()
+                        Toast.makeText(this, getString(R.string.settings_success), Toast.LENGTH_LONG).show()
+                        finish()
+                    } else {
+                        Toast.makeText(this, getString(R.string.settings_failed), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupEngineSelector() {
+        val currentEngine = UserConfig.getTtsEngine(this)
+        if (currentEngine == ITTSManager.EngineType.GOOGLE_TTS) {
+            toggleEngineGroup.check(R.id.btnEngineGoogle)
+            tvEngineBadge.text = getString(R.string.settings_engine_google_badge)
+        } else {
+            toggleEngineGroup.check(R.id.btnEngineVieNeu)
+            tvEngineBadge.text = getString(R.string.settings_engine_vieneu_badge)
         }
 
-        // Initialize TTS Sliders
-        val sliderPitch = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPitch)
-        val sliderSpeed = findViewById<com.google.android.material.slider.Slider>(R.id.sliderSpeed)
-        val tvPitchValue = findViewById<android.widget.TextView>(R.id.tvPitchValue)
-        val tvSpeedValue = findViewById<android.widget.TextView>(R.id.tvSpeedValue)
-        
-        // Helper to format slider value
+        toggleEngineGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                val newEngine = when (checkedId) {
+                    R.id.btnEngineGoogle -> ITTSManager.EngineType.GOOGLE_TTS
+                    else -> ITTSManager.EngineType.VIENEU
+                }
+                UserConfig.setTtsEngine(this, newEngine)
+
+                // Notify ReadingService to switch engine immediately
+                try {
+                    val serviceIntent = android.content.Intent(this, com.skul9x.doctruyen.service.ReadingService::class.java).apply {
+                        action = com.skul9x.doctruyen.service.ReadingService.ACTION_SWITCH_ENGINE
+                        putExtra(com.skul9x.doctruyen.service.ReadingService.EXTRA_ENGINE_TYPE, newEngine.name)
+                    }
+                    startService(serviceIntent)
+                } catch (e: Throwable) {
+                    // Ignore if service cannot be started directly
+                }
+
+                if (newEngine == ITTSManager.EngineType.GOOGLE_TTS) {
+                    tvEngineBadge.text = getString(R.string.settings_engine_google_badge)
+                    Toast.makeText(this, getString(R.string.settings_engine_switched, getString(R.string.settings_engine_google)), Toast.LENGTH_SHORT).show()
+                } else {
+                    tvEngineBadge.text = getString(R.string.settings_engine_vieneu_badge)
+                    Toast.makeText(this, getString(R.string.settings_engine_switched, getString(R.string.settings_engine_vieneu)), Toast.LENGTH_SHORT).show()
+                }
+
+                updateActiveVoiceDisplay()
+            }
+        }
+    }
+
+    private fun setupVoiceSelection() {
+        VoicePresets.loadFromContext(this)
+        updateActiveVoiceDisplay()
+
+        btnSelectVoice.setOnClickListener {
+            val engine = UserConfig.getTtsEngine(this)
+            if (engine == ITTSManager.EngineType.GOOGLE_TTS) {
+                showGoogleVoicePickerDialog()
+            } else {
+                showVieNeuVoicePickerDialog()
+            }
+        }
+    }
+
+    private fun updateActiveVoiceDisplay() {
+        val engine = UserConfig.getTtsEngine(this)
+        if (engine == ITTSManager.EngineType.GOOGLE_TTS) {
+            val savedGoogleVoice = UserConfig.getGoogleTtsVoice(this)
+            val googleTts = tempGoogleTts ?: GoogleTTSManager(this, onStateChange = {}).also {
+                tempGoogleTts = it
+            }
+            val available = googleTts.getAvailableVoices()
+            val matched = if (!savedGoogleVoice.isNullOrEmpty()) {
+                available.find { it.id == savedGoogleVoice }
+            } else {
+                available.firstOrNull()
+            }
+            val displayVoice = matched?.displayName ?: savedGoogleVoice ?: "Google Tiếng Việt (Mặc định)"
+            tvCurrentVoice.text = getString(R.string.settings_voice_active, displayVoice)
+            tvVoiceSubInfo.text = matched?.description ?: "Google TTS • Hệ thống Android • Chuẩn ngôn ngữ Tiếng Việt"
+        } else {
+            val activeVoice = UserConfig.getTtsVoice(this) ?: VoicePresets.defaultVoiceName
+            val preset = VoicePresets.getVoice(activeVoice)
+            tvCurrentVoice.text = getString(R.string.settings_voice_active, activeVoice)
+            if (preset != null) {
+                val formattedDesc = preset.getFormattedDescription()
+                tvVoiceSubInfo.text = if (formattedDesc.isNotEmpty()) formattedDesc else "Neural TTS • Giọng đọc AI tự nhiên"
+            } else {
+                tvVoiceSubInfo.text = "Neural TTS • Giọng đọc AI tự nhiên"
+            }
+        }
+    }
+
+    data class VoiceOption(
+        val id: String,
+        val title: String,
+        val subtitle: String
+    )
+
+    private fun showCustomVoicePickerDialog(
+        title: String,
+        options: List<VoiceOption>,
+        selectedId: String,
+        onSelected: (VoiceOption) -> Unit
+    ) {
+        val selectedIndex = options.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+        var dialog: AlertDialog? = null
+
+        val adapter = object : ArrayAdapter<VoiceOption>(this, R.layout.dialog_item_voice, options) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.dialog_item_voice, parent, false)
+                val item = getItem(position) ?: return view
+
+                val layoutItem = view.findViewById<View>(R.id.layoutVoiceItem)
+                val rbSelected = view.findViewById<RadioButton>(R.id.rbVoiceSelected)
+                val tvTitle = view.findViewById<TextView>(R.id.tvVoiceItemTitle)
+                val tvSubtitle = view.findViewById<TextView>(R.id.tvVoiceItemSubtitle)
+
+                tvTitle.text = item.title
+                if (item.subtitle.isNotEmpty()) {
+                    tvSubtitle.text = item.subtitle
+                    tvSubtitle.visibility = View.VISIBLE
+                } else {
+                    tvSubtitle.visibility = View.GONE
+                }
+
+                val isSelected = (position == selectedIndex)
+                rbSelected.isChecked = isSelected
+                layoutItem.isSelected = isSelected
+                layoutItem.isActivated = isSelected
+
+                return view
+            }
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setAdapter(adapter) { _, which ->
+                val selected = options[which]
+                onSelected(selected)
+                dialog?.dismiss()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .create()
+
+        dialog.show()
+        dialog.listView?.divider = null
+        dialog.listView?.dividerHeight = 0
+    }
+
+    private fun showVieNeuVoicePickerDialog() {
+        val available = VoicePresets.availableVoices
+        val voiceList = if (available.isNotEmpty()) available else listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
+
+        val options = voiceList.map { name ->
+            val preset = VoicePresets.getVoice(name)
+            val desc = preset?.getFormattedDescription() ?: ""
+            VoiceOption(
+                id = name,
+                title = name,
+                subtitle = desc
+            )
+        }
+
+        val currentVoice = UserConfig.getTtsVoice(this) ?: VoicePresets.defaultVoiceName
+
+        showCustomVoicePickerDialog(
+            title = getString(R.string.settings_select_voice_dialog),
+            options = options,
+            selectedId = currentVoice
+        ) { selected ->
+            UserConfig.setTtsVoice(this, selected.id)
+            updateActiveVoiceDisplay()
+            Toast.makeText(this, getString(R.string.settings_voice_current, selected.title), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showGoogleVoicePickerDialog() {
+        val googleTts = tempGoogleTts ?: GoogleTTSManager(this, onStateChange = {}).also {
+            tempGoogleTts = it
+        }
+
+        val availableVoices = googleTts.getAvailableVoices()
+        if (availableVoices.isEmpty()) {
+            Toast.makeText(this, getString(R.string.settings_voice_none), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val options = availableVoices.map { voice ->
+            val sub = if (voice.description.isNotEmpty()) "${voice.gender} • ${voice.description}" else voice.gender
+            VoiceOption(
+                id = voice.id,
+                title = voice.displayName,
+                subtitle = sub
+            )
+        }
+
+        val currentVoice = UserConfig.getGoogleTtsVoice(this) ?: availableVoices.firstOrNull()?.id ?: ""
+
+        showCustomVoicePickerDialog(
+            title = getString(R.string.settings_select_voice_dialog),
+            options = options,
+            selectedId = currentVoice
+        ) { selected ->
+            UserConfig.setGoogleTtsVoice(this, selected.id)
+            updateActiveVoiceDisplay()
+            Toast.makeText(this, getString(R.string.settings_voice_current, selected.title), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupVoiceModulation() {
         fun formatSliderValue(value: Float): String = String.format("%.1fx", value)
-        
+
         sliderPitch.value = UserConfig.getTtsPitch(this)
         sliderSpeed.value = UserConfig.getTtsSpeed(this)
-        
-        // Set initial values
+
         tvPitchValue.text = formatSliderValue(sliderPitch.value)
         tvSpeedValue.text = formatSliderValue(sliderSpeed.value)
-        
-        sliderPitch.addOnChangeListener { _, value, _ ->
-            UserConfig.setTtsPitch(this, value)
-            tvPitchValue.text = formatSliderValue(value)
-        }
-        
-        sliderSpeed.addOnChangeListener { _, value, _ ->
-            UserConfig.setTtsSpeed(this, value)
-            tvSpeedValue.text = formatSliderValue(value)
-        }
-        
-        // Voice Selection Logic for VieNeu Neural TTS
-        val tvCurrentVoice = findViewById<android.widget.TextView>(R.id.tvCurrentVoice)
-        val btnSelectVoice = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectVoice)
-        
-        // Ensure Voice Presets are loaded
-        com.skul9x.doctruyen.tts.vieneu.VoicePresets.loadFromContext(this)
-        
-        val initialVoice = UserConfig.getTtsVoice(this) ?: com.skul9x.doctruyen.tts.vieneu.VoicePresets.defaultVoiceName
-        tvCurrentVoice.text = getString(R.string.settings_voice_current, initialVoice)
-        
-        btnSelectVoice.setOnClickListener {
-            val available = com.skul9x.doctruyen.tts.vieneu.VoicePresets.availableVoices
-            val voiceList = if (available.isNotEmpty()) available else listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
-            
-            val voiceNames = voiceList.toTypedArray()
-            val displayNames = voiceNames.map { name ->
-                val preset = com.skul9x.doctruyen.tts.vieneu.VoicePresets.getVoice(name)
-                if (preset != null && preset.description.isNotEmpty()) {
-                    "$name (${preset.description})"
-                } else {
-                    name
-                }
-            }.toTypedArray()
-            
-            val currentVoice = UserConfig.getTtsVoice(this) ?: com.skul9x.doctruyen.tts.vieneu.VoicePresets.defaultVoiceName
-            val currentIndex = voiceNames.indexOf(currentVoice).coerceAtLeast(0)
-            
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(getString(R.string.settings_select_voice_dialog))
-                .setSingleChoiceItems(displayNames, currentIndex) { dialog, which ->
-                    val selectedName = voiceNames[which]
-                    UserConfig.setTtsVoice(this, selectedName)
-                    tvCurrentVoice.text = getString(R.string.settings_voice_current, selectedName)
-                    Toast.makeText(this, getString(R.string.settings_voice_current, selectedName), Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                }
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show()
+
+        sliderPitch.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                UserConfig.setTtsPitch(this, value)
+                tvPitchValue.text = formatSliderValue(value)
+            }
         }
 
-        // Initialize Pause and Reading Cadence Controls
-        val sliderPauseSentence = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseSentence)
-        val sliderPauseParagraph = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseParagraph)
-        val sliderPauseClause = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseClause)
+        sliderSpeed.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                UserConfig.setTtsSpeed(this, value)
+                tvSpeedValue.text = formatSliderValue(value)
+            }
+        }
 
-        val tvPauseSentenceValue = findViewById<android.widget.TextView>(R.id.tvPauseSentenceValue)
-        val tvPauseParagraphValue = findViewById<android.widget.TextView>(R.id.tvPauseParagraphValue)
-        val tvPauseClauseValue = findViewById<android.widget.TextView>(R.id.tvPauseClauseValue)
+        btnResetPitchSpeed.setOnClickListener {
+            UserConfig.setTtsPitch(this, 1.0f)
+            UserConfig.setTtsSpeed(this, 1.0f)
+            sliderPitch.value = 1.0f
+            sliderSpeed.value = 1.0f
+            tvPitchValue.text = "1.0x"
+            tvSpeedValue.text = "1.0x"
+            Toast.makeText(this, getString(R.string.settings_reset_pitch_speed_done), Toast.LENGTH_SHORT).show()
+        }
+    }
 
-        val btnPresetStandard = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetStandard)
-        val btnPresetFast = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetFast)
-        val btnPresetEmotional = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetEmotional)
-
-        val switchDebugLogging = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchDebugLogging)
-        val btnViewTimingLogs = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnViewTimingLogs)
-
+    private fun setupCadenceAndPauses() {
         fun formatMs(ms: Int): String = "$ms ms"
 
         fun updatePauseUIFromConfig() {
@@ -179,7 +453,9 @@ class SettingsActivity : AppCompatActivity() {
             updatePauseUIFromConfig()
             Toast.makeText(this, getString(R.string.preset_emotional), Toast.LENGTH_SHORT).show()
         }
+    }
 
+    private fun setupDiagnostics() {
         switchDebugLogging.isChecked = UserConfig.isDebugLoggingEnabled(this)
         switchDebugLogging.setOnCheckedChangeListener { _, isChecked ->
             UserConfig.setDebugLoggingEnabled(this, isChecked)
@@ -189,44 +465,14 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(android.content.Intent(this, DebugLogActivity::class.java))
         }
 
-        btnSave.setOnClickListener {
-            // ... existing save logic ...
-            val newUrl = etBaseUrl.text.toString().trim()
-            if (newUrl.isEmpty()) {
-                Toast.makeText(this, getString(R.string.msg_enter_url), Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            // Save new URL
-            UserConfig.setBaseUrl(this, newUrl)
-            
-            // Re-verify connection
-            // We pass the new URL here. HostingVerifier will handle the cookie update if successful
-            val formattedUrl = UserConfig.getBaseUrl(this) // Get back the formatted one
-            
-            btnSave.isEnabled = false
-            btnSave.text = getString(R.string.settings_checking)
-            
-            HostingVerifier.verify(this, formattedUrl) { success ->
-                runOnUiThread {
-                    btnSave.isEnabled = true
-                    btnSave.text = getString(R.string.settings_save_btn)
-                    
-                    if (success) {
-                        RetrofitClient.resetClient() // Force rebuild with new URL
-                        Toast.makeText(this, getString(R.string.settings_success), Toast.LENGTH_LONG).show()
-                        finish() // Return to Main to reload
-                    } else {
-                        Toast.makeText(this, getString(R.string.settings_failed), Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
+        btnViewLogs.setOnClickListener {
+            startActivity(android.content.Intent(this, DebugLogActivity::class.java))
         }
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
-        // No explicit cleanup for tempTts needed as it's just for list fetching, 
-        // but good practice might be to shutdown if we stored it as a class property
+        tempGoogleTts?.shutdown()
+        tempGoogleTts = null
     }
 }

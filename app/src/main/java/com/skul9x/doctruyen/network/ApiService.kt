@@ -1,5 +1,6 @@
 package com.skul9x.doctruyen.network
 
+import com.skul9x.doctruyen.BuildConfig
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import okhttp3.OkHttpClient
@@ -91,7 +92,7 @@ object RetrofitClient {
     
     private fun createClient(): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.HEADERS
         }
         
         return OkHttpClient.Builder()
@@ -110,11 +111,13 @@ object RetrofitClient {
                 val finalRequest = requestBuilder.build()
 
                 // Detailed Request Logging
-                com.skul9x.doctruyen.utils.DebugLogger.log(
-                    "Network", 
-                    "Request: ${finalRequest.method} ${finalRequest.url}\nHeaders: ${finalRequest.headers}",
-                    com.skul9x.doctruyen.utils.LogType.REQUEST
-                )
+                if (BuildConfig.DEBUG) {
+                    com.skul9x.doctruyen.utils.DebugLogger.log(
+                        "Network", 
+                        "Request: ${finalRequest.method} ${finalRequest.url}\nHeaders: ${finalRequest.headers}",
+                        com.skul9x.doctruyen.utils.LogType.REQUEST
+                    )
+                }
 
                 val response = try {
                     chain.proceed(finalRequest)
@@ -123,13 +126,15 @@ object RetrofitClient {
                     throw e
                 }
                 
-                // Detailed Response Logging
-                val responseBody = response.peekBody(Long.MAX_VALUE).string()
-                com.skul9x.doctruyen.utils.DebugLogger.log(
-                    "Network", 
-                    "Response: ${response.code} ${response.message}\nURL: ${response.request.url}\nBody: $responseBody",
-                    if (response.isSuccessful) com.skul9x.doctruyen.utils.LogType.RESPONSE else com.skul9x.doctruyen.utils.LogType.ERROR
-                )
+                // Detailed Response Logging (C1 Fix: debug-only with 2048L peek limit)
+                if (BuildConfig.DEBUG) {
+                    val responseBody = response.peekBody(2048L).string()
+                    com.skul9x.doctruyen.utils.DebugLogger.log(
+                        "Network", 
+                        "Response: ${response.code} ${response.message}\nURL: ${response.request.url}\nBody: $responseBody",
+                        if (response.isSuccessful) com.skul9x.doctruyen.utils.LogType.RESPONSE else com.skul9x.doctruyen.utils.LogType.ERROR
+                    )
+                }
                 
                 response
             }

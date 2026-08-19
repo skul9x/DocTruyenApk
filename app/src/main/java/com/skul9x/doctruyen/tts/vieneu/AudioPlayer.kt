@@ -18,10 +18,12 @@ class AudioPlayer(
     private val lock = Any()
     private var audioTrack: AudioTrack? = null
 
+    private var needsReinit = false
+
     val isInitialized: Boolean
         get() = synchronized(lock) {
             try {
-                audioTrack != null && audioTrack?.state == AudioTrack.STATE_INITIALIZED
+                !needsReinit && audioTrack != null && audioTrack?.state == AudioTrack.STATE_INITIALIZED
             } catch (e: Throwable) {
                 false
             }
@@ -41,8 +43,18 @@ class AudioPlayer(
      */
     fun init() {
         synchronized(lock) {
-            if (audioTrack != null) {
+            if (audioTrack != null && !needsReinit) {
                 return
+            }
+
+            if (needsReinit) {
+                try {
+                    audioTrack?.release()
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Failed to release previous AudioTrack on re-init: ${e.message}")
+                }
+                audioTrack = null
+                needsReinit = false
             }
 
             try {
@@ -69,6 +81,16 @@ class AudioPlayer(
             } catch (e: Throwable) {
                 Log.w(TAG, "AudioTrack initialization skipped or failed: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Resets the AudioPlayer by releasing the existing AudioTrack and creating a fresh one.
+     */
+    fun reset() {
+        synchronized(lock) {
+            release()
+            init()
         }
     }
 
@@ -146,7 +168,7 @@ class AudioPlayer(
     }
 
     /**
-     * Stops audio playback and flushes buffered audio.
+     * Stops audio playback, flushes buffered audio, and marks player for re-initialization.
      */
     fun stop() {
         synchronized(lock) {
@@ -159,6 +181,8 @@ class AudioPlayer(
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to stop AudioTrack", e)
+            } finally {
+                needsReinit = true
             }
         }
     }

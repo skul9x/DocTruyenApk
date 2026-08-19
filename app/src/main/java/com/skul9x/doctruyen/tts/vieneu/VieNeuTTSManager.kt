@@ -3,6 +3,9 @@ package com.skul9x.doctruyen.tts.vieneu
 import android.content.Context
 import android.util.Log
 import com.skul9x.doctruyen.tts.AndroidTTSManager
+import com.skul9x.doctruyen.tts.ITTSManager
+import com.skul9x.doctruyen.tts.ITTSManager.TTSState
+import com.skul9x.doctruyen.tts.VoiceInfo
 import com.skul9x.doctruyen.utils.DebugLogger
 import com.skul9x.doctruyen.utils.LogType
 import com.skul9x.doctruyen.utils.UserConfig
@@ -14,26 +17,25 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+typealias TTSState = ITTSManager.TTSState
+
 /**
  * Text-to-Speech Manager using offline VieNeu ONNX engine and neural audio pipeline.
  * Drop-in replacement for the original Android TextToSpeech manager with identical state callbacks.
  */
 class VieNeuTTSManager(
     context: Context? = null,
-    private val onStateChange: (TTSState) -> Unit,
+    private val onStateChange: (ITTSManager.TTSState) -> Unit,
     private val onProgressChange: ((Int) -> Unit)? = null,
     private val customEngine: VieNeuOnnxEngine? = null,
     private val customPipeline: TTSAudioPipeline? = null
-) {
+) : ITTSManager {
 
-    enum class TTSState {
-        IDLE,
-        INITIALIZING,
-        READY,
-        PLAYING,
-        PAUSED,
-        ERROR
-    }
+    override val engineType: ITTSManager.EngineType
+        get() = ITTSManager.EngineType.VIENEU
+
+    override val currentVoiceName: String
+        get() = voiceName
 
     private val appContext: Context? = try {
         context?.applicationContext ?: context
@@ -51,7 +53,7 @@ class VieNeuTTSManager(
         private set
 
     @Volatile
-    var currentState: TTSState = TTSState.IDLE
+    override var currentState: ITTSManager.TTSState = ITTSManager.TTSState.IDLE
         private set
 
     private var pendingTitle: String? = null
@@ -64,7 +66,7 @@ class VieNeuTTSManager(
         initManager()
     }
 
-    private fun notifyStateChange(state: TTSState) {
+    private fun notifyStateChange(state: ITTSManager.TTSState) {
         currentState = state
         try {
             onStateChange(state)
@@ -123,16 +125,12 @@ class VieNeuTTSManager(
                 pipeline = loadedPipeline
 
                 DebugLogger.log(TAG, "✅ VieNeuOnnxEngine & TTSAudioPipeline ready. Voice: $voiceName", LogType.INFO)
-                withContext(Dispatchers.Main) {
-                    notifyStateChange(TTSState.READY)
-                    checkPendingSpeech()
-                }
+                notifyStateChange(TTSState.READY)
+                checkPendingSpeech()
             } catch (e: Throwable) {
                 DebugLogger.logError(TAG, "❌ Failed to initialize VieNeu engine: ${e.message}. Attempting Android TTS fallback...", e)
                 Log.e(TAG, "Failed to initialize VieNeuOnnxEngine", e)
-                withContext(Dispatchers.Main) {
-                    tryFallbackAndroidTTS()
-                }
+                tryFallbackAndroidTTS()
             }
         }
     }
@@ -206,14 +204,21 @@ class VieNeuTTSManager(
      * Pre-synthesizes the first 2 chunks (Title + Opening sentence) into PrewarmedChunkCache
      * for instant playback with 0ms starvation latency when play is pressed.
      */
-    fun prepareStory(
+    /**
+     * Proactively pre-warm story synthesis in background.
+     * Pre-synthesizes the first 2 chunks (Title + Opening sentence) into PrewarmedChunkCache
+     * for instant playback with 0ms starvation latency when play is pressed.
+     */
+    private fun prepareStoryInternal(
         storyId: Int,
         title: String,
         content: String,
-        voice: String = voiceName,
+        voice: String? = null,
         pauseConfig: PauseConfig = getLoadedPauseConfig()
     ) {
         if (isUsingFallback) return
+
+        val effectiveVoice = voice ?: appContext?.let { UserConfig.getTtsVoice(it) } ?: voiceName
 
         // Cancel previous pre-warm job if running
         cancelPrewarm()
@@ -225,13 +230,13 @@ class VieNeuTTSManager(
 
         prewarmJob = scope.launch(Dispatchers.Default) {
             try {
-                Log.d(TAG, "🔥 Starting pre-warming for story $storyId (voice: $voice)")
+                Log.d(TAG, "🔥 Starting pre-warming for story $storyId (voice: $effectiveVoice)")
                 val chunks = SmartTextSegmenter.segmentStory(title, content, pauseConfig = pauseConfig)
                 val prewarmCount = minOf(2, chunks.size)
 
                 for (i in 0 until prewarmCount) {
                     if (!isActive) break
-                    if (PrewarmedChunkCache.contains(storyId, voice, i)) continue
+                    if (PrewarmedChunkCache.contains(storyId, effectiveVoice, i)) continue
 
                     val chunk = chunks[i]
                     val g2pStart = System.currentTimeMillis()
@@ -241,7 +246,7 @@ class VieNeuTTSManager(
 
                     val inferStart = System.currentTimeMillis()
                     val pcmFloat = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                        eng.infer(phonemes = phonemes, voiceName = voice)
+                        eng.infer(phonemes = phonemes, voiceName = effectiveVoice)
                     }
                     val inferDuration = System.currentTimeMillis() - inferStart
                     if (!isActive) break
@@ -264,7 +269,7 @@ class VieNeuTTSManager(
                         speechPcm
                     }
 
-                    PrewarmedChunkCache.put(storyId, voice, i, combinedPcm)
+                    PrewarmedChunkCache.put(storyId, effectiveVoice, i, combinedPcm)
                     Log.d(TAG, "⚡ Pre-warmed chunk $i/$prewarmCount for story $storyId (G2P: ${g2pDuration}ms, Infer: ${inferDuration}ms)")
                 }
                 Log.d(TAG, "✅ Finished pre-warming story $storyId")
@@ -275,19 +280,6 @@ class VieNeuTTSManager(
             }
         }
     }
-
-    /**
-     * Cancel any active background pre-warm job.
-     */
-    fun cancelPrewarm() {
-        prewarmJob?.cancel()
-        prewarmJob = null
-    }
-
-    /**
-     * Start speaking text content.
-     */
-    fun speak(text: String, storyId: Int = 0) = speakContent(text, storyId = storyId)
 
     /**
      * Start speaking text content.
@@ -316,6 +308,7 @@ class VieNeuTTSManager(
         TtsMetricsLogger.startSession(storyTitle = content.take(30))
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
+        val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
         pipe.startReading(
             text = content,
             storyId = storyId,
@@ -323,14 +316,14 @@ class VieNeuTTSManager(
                 handlePipelineState(pipeState)
             },
             onProgress = onProgressChange,
-            pauseConfig = pauseConfig
+            pauseConfig = config
         )
     }
 
     /**
      * Speak story title, pause 1 second, then speak content.
      */
-    fun speakWithTitlePause(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+    private fun speakWithTitlePauseInternal(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
         cancelPrewarm()
 
         if (isUsingFallback && fallbackManager != null) {
@@ -354,6 +347,7 @@ class VieNeuTTSManager(
         TtsMetricsLogger.startSession(storyTitle = title)
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
+        val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
         pipe.startReadingWithTitlePause(
             title = title,
             content = content,
@@ -362,7 +356,7 @@ class VieNeuTTSManager(
                 handlePipelineState(pipeState)
             },
             onProgress = onProgressChange,
-            pauseConfig = pauseConfig
+            pauseConfig = config
         )
     }
 
@@ -391,9 +385,83 @@ class VieNeuTTSManager(
     }
 
     /**
-     * Pause reading. Preserves current chunk position.
+     * Check if speech is actively playing or synthesizing.
      */
-    fun pause() {
+    override fun isPlaying(): Boolean {
+        if (isUsingFallback && fallbackManager != null) {
+            return fallbackManager?.isPlaying() == true
+        }
+        return currentState == TTSState.PLAYING
+    }
+
+    /**
+     * Check if speech is currently paused.
+     */
+    override fun isPaused(): Boolean {
+        if (isUsingFallback && fallbackManager != null) {
+            return fallbackManager?.isPaused() == true
+        }
+        return currentState == TTSState.PAUSED
+    }
+
+    /**
+     * Set active VieNeu preset voice name.
+     */
+    override fun setVoice(voiceName: String) {
+        val oldVoice = this.voiceName
+        this.voiceName = voiceName
+        pipeline?.voiceName = voiceName
+        if (oldVoice != voiceName) {
+            PrewarmedChunkCache.clear()
+        }
+        appContext?.let { UserConfig.setTtsVoice(it, voiceName) }
+    }
+
+    /**
+     * Get list of all available preset voice infos.
+     */
+    override fun getAvailableVoices(): List<VoiceInfo> {
+        val presets = VoicePresets.getVoicePresets()
+        if (presets.isNotEmpty()) {
+            return presets.map { preset ->
+                VoiceInfo(
+                    id = preset.name,
+                    displayName = preset.getFormattedDisplayName(),
+                    description = preset.getFormattedDescription(),
+                    gender = preset.genderDisplay,
+                    region = preset.regionDisplay,
+                    isDefault = preset.name == VoicePresets.defaultVoiceName
+                )
+            }
+        }
+        val defaultList = listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
+        return defaultList.map { name ->
+            VoiceInfo(
+                id = name,
+                displayName = name,
+                description = "VieNeu Neural Voice",
+                isDefault = name == "Trúc Ly"
+            )
+        }
+    }
+
+    override fun setSpeed(speed: Float) {
+        appContext?.let { UserConfig.setTtsSpeed(it, speed) }
+    }
+
+    override fun setPitch(pitch: Float) {
+        appContext?.let { UserConfig.setTtsPitch(it, pitch) }
+    }
+
+    override fun speak(text: String, storyId: Int) {
+        speakContent(text, storyId = storyId)
+    }
+
+    override fun speakWithTitlePause(title: String, content: String, storyId: Int, pauseConfig: PauseConfig) {
+        speakWithTitlePauseInternal(title, content, storyId, pauseConfig)
+    }
+
+    override fun pause() {
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.pause()
             return
@@ -402,10 +470,7 @@ class VieNeuTTSManager(
         notifyStateChange(TTSState.PAUSED)
     }
 
-    /**
-     * Resume reading from preserved chunk position.
-     */
-    fun resume() {
+    override fun resume() {
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.resume()
             return
@@ -416,10 +481,7 @@ class VieNeuTTSManager(
         }
     }
 
-    /**
-     * Stop reading and reset position.
-     */
-    fun stop() {
+    override fun stop() {
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.stop()
             return
@@ -429,48 +491,25 @@ class VieNeuTTSManager(
         onProgressChange?.invoke(0)
     }
 
-    /**
-     * Check if speech is actively playing or synthesizing.
-     */
-    fun isPlaying(): Boolean {
-        if (isUsingFallback && fallbackManager != null) {
-            return fallbackManager?.isPlaying() == true
-        }
-        return currentState == TTSState.PLAYING
+    override fun prepareStory(
+        storyId: Int,
+        title: String,
+        content: String,
+        voice: String?,
+        pauseConfig: PauseConfig
+    ) {
+        prepareStoryInternal(storyId, title, content, voice, pauseConfig)
     }
 
-    /**
-     * Check if speech is currently paused.
-     */
-    fun isPaused(): Boolean {
-        if (isUsingFallback && fallbackManager != null) {
-            return fallbackManager?.isPaused() == true
-        }
-        return currentState == TTSState.PAUSED
-    }
-
-    /**
-     * Set active VieNeu preset voice name.
-     */
-    fun setVoice(name: String) {
-        voiceName = name
-        pipeline?.voiceName = name
-        appContext?.let { UserConfig.setTtsVoice(it, name) }
-    }
-
-    /**
-     * Get list of all available preset voice names.
-     */
-    fun getAvailableVoices(): List<String> {
-        val presets = VoicePresets.availableVoices
-        if (presets.isNotEmpty()) return presets
-        return listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
+    override fun cancelPrewarm() {
+        prewarmJob?.cancel()
+        prewarmJob = null
     }
 
     /**
      * Release all TTS resources and ONNX engine sessions.
      */
-    fun shutdown() {
+    override fun shutdown() {
         cancelPrewarm()
         scope.cancel()
         pipeline?.release()

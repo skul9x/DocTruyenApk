@@ -80,4 +80,20 @@ class PcmUtilsTest {
         assertTrue(PcmUtils.splitIntoSentences("").isEmpty())
         assertTrue(PcmUtils.splitIntoSentences("   \n\n  \t ").isEmpty())
     }
+
+    @Test
+    fun testMicroFadeInPlace() {
+        val original = ShortArray(1000) { 10000.toShort() }
+        val faded = PcmUtils.applyMicroFade(original, fadeDurationMs = 5.0f, sampleRate = 48000)
+
+        // Verify returns same instance
+        assertSame(original, faded)
+        // Verify start has fade in (first sample is 0)
+        assertEquals(0.toShort(), faded[0])
+        assertTrue("Fade in ramping", faded[10] > faded[0] && faded[10] < 10000)
+        // Verify middle is unaffected
+        assertEquals(10000.toShort(), faded[500])
+        // Verify end has fade out (last sample is ramped down)
+        assertTrue("Fade out ramping", faded[999] < 1000)
+    }
 }
