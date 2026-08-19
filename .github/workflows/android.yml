@@ -74,16 +74,27 @@ jobs:
 
       # 4. Build & Ký số APK
       - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/skul9x.jks
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::GitHub Secret 'KEYSTORE_BASE64' is missing or empty. Please add it in Repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/skul9x.jks
 
       - name: Build & Sign Release APK
+        env:
+          STORE_FILE: skul9x.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew :app:assembleRelease \
-            -PSTORE_FILE="skul9x.jks" \
-            -PSTORE_PASSWORD="${{ secrets.STORE_PASSWORD }}" \
-            -PKEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
-            -PKEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+          if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::One or more signing secrets (STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) are missing. Please add them in Repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          ./gradlew :app:assembleRelease
 
       # 5. Đổi tên file APK theo chuẩn <slugified-app-name>-<version>.apk
       - name: Prepare and Rename APK
