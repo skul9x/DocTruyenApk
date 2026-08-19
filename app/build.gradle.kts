@@ -33,6 +33,19 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
+    androidResources {
+        noCompress += listOf("onnx", "data", "npz", "json")
+    }
 }
 
 dependencies {
@@ -42,6 +55,9 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+
+    // ONNX Runtime Android
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
@@ -68,6 +84,8 @@ dependencies {
     implementation("androidx.media:media:1.7.0")
 
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20231013")
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.20.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

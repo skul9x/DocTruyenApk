@@ -1,0 +1,5 @@
+[20:09] START phase-01-setup
+[20:09] DONE task: Add ONNX Runtime Android dependency and noCompress aaptOptions
+[20:09] DONE task: Bundle 285MB model assets (backbone, codec, denoiser)
+[20:09] DONE task: Verify Gradle assembleDebug and create test_phase01_setup.sh
+[20:09] END phase-01-setup ✅

@@ -17,7 +17,7 @@ import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.skul9x.doctruyen.network.RetrofitClient
-import com.skul9x.doctruyen.tts.TTSManager
+import com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -91,10 +91,10 @@ class StoryDetailActivity : AppCompatActivity() {
                     if (serviceStoryId == storyId && serviceStoryId != 0) {
                         DebugLogger.log(TAG, "✅ Updating UI for current story", LogType.INFO)
                         updateTTSUI(state)
-                    } else if (state == TTSManager.TTSState.READY || 
-                               state == TTSManager.TTSState.IDLE) {
+                    } else if (state == VieNeuTTSManager.TTSState.READY || 
+                               state == VieNeuTTSManager.TTSState.IDLE) {
                         DebugLogger.log(TAG, "🔄 Service ready/idle, showing initial state", LogType.INFO)
-                        updateTTSUI(TTSManager.TTSState.READY)
+                        updateTTSUI(VieNeuTTSManager.TTSState.READY)
                     } else {
                         DebugLogger.log(TAG, "⚠️ State mismatch: service reading story $serviceStoryId, viewing $storyId", LogType.INFO)
                     }
@@ -358,12 +358,12 @@ class StoryDetailActivity : AppCompatActivity() {
         
         when {
             // Currently playing this story - pause it
-            state == TTSManager.TTSState.PLAYING && serviceStoryId == storyId -> {
+            state == VieNeuTTSManager.TTSState.PLAYING && serviceStoryId == storyId -> {
                 DebugLogger.log(TAG, "⏸️ Action: PAUSE (playing this story)", LogType.INFO)
                 service.pauseReading()
             }
             // Paused on this story - resume it
-            state == TTSManager.TTSState.PAUSED && serviceStoryId == storyId -> {
+            state == VieNeuTTSManager.TTSState.PAUSED && serviceStoryId == storyId -> {
                 DebugLogger.log(TAG, "▶️ Action: RESUME (paused on this story)", LogType.INFO)
                 service.resumeReading()
             }
@@ -381,13 +381,13 @@ class StoryDetailActivity : AppCompatActivity() {
         }
     }
     
-    private fun updateTTSUI(state: TTSManager.TTSState) {
+    private fun updateTTSUI(state: VieNeuTTSManager.TTSState) {
         DebugLogger.log(TAG, "🎨 updateTTSUI: state=$state", LogType.INFO)
         
         val progressTts = findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.progressTts)
         
         when (state) {
-            TTSManager.TTSState.IDLE, TTSManager.TTSState.INITIALIZING, TTSManager.TTSState.READY, TTSManager.TTSState.ERROR -> {
+            VieNeuTTSManager.TTSState.IDLE, VieNeuTTSManager.TTSState.INITIALIZING, VieNeuTTSManager.TTSState.READY, VieNeuTTSManager.TTSState.ERROR -> {
                 // Button A: "Đọc truyện", Active
                 btnPlayPause.text = getString(R.string.btn_read_story)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_play)
@@ -401,7 +401,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 tvTtsStatus.visibility = View.INVISIBLE
                 progressTts.visibility = View.GONE
             }
-            TTSManager.TTSState.PLAYING -> {
+            VieNeuTTSManager.TTSState.PLAYING -> {
                 // Button A: "Tạm dừng", Active
                 btnPlayPause.text = getString(R.string.btn_pause)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_pause)
@@ -416,7 +416,7 @@ class StoryDetailActivity : AppCompatActivity() {
                 tvTtsStatus.visibility = View.VISIBLE
                 progressTts.visibility = View.VISIBLE
             }
-            TTSManager.TTSState.PAUSED -> {
+            VieNeuTTSManager.TTSState.PAUSED -> {
                 // Button A: "Đọc tiếp", Active
                 btnPlayPause.text = getString(R.string.btn_resume)
                 btnPlayPause.setIconResource(android.R.drawable.ic_media_play)
@@ -440,7 +440,7 @@ class StoryDetailActivity : AppCompatActivity() {
         """.trimMargin(), LogType.INFO)
         
         // Show error toast if needed, but UI resets to Ready state visually
-        if (state == TTSManager.TTSState.ERROR) {
+        if (state == VieNeuTTSManager.TTSState.ERROR) {
             Toast.makeText(this, getString(R.string.tts_error), Toast.LENGTH_SHORT).show()
         }
     }

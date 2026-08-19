@@ -13,7 +13,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.skul9x.doctruyen.MainActivity
 import com.skul9x.doctruyen.R
-import com.skul9x.doctruyen.tts.TTSManager
+import com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager
 
 class ReadingService : Service() {
 
@@ -24,15 +24,17 @@ class ReadingService : Service() {
         const val ACTION_PLAY = "action_play"
         const val ACTION_PAUSE = "action_pause"
         const val ACTION_STOP = "action_stop"
+
+        const val EXTRA_VOICE_NAME = "extra_voice_name"
     }
 
-    private var ttsManager: TTSManager? = null
+    private var ttsManager: VieNeuTTSManager? = null
     private val binder = ReadingBinder()
     
     // State callbacks for UI
-    private var stateCallback: ((TTSManager.TTSState) -> Unit)? = null
+    private var stateCallback: ((VieNeuTTSManager.TTSState) -> Unit)? = null
     private var progressCallback: ((Int) -> Unit)? = null
-    var currentState = TTSManager.TTSState.IDLE
+    var currentState = VieNeuTTSManager.TTSState.IDLE
         private set
         
     var currentStoryTitle: String = ""
@@ -52,32 +54,28 @@ class ReadingService : Service() {
     }
 
     private fun initTTS() {
-        android.util.Log.d("ReadingService", "🔧 initTTS: Creating TTSManager")
-        ttsManager = TTSManager(
+        android.util.Log.d("ReadingService", "🔧 initTTS: Creating VieNeuTTSManager")
+        ttsManager = VieNeuTTSManager(
             context = this,
             onStateChange = { state ->
-                android.util.Log.d("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState")
+                android.util.Log.d("ReadingService", "📡 VieNeuTTSManager callback: state=$state, previousState=$currentState")
                 val previousState = currentState
                 currentState = state
                 
                 // Only update notification for relevant states
-                if (state == TTSManager.TTSState.PLAYING || state == TTSManager.TTSState.PAUSED) {
+                if (state == VieNeuTTSManager.TTSState.PLAYING || state == VieNeuTTSManager.TTSState.PAUSED) {
                     updateNotification(state)
-                } else if (state == TTSManager.TTSState.READY || state == TTSManager.TTSState.IDLE) {
+                } else if (state == VieNeuTTSManager.TTSState.READY || state == VieNeuTTSManager.TTSState.IDLE) {
                     // Determine if we finished playing naturally
-                    if (previousState == TTSManager.TTSState.PLAYING) {
+                    if (previousState == VieNeuTTSManager.TTSState.PLAYING) {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                     } else {
-                         // Just remove notification if it exists (e.g. from Stop button)
-                         // But wait, stopReading already calls stopForeground.
-                         // The issue is updateNotification might have reposted it.
-                         // Here we DON'T repost notification.
                          val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                          manager.cancel(NOTIFICATION_ID)
                     }
                     // Reset progress when stopped/ready
                     progressCallback?.invoke(0)
-                } else if (state == TTSManager.TTSState.ERROR) {
+                } else if (state == VieNeuTTSManager.TTSState.ERROR) {
                      stopForeground(STOP_FOREGROUND_REMOVE)
                 }
                 
@@ -103,7 +101,7 @@ class ReadingService : Service() {
         return binder
     }
 
-    fun setStateCallback(callback: (TTSManager.TTSState) -> Unit) {
+    fun setStateCallback(callback: (VieNeuTTSManager.TTSState) -> Unit) {
         stateCallback = callback
         // Immediately notify current state
         callback(currentState)
@@ -118,25 +116,28 @@ class ReadingService : Service() {
         progressCallback = null
     }
 
-    fun startReading(storyId: Int, title: String, content: String) {
+    fun startReading(storyId: Int, title: String, content: String, voice: String? = null) {
         android.util.Log.d("ReadingService", "🔊 startReading: storyId=$storyId, title='$title', contentLen=${content.length}")
         currentStoryId = storyId
         currentStoryTitle = title
+        if (!voice.isNullOrEmpty()) {
+            ttsManager?.setVoice(voice)
+        }
         // Use speakWithTitlePause for natural 1s pause between title and content
         android.util.Log.d("ReadingService", "📤 Calling ttsManager.speakWithTitlePause...")
         ttsManager?.speakWithTitlePause(title, content)
         android.util.Log.d("ReadingService", "✅ After speakWithTitlePause, currentState=$currentState")
-        startForeground(NOTIFICATION_ID, buildNotification(TTSManager.TTSState.PLAYING))
+        startForeground(NOTIFICATION_ID, buildNotification(VieNeuTTSManager.TTSState.PLAYING))
     }
 
     fun pauseReading() {
         ttsManager?.pause()
-        updateNotification(TTSManager.TTSState.PAUSED)
+        updateNotification(VieNeuTTSManager.TTSState.PAUSED)
     }
 
     fun resumeReading() {
         ttsManager?.resume()
-        updateNotification(TTSManager.TTSState.PLAYING)
+        updateNotification(VieNeuTTSManager.TTSState.PLAYING)
     }
 
     fun stopReading() {
@@ -144,11 +145,8 @@ class ReadingService : Service() {
         currentStoryId = 0
         currentStoryTitle = ""
         stopForeground(STOP_FOREGROUND_REMOVE)
-        // Don't call stopSelf() - keep service alive for next play action
-        // Service will be properly destroyed when Activity unbinds
     }
     
-    // Allow Activity to manually shutdown on destroy if needed
     fun shutdown() {
         stopReading()
     }
@@ -165,20 +163,19 @@ class ReadingService : Service() {
         }
     }
 
-    private fun updateNotification(state: TTSManager.TTSState) {
-        if (state == TTSManager.TTSState.PLAYING || state == TTSManager.TTSState.PAUSED) {
+    private fun updateNotification(state: VieNeuTTSManager.TTSState) {
+        if (state == VieNeuTTSManager.TTSState.PLAYING || state == VieNeuTTSManager.TTSState.PAUSED) {
             val notification = buildNotification(state)
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, notification)
         } else {
-             // For other states (READY, STOPPED), do not show notification
              val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
              manager.cancel(NOTIFICATION_ID)
         }
     }
 
-    private fun buildNotification(state: TTSManager.TTSState): Notification {
-        val isPlaying = state == TTSManager.TTSState.PLAYING
+    private fun buildNotification(state: VieNeuTTSManager.TTSState): Notification {
+        val isPlaying = state == VieNeuTTSManager.TTSState.PLAYING
 
         val playPauseIntent = Intent(this, ReadingService::class.java).apply {
             action = if (isPlaying) ACTION_PAUSE else ACTION_PLAY
@@ -194,7 +191,6 @@ class ReadingService : Service() {
             this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         
-        // Use R.drawable.ic_media_pause/play if available, or fallback to android system icons
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         val playPauseText = if (isPlaying) "Tạm dừng" else "Tiếp tục"
 
@@ -207,7 +203,7 @@ class ReadingService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Đang đọc: $currentStoryTitle")
             .setContentText(if (isPlaying) "Đang phát..." else "Đã tạm dừng")
-            .setSmallIcon(R.mipmap.ic_launcher) // Use app icon
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(contentPendingIntent)
             .setOngoing(isPlaying)
             .addAction(playPauseIcon, playPauseText, playPausePendingIntent)
@@ -223,10 +219,8 @@ class ReadingService : Service() {
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Stop TTS reading
         ttsManager?.stop()
         ttsManager?.shutdown()
-        // Remove notification and stop service
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

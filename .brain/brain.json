@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "schema_version": "1.1.0",
+    "awf_version": "4.0.2",
+    "created_at": "2026-08-18T20:04:00+07:00",
+    "updated_at": "2026-08-19T08:50:00+07:00"
+  },
+  "project": {
+    "name": "VieNeu-TTS & DocTruyenApk Integration",
+    "type": "Offline AI Text-to-Speech Mobile App",
+    "status": "Phases 01-05 Complete (Working & Verified on Android Device)"
+  },
+  "tech_stack": {
+    "mobile_app": {
+      "platform": "Android (Min SDK 24, Target SDK 35)",
+      "language": "Kotlin",
+      "architecture": "MVVM + Foreground Service (ReadingService)",
+      "onnx_runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.20.0",
+      "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM)"
+    },
+    "tts_engine": {
+      "model": "VieNeu-TTS v3 Turbo",
+      "precision": "int8 ONNX (CPU Execution Provider)",
+      "sample_rate": 48000,
+      "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk)",
+      "codec": "MOSS-Audio-Tokenizer-Nano-ONNX"
+    },
+    "workspace_env": {
+      "pc_os": "Linux (Ubuntu/Debian)",
+      "python": "3.12.3",
+      "package_manager": "uv"
+    }
+  },
+  "model_artifacts": {
+    "total_size_mb": 290,
+    "backbone_dir": "app/src/main/assets/vieneu/backbone/",
+    "files": [
+      "vieneu_prefill.onnx (1.1MB)",
+      "vieneu_decode_step.onnx (1.1MB)",
+      "vieneu_acoustic_cached.onnx (6.9MB)",
+      "vieneu_backbone_shared.data (100MB)",
+      "vieneu_v3_heads.npz (50MB)",
+      "moss_audio_tokenizer_decode_full.onnx (668KB)",
+      "moss_audio_tokenizer_decode_shared.data (43MB)",
+      "moss_audio_tokenizer_decode_step.onnx (344KB)",
+      "denoiser.onnx (41MB)",
+      "sea_g2p.bin (60MB)"
+    ]
+  },
+  "decisions_made": [
+    {
+      "decision": "100% Offline On-Device on Android Phone",
+      "reason": "Saves PC electricity (0 VND electricity/server cost), reads stories completely offline anywhere."
+    },
+    {
+      "decision": "Use CPU ONNX int8 for VieNeu",
+      "reason": "Extremely lightweight (~500MB RAM, 0% GPU VRAM overhead), fast enough on mobile CPU."
+    },
+    {
+      "decision": "Chunking & Pre-buffering Pipeline",
+      "reason": "Sentence-level chunking ensures time-to-first-audio < 2s and gapless playback between sentences."
+    }
+  ]
+}

@@ -24,3 +24,6 @@ env
 build
 dist
 *.spec
+target/
+**/target/
+*.log

@@ -1,0 +1,74 @@
+{
+  "updated_at": "2026-08-19T08:50:00+07:00",
+  "working_on": {
+    "feature": "100% Offline VieNeu-TTS v3 on Android (DocTruyenApk)",
+    "current_stage": "All Phases (01-05) Complete & Verified on Device",
+    "plan_folder": "plans/260818-1935-offline-vieneu-tts/",
+    "total_phases": 6,
+    "current_phase": "phase-06-optimization.md"
+  },
+  "phases_status": [
+    {
+      "phase": "01",
+      "name": "Project Setup & Dependencies",
+      "status": "complete",
+      "file": "phase-01-setup.md",
+      "summary": "Added onnxruntime-android, noCompress for assets, bundled ~285MB model assets, verified debug APK build"
+    },
+    {
+      "phase": "02",
+      "name": "sea-g2p Phonemizer (Rust -> Android .so)",
+      "status": "complete",
+      "file": "phase-02-phonemizer.md",
+      "summary": "Cross-compiled sea-g2p with cargo-ndk to ARM64/ARMv7/x86_64 .so and JNI bridge"
+    },
+    {
+      "phase": "03",
+      "name": "ONNX Inference Engine (Kotlin)",
+      "status": "complete",
+      "file": "phase-03-onnx-engine.md",
+      "summary": "Ported prefill + decode step + acoustic + codec loop from Python to Kotlin"
+    },
+    {
+      "phase": "04",
+      "name": "Audio Pipeline & Playback",
+      "status": "complete",
+      "file": "phase-04-audio-pipeline.md",
+      "summary": "AudioTrack 48kHz streaming playback with pre-buffering chunk queue for gapless speech"
+    },
+    {
+      "phase": "05",
+      "name": "Replace TTSManager & Integration",
+      "status": "complete",
+      "file": "phase-05-integration.md",
+      "summary": "Replaced Android TTS in ReadingService with VieNeuTTSManager"
+    },
+    {
+      "phase": "06",
+      "name": "Optimization & Final Testing",
+      "status": "in_progress",
+      "file": "phase-06-optimization.md",
+      "summary": "Device testing, profiling, latency tuning, and performance optimizations"
+    }
+  ],
+  "recent_changes": [
+    "Fixed VieNeuTokenizer: Removed unsupported Pattern.UNICODE_CHARACTER_CLASS flag on Android which caused ExceptionInInitializerError/NoClassDefFoundError during engine creation",
+    "Enhanced VieNeuTTSManager: Passed Throwable to DebugLogger.logError for full stacktrace logging",
+    "Verified VieNeuOnnxEngineTest (testTokenizerEncode and testFullInference) on physical device (CPH2691 - Android 15)",
+    "Built and installed app-debug.apk with functional offline VieNeu neural TTS"
+  ],
+  "errors_encountered": [
+    {
+      "error": "Failed to initialize VieNeu engine: null / com.skul9x.doctruyen.tts.vieneu.VieNeuTokenizer, fallback to Android TTS",
+      "cause": "Pattern.UNICODE_CHARACTER_CLASS is not supported on Android runtime, throwing PatternSyntaxException in VieNeuTokenizer static initializer",
+      "solution": "Removed Pattern.UNICODE_CHARACTER_CLASS flag from Pattern.compile in VieNeuTokenizer.kt",
+      "resolved": true
+    }
+  ],
+  "decisions_made": [
+    {
+      "decision": "Producer-Consumer Pipeline via Coroutines",
+      "reason": "Synthesizes chunks in background continuously while playing previous chunks on AudioTrack for lowest TTFT latency and gapless playback"
+    }
+  ]
+}

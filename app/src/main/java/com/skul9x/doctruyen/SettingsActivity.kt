@@ -64,69 +64,44 @@ class SettingsActivity : AppCompatActivity() {
             tvSpeedValue.text = formatSliderValue(value)
         }
         
-        // Voice Selection Logic
+        // Voice Selection Logic for VieNeu Neural TTS
         val tvCurrentVoice = findViewById<android.widget.TextView>(R.id.tvCurrentVoice)
         val btnSelectVoice = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectVoice)
         
-        // Init temporary TTS to fetch voices
-        var tempTts: android.speech.tts.TextToSpeech? = null
-        tempTts = android.speech.tts.TextToSpeech(this) { status ->
-            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                // Pre-check current voice name for UI
-                val savedVoice = UserConfig.getTtsVoice(this)
-                if (savedVoice != null) {
-                    val allVoices = tempTts?.voices?.toList() ?: emptyList()
-                    val viVoices = allVoices.filter { it.locale.language == "vi" }
-                    val displayVoices = if (viVoices.isNotEmpty()) viVoices else allVoices
-                    val sortedVoices = displayVoices.sortedBy { it.name }
-                    
-                    val index = sortedVoices.indexOfFirst { it.name == savedVoice }
-                    if (index != -1) {
-                         tvCurrentVoice.text = getString(R.string.settings_voice_current, getString(R.string.settings_voice_person) + " ${index + 1}")
-                    } else {
-                         tvCurrentVoice.text = getString(R.string.settings_voice_current, getString(R.string.settings_voice_custom))
-                    }
-                }
-            }
-        }
+        // Ensure Voice Presets are loaded
+        com.skul9x.doctruyen.tts.vieneu.VoicePresets.loadFromContext(this)
+        
+        val initialVoice = UserConfig.getTtsVoice(this) ?: com.skul9x.doctruyen.tts.vieneu.VoicePresets.defaultVoiceName
+        tvCurrentVoice.text = getString(R.string.settings_voice_current, initialVoice)
         
         btnSelectVoice.setOnClickListener {
-            tempTts?.let { tts ->
-                val allVoices = tts.voices.toList()
-                // Prefer Vietnamese
-                val viVoices = allVoices.filter { it.locale.language == "vi" }
-                val displayVoices = if (viVoices.isNotEmpty()) viVoices else allVoices
-                
-                // Sort comfortably
-                val sortedVoices = displayVoices.sortedBy { it.name }
-                
-                val voiceNames = sortedVoices.map { it.name }.toTypedArray()
-                val friendlyNames = voiceNames.mapIndexed { index, _ -> getString(R.string.settings_voice_person) + " ${index + 1}" }.toTypedArray()
-                
-                if (voiceNames.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.settings_voice_none), Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+            val available = com.skul9x.doctruyen.tts.vieneu.VoicePresets.availableVoices
+            val voiceList = if (available.isNotEmpty()) available else listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
+            
+            val voiceNames = voiceList.toTypedArray()
+            val displayNames = voiceNames.map { name ->
+                val preset = com.skul9x.doctruyen.tts.vieneu.VoicePresets.getVoice(name)
+                if (preset != null && preset.description.isNotEmpty()) {
+                    "$name (${preset.description})"
+                } else {
+                    name
                 }
-                
-                val currentVoice = UserConfig.getTtsVoice(this)
-                val currentIndex = if (currentVoice != null) {
-                    voiceNames.indexOf(currentVoice).coerceAtLeast(0)
-                } else 0
-                
-                androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.settings_select_voice_dialog))
-                    .setSingleChoiceItems(friendlyNames, currentIndex) { dialog, which ->
-                        val selectedName = voiceNames[which]
-                        val friendlyName = friendlyNames[which]
-                        
-                        UserConfig.setTtsVoice(this, selectedName)
-                        tvCurrentVoice.text = getString(R.string.settings_voice_current, friendlyName)
-                        Toast.makeText(this, getString(R.string.settings_voice_current, friendlyName), Toast.LENGTH_SHORT).show()
-                        dialog.dismiss()
-                    }
-                    .setNegativeButton(getString(R.string.cancel), null)
-                    .show()
-            }
+            }.toTypedArray()
+            
+            val currentVoice = UserConfig.getTtsVoice(this) ?: com.skul9x.doctruyen.tts.vieneu.VoicePresets.defaultVoiceName
+            val currentIndex = voiceNames.indexOf(currentVoice).coerceAtLeast(0)
+            
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(getString(R.string.settings_select_voice_dialog))
+                .setSingleChoiceItems(displayNames, currentIndex) { dialog, which ->
+                    val selectedName = voiceNames[which]
+                    UserConfig.setTtsVoice(this, selectedName)
+                    tvCurrentVoice.text = getString(R.string.settings_voice_current, selectedName)
+                    Toast.makeText(this, getString(R.string.settings_voice_current, selectedName), Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
         }
 
         btnSave.setOnClickListener {

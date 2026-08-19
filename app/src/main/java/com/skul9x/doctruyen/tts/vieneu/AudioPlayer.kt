@@ -1,0 +1,221 @@
+package com.skul9x.doctruyen.tts.vieneu
+
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import android.util.Log
+
+/**
+ * Low-latency audio player using Android's AudioTrack API in streaming mode.
+ * Supports 48 kHz mono 16-bit PCM playback.
+ */
+class AudioPlayer(
+    val sampleRate: Int = 48000,
+    val channelConfig: Int = AudioFormat.CHANNEL_OUT_MONO,
+    val encoding: Int = AudioFormat.ENCODING_PCM_16BIT
+) {
+
+    private val lock = Any()
+    private var audioTrack: AudioTrack? = null
+
+    val isInitialized: Boolean
+        get() = synchronized(lock) {
+            try {
+                audioTrack != null && audioTrack?.state == AudioTrack.STATE_INITIALIZED
+            } catch (e: Throwable) {
+                false
+            }
+        }
+
+    val isPlaying: Boolean
+        get() = synchronized(lock) {
+            try {
+                audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING
+            } catch (e: Throwable) {
+                false
+            }
+        }
+
+    /**
+     * Initializes the underlying AudioTrack with a buffer size >= 2 * minBufferSize.
+     */
+    fun init() {
+        synchronized(lock) {
+            if (audioTrack != null) {
+                return
+            }
+
+            try {
+                val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, encoding)
+                val bufferSize = if (minBufferSize > 0) maxOf(minBufferSize * 2, sampleRate * 2) else sampleRate * 2
+
+                val attrBuilder = AudioAttributes.Builder()
+                attrBuilder.setUsage(AudioAttributes.USAGE_MEDIA)
+                attrBuilder.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                val attributes = attrBuilder.build()
+
+                val formatBuilder = AudioFormat.Builder()
+                formatBuilder.setSampleRate(sampleRate)
+                formatBuilder.setChannelMask(channelConfig)
+                formatBuilder.setEncoding(encoding)
+                val format = formatBuilder.build()
+
+                val trackBuilder = AudioTrack.Builder()
+                if (attributes != null) trackBuilder.setAudioAttributes(attributes)
+                if (format != null) trackBuilder.setAudioFormat(format)
+                trackBuilder.setBufferSizeInBytes(bufferSize)
+                trackBuilder.setTransferMode(AudioTrack.MODE_STREAM)
+                audioTrack = trackBuilder.build()
+            } catch (e: Throwable) {
+                Log.w(TAG, "AudioTrack initialization skipped or failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Writes 16-bit PCM audio samples to the AudioTrack.
+     * Blocks if the buffer is full until all samples are written or track is stopped.
+     */
+    fun write(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int {
+        val track: AudioTrack?
+        synchronized(lock) {
+            track = audioTrack
+        }
+        if (track == null) {
+            return 0
+        }
+
+        try {
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                return 0
+            }
+
+            var totalWritten = 0
+            while (totalWritten < size) {
+                val count = track.write(
+                    pcm16,
+                    offset + totalWritten,
+                    size - totalWritten,
+                    AudioTrack.WRITE_BLOCKING
+                )
+                if (count <= 0) {
+                    if (count < 0) Log.w(TAG, "AudioTrack write error: $count")
+                    break
+                }
+                totalWritten += count
+            }
+            return totalWritten
+        } catch (e: Throwable) {
+            Log.w(TAG, "AudioTrack write failed", e)
+            return 0
+        }
+    }
+
+    /**
+     * Starts audio playback.
+     */
+    fun play() {
+        synchronized(lock) {
+            try {
+                if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
+                    if (audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack?.play()
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to start AudioTrack playback", e)
+            }
+        }
+    }
+
+    /**
+     * Pauses audio playback without dropping queued audio.
+     */
+    fun pause() {
+        synchronized(lock) {
+            try {
+                if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
+                    if (audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack?.pause()
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to pause AudioTrack", e)
+            }
+        }
+    }
+
+    /**
+     * Stops audio playback and flushes buffered audio.
+     */
+    fun stop() {
+        synchronized(lock) {
+            try {
+                if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
+                    if (audioTrack?.playState != AudioTrack.PLAYSTATE_STOPPED) {
+                        audioTrack?.stop()
+                    }
+                    audioTrack?.flush()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to stop AudioTrack", e)
+            }
+        }
+    }
+
+    /**
+     * Flushes currently buffered audio.
+     */
+    fun flush() {
+        synchronized(lock) {
+            try {
+                if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
+                    audioTrack?.flush()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to flush AudioTrack", e)
+            }
+        }
+    }
+
+    /**
+     * Adjusts the volume / gain of the player (0.0f = silent, 1.0f = full volume).
+     */
+    fun setVolume(volume: Float) {
+        synchronized(lock) {
+            val clamped = volume.coerceIn(0f, 1f)
+            try {
+                audioTrack?.setVolume(clamped)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to set AudioTrack volume", e)
+            }
+        }
+    }
+
+    /**
+     * Releases the AudioTrack and native resources.
+     */
+    fun release() {
+        synchronized(lock) {
+            try {
+                audioTrack?.let {
+                    if (it.state == AudioTrack.STATE_INITIALIZED) {
+                        if (it.playState != AudioTrack.PLAYSTATE_STOPPED) {
+                            it.stop()
+                        }
+                        it.flush()
+                    }
+                    it.release()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to release AudioTrack", e)
+            } finally {
+                audioTrack = null
+            }
+        }
+    }
+
+    companion object {
+        private const val TAG = "AudioPlayer"
+    }
+}
