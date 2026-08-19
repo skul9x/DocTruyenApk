@@ -3,17 +3,18 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-19T10:05:00+07:00"
+    "updated_at": "2026-08-19T10:28:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Plan 'tts-timing-natural-pauses' (Phases 01-05) Complete & Verified on Physical Device"
+    "status": "Production Ready with CI/CD Auto-Release & On-Device AI Benchmark Verified",
+    "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
     "mobile_app": {
       "platform": "Android (Min SDK 24, Target SDK 35)",
-      "language": "Kotlin",
+      "language": "Kotlin 2.0",
       "architecture": "MVVM + Foreground Service (ReadingService)",
       "onnx_runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.20.0",
       "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM Mono)"
@@ -32,6 +33,11 @@
     "telemetry": {
       "module": "TtsMetricsLogger & DebugLogger",
       "metrics": "TTFT, RTF, inference time, audio duration, buffer underruns, queue dwell time"
+    },
+    "ci_cd": {
+      "runner": "GitHub Actions (ubuntu-latest, JDK 17)",
+      "workflow": ".github/workflows/android.yml",
+      "features": "App name slugification, auto-increment minor tag versioning, Keystore base64 decoding & release signing, automated GitHub Releases"
     }
   },
   "model_artifacts": {
@@ -75,6 +81,11 @@
       "name": "End-to-End On-Device Hardware Testing & Benchmarking",
       "status": "Implemented & Passed",
       "components": ["TTSNaturalReadingDeviceTest (Story 118 on Android 15)", "benchmark_report.md"]
+    },
+    {
+      "name": "Automated CI/CD & Signed Release Pipeline",
+      "status": "Implemented & Active",
+      "components": [".github/workflows/android.yml", "app/build.gradle.kts (signingConfigs)"]
     }
   ],
   "decisions_made": [
@@ -93,6 +104,10 @@
     {
       "decision": "Unified Audio Buffer per Chunk",
       "reason": "Combining synthesized speech with pause silence in a single buffer avoids polling starvation glitches."
+    },
+    {
+      "decision": "Exclude private Keystore from Git",
+      "reason": "Keystore is injected at build-time via GitHub Secrets Base64 decoding, preventing credential exposure."
     }
   ]
 }

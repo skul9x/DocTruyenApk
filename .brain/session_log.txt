@@ -1,5 +1,10 @@
-[20:09] START phase-01-setup
-[20:09] DONE task: Add ONNX Runtime Android dependency and noCompress aaptOptions
-[20:09] DONE task: Bundle 285MB model assets (backbone, codec, denoiser)
-[20:09] DONE task: Verify Gradle assembleDebug and create test_phase01_setup.sh
-[20:09] END phase-01-setup ✅
+# Session Log - DocTruyen & VieNeu-TTS Integration
+[2026-08-18 20:09] Initialized VieNeu-TTS offline Android integration plan.
+[2026-08-19 09:00] Completed Phase 01: TtsMetricsLogger and telemetry diagnostics.
+[2026-08-19 09:25] Completed Phase 02: SmartTextSegmenter with linguistic Vietnamese context rules.
+[2026-08-19 09:45] Completed Phase 03: TTSAudioPipeline with atomic silence padding and micro-fades.
+[2026-08-19 09:55] Completed Phase 04: User configurable pauses and cadence settings.
+[2026-08-19 10:05] Completed Phase 05: On-device physical benchmark (TTFT: 2.24s, RTF: 0.443x, 0 underruns).
+[2026-08-19 10:16] Rewrote detailed README.md with system architecture, benchmark results, and build guides.
+[2026-08-19 10:21] Configured GitHub Actions CI/CD (.github/workflows/android.yml) for auto versioning, keystore release signing & GitHub releases.
+[2026-08-19 10:22] Committed and pushed all source code and workflows to origin main without force push.

@@ -1,36 +1,56 @@
 {
-  "updated_at": "2026-08-19T10:03:15+07:00",
+  "updated_at": "2026-08-19T10:28:40+07:00",
   "working_on": {
-    "feature": "TTS Timing Diagnostics & Natural Story Cadence",
-    "task": "Phase 05: Verification, Benchmarking & End-to-End Testing",
+    "feature": "Android CI/CD & Automated GitHub Release",
+    "task": "GitHub Actions Setup, Keystore Decoding & Remote Push",
     "status": "completed",
     "files": [
-      "app/src/androidTest/java/com/skul9x/doctruyen/tts/vieneu/TTSNaturalReadingDeviceTest.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-      "plans/260819-0855-tts-timing-natural-pauses/reports/benchmark_report.md"
+      ".github/workflows/android.yml",
+      "app/build.gradle.kts",
+      ".gitignore",
+      "README.md",
+      "CHANGELOG.md"
     ],
     "blockers": [],
-    "notes": "All 5 phases of TTS timing metrics, smart segmentation, natural audio pause pipeline, settings customization, and physical device benchmarking are complete and verified."
+    "notes": "Code has been built, tested, and pushed successfully to GitHub repository skul9x/DocTruyenApk with automated CI/CD pipeline."
   },
   "pending_tasks": [],
   "recent_changes": [
     {
-      "timestamp": "2026-08-19T10:03:00+07:00",
-      "type": "test_and_benchmark",
-      "description": "Implemented and verified on-device benchmark TTSNaturalReadingDeviceTest.kt and created benchmark_report.md",
+      "timestamp": "2026-08-19T10:22:40+07:00",
+      "type": "push_to_remote",
+      "description": "Committed and pushed complete VieNeu-TTS integration, natural pause pipeline, tests, benchmark report, and GitHub Actions CI/CD to origin main",
       "files": [
-        "app/src/androidTest/java/com/skul9x/doctruyen/tts/vieneu/TTSNaturalReadingDeviceTest.kt",
-        "plans/260819-0855-tts-timing-natural-pauses/reports/benchmark_report.md",
-        "plans/260819-0855-tts-timing-natural-pauses/phase-05-device-testing-benchmarking.md",
-        "plans/260819-0855-tts-timing-natural-pauses/plan.md"
+        ".github/workflows/android.yml",
+        "README.md",
+        "CHANGELOG.md",
+        "app/build.gradle.kts",
+        ".gitignore"
+      ]
+    },
+    {
+      "timestamp": "2026-08-19T10:21:20+07:00",
+      "type": "ci_cd_workflow",
+      "description": "Created .github/workflows/android.yml with app name slugification, auto-increment minor versioning, keystore base64 decoding, signed assembleRelease, and softprops/action-gh-release@v2",
+      "files": [
+        ".github/workflows/android.yml",
+        "app/build.gradle.kts"
+      ]
+    },
+    {
+      "timestamp": "2026-08-19T10:16:40+07:00",
+      "type": "documentation",
+      "description": "Rewrote README.md comprehensively with architecture diagrams, module breakdown, hardware benchmark numbers, and build instructions",
+      "files": [
+        "README.md"
       ]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "Merge speech and silence buffer into unified atomic chunk array in TTSAudioPipeline",
-      "reason": "Prevents polling underrun false alarms between speech audio and appended silence."
+      "decision": "Added *.jks and *.keystore to .gitignore and injected keystore dynamically via GitHub Secrets",
+      "reason": "Ensures private signing keys remain confidential while allowing fully automated release signing in CI/CD."
     }
   ]
 }
