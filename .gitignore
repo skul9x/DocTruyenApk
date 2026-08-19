@@ -27,3 +27,8 @@ dist
 target/
 **/target/
 *.log
+*.jks
+*.keystore
+app/build/
+build/
+

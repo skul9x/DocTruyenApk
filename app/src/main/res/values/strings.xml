@@ -76,4 +76,17 @@
     <string name="cancel">Hủy</string>
     <string name="msg_enter_url">Vui lòng nhập URL!</string>
     <string name="app_version">DocTruyen v1.0</string>
+
+    <!-- Cadence & Pause Settings -->
+    <string name="settings_cadence_title">⏳ Nhịp điệu giọng đọc (Ngắt nghỉ câu/đoạn)</string>
+    <string name="settings_cadence_desc">Tùy chỉnh thời gian ngừng nghỉ giữa các câu, đoạn và vế câu để tạo cảm giác tự nhiên nhất.</string>
+    <string name="settings_cadence_presets">Cấu hình mẫu</string>
+    <string name="preset_standard">Chuẩn / Tự nhiên</string>
+    <string name="preset_fast">Đọc nhanh / Ngắt ngắn</string>
+    <string name="preset_emotional">Truyện cảm xúc / Ngắt dài</string>
+    <string name="settings_pause_sentence">Nghỉ hết câu (. ! ? …)</string>
+    <string name="settings_pause_paragraph">Nghỉ chuyển đoạn</string>
+    <string name="settings_pause_clause">Nghỉ ngắt ý (, ; : —)</string>
+    <string name="settings_debug_logging">Bật ghi nhật ký đo đạc (Debug Logs)</string>
+    <string name="settings_view_timing_logs">⏱️ Xem Nhật Ký Đo Thời Gian Đọc</string>
 </resources>

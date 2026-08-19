@@ -24,90 +24,63 @@ object PcmUtils {
     }
 
     /**
-     * Split text into sentence chunks at ". ", "! ", "? ", "\n", "…" boundaries.
-     * Long sentences exceeding [maxCharsPerChunk] are further split at commas,
-     * semicolons, colons, dashes or word boundaries.
+     * Split text into sentence chunks using [SmartTextSegmenter].
+     * Preserves backward compatibility while leveraging linguistic and abbreviation rules.
      */
-    fun splitIntoSentences(text: String, maxCharsPerChunk: Int = 200): List<String> {
-        if (text.isBlank()) return emptyList()
+    fun splitIntoSentences(text: String, maxCharsPerChunk: Int = SmartTextSegmenter.DEFAULT_MAX_CHARS): List<String> {
+        return SmartTextSegmenter.segment(text, maxCharsPerChunk).map { it.text }
+    }
 
-        val rawChunks = mutableListOf<String>()
-        // Normalize line breaks
-        val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+    /**
+     * Split text into structured [TextChunk] list with pause metadata.
+     */
+    fun splitIntoChunks(text: String, maxCharsPerChunk: Int = SmartTextSegmenter.DEFAULT_MAX_CHARS): List<TextChunk> {
+        return SmartTextSegmenter.segment(text, maxCharsPerChunk)
+    }
 
-        // Split by lines first
-        val lines = normalized.split('\n')
-        for (line in lines) {
-            val trimmedLine = line.trim()
-            if (trimmedLine.isEmpty()) continue
+    /**
+     * Generate acoustic silence buffer (16-bit PCM zeroes) for a given pause duration in milliseconds.
+     * N = sampleRate * (pauseMs / 1000.0)
+     */
+    fun generateSilence(pauseMs: Int, sampleRate: Int = VieNeuConfig.SAMPLE_RATE): ShortArray {
+        if (pauseMs <= 0) return ShortArray(0)
+        val sampleCount = ((sampleRate.toLong() * pauseMs) / 1000L).toInt()
+        return ShortArray(sampleCount)
+    }
 
-            // Split line by sentence terminators (. ! ? …) followed by whitespace or end of line
-            val regex = Regex("(?<=[.!?…])\\s+")
-            val sentenceParts = trimmedLine.split(regex)
-            for (part in sentenceParts) {
-                val trimmedPart = part.trim()
-                if (trimmedPart.isNotEmpty()) {
-                    rawChunks.add(trimmedPart)
-                }
-            }
+    /**
+     * Apply micro-fading (fade-in at start, fade-out at end) to eliminate acoustic pop/click discontinuities.
+     * Uses linear or half-cosine ramp over fadeDurationMs (default 5ms).
+     *
+     * @param pcm16 Audio samples array
+     * @param fadeDurationMs Duration of fade in milliseconds (default 5ms)
+     * @param sampleRate Audio sample rate (default 48000 Hz)
+     * @return New ShortArray with smooth micro-fades applied
+     */
+    fun applyMicroFade(
+        pcm16: ShortArray,
+        fadeDurationMs: Float = 5.0f,
+        sampleRate: Int = VieNeuConfig.SAMPLE_RATE
+    ): ShortArray {
+        if (pcm16.isEmpty()) return ShortArray(0)
+        val result = pcm16.copyOf()
+        val fadeSamples = ((sampleRate * fadeDurationMs) / 1000f).toInt().coerceAtMost(pcm16.size / 2)
+        if (fadeSamples <= 0) return result
+
+        // Fade in: [0..fadeSamples-1] ramp 0.0 -> 1.0
+        for (i in 0 until fadeSamples) {
+            val factor = i.toFloat() / fadeSamples.toFloat()
+            result[i] = (result[i] * factor).toInt().toShort()
         }
 
-        // Sub-split chunks exceeding maxCharsPerChunk
-        val result = mutableListOf<String>()
-        for (chunk in rawChunks) {
-            if (chunk.length <= maxCharsPerChunk) {
-                result.add(chunk)
-            } else {
-                result.addAll(splitLongChunk(chunk, maxCharsPerChunk))
-            }
+        // Fade out: [size - fadeSamples..size - 1] ramp 1.0 -> 0.0
+        val n = result.size
+        for (i in 0 until fadeSamples) {
+            val factor = (fadeSamples - 1 - i).toFloat() / fadeSamples.toFloat()
+            result[n - fadeSamples + i] = (result[n - fadeSamples + i] * factor).toInt().toShort()
         }
+
         return result
     }
-
-    private fun splitLongChunk(chunk: String, maxChars: Int): List<String> {
-        val subChunks = mutableListOf<String>()
-        val clauseRegex = Regex("(?<=[,;:—–-])\\s+")
-        val clauses = chunk.split(clauseRegex)
-        var current = StringBuilder()
-
-        for (clause in clauses) {
-            val trimmedClause = clause.trim()
-            if (trimmedClause.isEmpty()) continue
-
-            if (current.isEmpty()) {
-                current.append(trimmedClause)
-            } else if (current.length + 1 + trimmedClause.length <= maxChars) {
-                current.append(" ").append(trimmedClause)
-            } else {
-                if (current.isNotEmpty()) {
-                    subChunks.add(current.toString())
-                    current = StringBuilder()
-                }
-                if (trimmedClause.length <= maxChars) {
-                    current.append(trimmedClause)
-                } else {
-                    // Split by words
-                    val words = trimmedClause.split(Regex("\\s+"))
-                    var wordBuf = StringBuilder()
-                    for (word in words) {
-                        if (wordBuf.isEmpty()) {
-                            wordBuf.append(word)
-                        } else if (wordBuf.length + 1 + word.length <= maxChars) {
-                            wordBuf.append(" ").append(word)
-                        } else {
-                            subChunks.add(wordBuf.toString())
-                            wordBuf = StringBuilder(word)
-                        }
-                    }
-                    if (wordBuf.isNotEmpty()) {
-                        current = wordBuf
-                    }
-                }
-            }
-        }
-        if (current.isNotEmpty()) {
-            subChunks.add(current.toString())
-        }
-        return subChunks
-    }
 }
+

@@ -1,5 +1,5 @@
 # Phase 01: TTS Timing Metrics & Diagnostic Logging System
-Status: ⬜ Pending
+Status: ✅ Completed
 Dependencies: None
 
 ## Objective
@@ -8,7 +8,7 @@ Design and implement a dedicated TTS timing telemetry and diagnostics engine in 
 ## Requirements
 
 ### Functional Requirements
-- [ ] Create `TtsChunkTiming` data structure recording:
+- [x] Create `TtsChunkTiming` data structure recording:
   - `chunkIndex`: Index of chunk in story
   - `totalChunks`: Total chunk count
   - `textSnippet`: First 40 characters of chunk text
@@ -22,26 +22,26 @@ Design and implement a dedicated TTS timing telemetry and diagnostics engine in 
   - `playbackDurationMs`: Actual playback duration on AudioTrack
   - `pauseDurationMs`: Planned silence pause after this chunk
   - `starvationDelayMs`: Unplanned playback wait time if buffer was empty
-- [ ] Add `TtsSessionMetrics` to aggregate:
+- [x] Add `TtsSessionMetrics` to aggregate:
   - `storyId` & `storyTitle`
   - `timeToFirstAudioMs` (TTFT: time from user tap to first audio sample output)
   - `averageRtf`: Average RTF across all synthesized chunks
   - `totalAudioDurationMs`: Total story audio runtime
   - `totalSynthesisDurationMs`: Total background inference time
   - `underrunCount`: Count of buffer starvations encountered during reading
-- [ ] Extend `DebugLogger` with `LogType.TTS_TIMING` and structured log formatting.
-- [ ] Update `DebugLogActivity` to display formatted TTS metrics with copy, share, and filter capabilities.
+- [x] Extend `DebugLogger` with `LogType.TTS_TIMING` and structured log formatting.
+- [x] Update `DebugLogActivity` to display formatted TTS metrics with copy, share, and filter capabilities.
 
 ### Non-Functional Requirements
 - Overhead of telemetry collection must be $< 1\text{ms}$ per chunk.
 - Thread-safe and non-blocking for background coroutine synthesis and AudioTrack playback.
 
 ## Implementation Steps
-1. [ ] Create `TtsMetricsLogger.kt` in `com.skul9x.doctruyen.tts.vieneu`.
-2. [ ] Add `LogType.TTS_TIMING` in `DebugLogger.kt` and format timing logs with clear icons (⏱️, ⚡, 📊).
-3. [ ] Integrate timing probe points in `TTSAudioPipeline.kt` and `VieNeuTTSManager.kt`.
-4. [ ] Enhance `DebugLogActivity.kt` with a filter toggle to easily isolate TTS Timing logs from standard logs.
-5. [ ] Implement file-based test suite `TtsMetricsLoggerTest.kt`.
+1. [x] Create `TtsMetricsLogger.kt` in `com.skul9x.doctruyen.tts.vieneu`.
+2. [x] Add `LogType.TTS_TIMING` in `DebugLogger.kt` and format timing logs with clear icons (⏱️, ⚡, 📊).
+3. [x] Integrate timing probe points in `TTSAudioPipeline.kt` and `VieNeuTTSManager.kt`.
+4. [x] Enhance `DebugLogActivity.kt` with a filter toggle to easily isolate TTS Timing logs from standard logs.
+5. [x] Implement file-based test suite `TtsMetricsLoggerTest.kt`.
 
 ## Files to Create/Modify
 - `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt` - [NEW] Core timing telemetry engine
@@ -50,7 +50,7 @@ Design and implement a dedicated TTS timing telemetry and diagnostics engine in 
 - `app/src/test/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLoggerTest.kt` - [NEW] File-based verification test suite
 
 ## Test Criteria (File-Based Tests)
-- [ ] `TtsMetricsLoggerTest.kt` passes with 100% assertions on:
+- [x] `TtsMetricsLoggerTest.kt` passes with 100% assertions on:
   - Correct RTF computation ($t_{infer} / t_{audio}$)
   - Accurate TTFT calculation from start trigger to first audio chunk
   - Buffer underrun detection and logging

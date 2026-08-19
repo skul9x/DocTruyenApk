@@ -11,7 +11,10 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.skul9x.doctruyen.utils.DebugLogger
+import com.skul9x.doctruyen.utils.LogType
 
 class DebugLogActivity : AppCompatActivity() {
 
@@ -20,6 +23,8 @@ class DebugLogActivity : AppCompatActivity() {
     private lateinit var btnClear: ImageButton
     private lateinit var btnCopy: MaterialButton
     private lateinit var btnShare: MaterialButton
+    private lateinit var chipGroupFilter: ChipGroup
+    private var currentFilter: LogType? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +42,7 @@ class DebugLogActivity : AppCompatActivity() {
         btnClear = findViewById(R.id.btnClear)
         btnCopy = findViewById(R.id.btnCopy)
         btnShare = findViewById(R.id.btnShare)
+        chipGroupFilter = findViewById(R.id.chipGroupFilter)
     }
     
     private fun setupListeners() {
@@ -48,7 +54,7 @@ class DebugLogActivity : AppCompatActivity() {
         }
         
         btnCopy.setOnClickListener {
-            val logs = DebugLogger.getFormattedLogs()
+            val logs = DebugLogger.getFormattedLogs(currentFilter)
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("DocTruyen Logs", logs)
             clipboard.setPrimaryClip(clip)
@@ -56,7 +62,7 @@ class DebugLogActivity : AppCompatActivity() {
         }
         
         btnShare.setOnClickListener {
-            val logs = DebugLogger.getFormattedLogs()
+            val logs = DebugLogger.getFormattedLogs(currentFilter)
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_SUBJECT, "DocTruyen Debug Logs")
@@ -64,19 +70,31 @@ class DebugLogActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(intent, "Chia sẻ log lỗi"))
         }
+
+        chipGroupFilter.setOnCheckedStateChangeListener { _, checkedIds ->
+            currentFilter = when {
+                checkedIds.contains(R.id.chipTtsTiming) -> LogType.TTS_TIMING
+                checkedIds.contains(R.id.chipErrors) -> LogType.ERROR
+                else -> null
+            }
+            updateLogsDisplay()
+        }
     }
     
+    private fun updateLogsDisplay() {
+        tvLogs.text = DebugLogger.getFormattedLogs(currentFilter)
+        tvLogs.post {
+            val layout = tvLogs.layout ?: return@post
+            val scrollAmount = layout.getLineTop(tvLogs.lineCount) - tvLogs.height
+            if (scrollAmount > 0) {
+                tvLogs.scrollTo(0, scrollAmount)
+            }
+        }
+    }
+
     private fun observeLogs() {
         DebugLogger.logs.observe(this) { 
-            tvLogs.text = DebugLogger.getFormattedLogs()
-            
-            // Auto scroll to bottom
-            tvLogs.post {
-                val scrollAmount = tvLogs.layout.getLineTop(tvLogs.lineCount) - tvLogs.height
-                if (scrollAmount > 0) {
-                    tvLogs.scrollTo(0, scrollAmount)
-                }
-            }
+            updateLogsDisplay()
         }
     }
 }

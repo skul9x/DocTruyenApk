@@ -14,7 +14,7 @@ data class LogEntry(
 )
 
 enum class LogType {
-    INFO, REQUEST, RESPONSE, ERROR
+    INFO, REQUEST, RESPONSE, ERROR, TTS_TIMING
 }
 
 object DebugLogger {
@@ -44,15 +44,21 @@ object DebugLogger {
         }
     }
 
-    fun getFormattedLogs(): String {
+    fun getFormattedLogs(filterType: LogType? = null): String {
         return synchronized(logList) {
-            logList.joinToString("\n\n") { entry ->
+            val filtered = if (filterType != null) {
+                logList.filter { it.type == filterType }
+            } else {
+                logList
+            }
+            filtered.joinToString("\n\n") { entry ->
                 val time = dateFormat.format(Date(entry.timestamp))
                 val icon = when (entry.type) {
                     LogType.INFO -> "ℹ️"
                     LogType.REQUEST -> "📤"
                     LogType.RESPONSE -> "📥"
                     LogType.ERROR -> "❌"
+                    LogType.TTS_TIMING -> "⏱️"
                 }
                 "[$time] $icon ${entry.tag}:\n${entry.message}"
             }

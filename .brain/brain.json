@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-19T08:50:00+07:00"
+    "updated_at": "2026-08-19T10:05:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Phases 01-05 Complete (Working & Verified on Android Device)"
+    "status": "Plan 'tts-timing-natural-pauses' (Phases 01-05) Complete & Verified on Physical Device"
   },
   "tech_stack": {
     "mobile_app": {
@@ -16,7 +16,7 @@
       "language": "Kotlin",
       "architecture": "MVVM + Foreground Service (ReadingService)",
       "onnx_runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.20.0",
-      "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM)"
+      "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM Mono)"
     },
     "tts_engine": {
       "model": "VieNeu-TTS v3 Turbo",
@@ -25,10 +25,13 @@
       "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk)",
       "codec": "MOSS-Audio-Tokenizer-Nano-ONNX"
     },
-    "workspace_env": {
-      "pc_os": "Linux (Ubuntu/Debian)",
-      "python": "3.12.3",
-      "package_manager": "uv"
+    "text_segmentation": {
+      "module": "SmartTextSegmenter",
+      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing, protected abbreviations (TP.HCM, BS., TS., GS.), numbers, and time formats"
+    },
+    "telemetry": {
+      "module": "TtsMetricsLogger & DebugLogger",
+      "metrics": "TTFT, RTF, inference time, audio duration, buffer underruns, queue dwell time"
     }
   },
   "model_artifacts": {
@@ -47,6 +50,33 @@
       "sea_g2p.bin (60MB)"
     ]
   },
+  "features": [
+    {
+      "name": "TTS Timing Diagnostics & Telemetry",
+      "status": "Implemented",
+      "components": ["TtsMetricsLogger", "DebugLogger", "SettingsActivity"]
+    },
+    {
+      "name": "Smart Vietnamese Text Segmentation",
+      "status": "Implemented",
+      "components": ["SmartTextSegmenter", "TextChunk", "PauseType", "PauseConfig"]
+    },
+    {
+      "name": "Natural Pause & Anti-Starvation Audio Pipeline",
+      "status": "Implemented",
+      "components": ["TTSAudioPipeline", "PcmUtils (generateSilence, applyMicroFade)", "AudioPlayer"]
+    },
+    {
+      "name": "Cadence & Pause Customization in Settings",
+      "status": "Implemented",
+      "components": ["UserConfig", "SettingsActivity", "activity_settings.xml"]
+    },
+    {
+      "name": "End-to-End On-Device Hardware Testing & Benchmarking",
+      "status": "Implemented & Passed",
+      "components": ["TTSNaturalReadingDeviceTest (Story 118 on Android 15)", "benchmark_report.md"]
+    }
+  ],
   "decisions_made": [
     {
       "decision": "100% Offline On-Device on Android Phone",
@@ -58,7 +88,11 @@
     },
     {
       "decision": "Chunking & Pre-buffering Pipeline",
-      "reason": "Sentence-level chunking ensures time-to-first-audio < 2s and gapless playback between sentences."
+      "reason": "Sentence-level chunking ensures time-to-first-audio ~2.2s and gapless playback between sentences."
+    },
+    {
+      "decision": "Unified Audio Buffer per Chunk",
+      "reason": "Combining synthesized speech with pause silence in a single buffer avoids polling starvation glitches."
     }
   ]
 }

@@ -29,7 +29,9 @@ class TTSAudioPipeline(
     private val engine: VieNeuOnnxEngine,
     var voiceName: String = "Trúc Ly",
     private val context: Context? = null,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    var minPreBufferChunks: Int = 1,
+    var minPreBufferDurationMs: Long = 1500L
 ) {
 
     sealed class PipelineState {
@@ -47,7 +49,7 @@ class TTSAudioPipeline(
     private var synthesisJob: Job? = null
     private var playbackJob: Job? = null
 
-    private var sentences: List<String> = emptyList()
+    private var chunks: List<TextChunk> = emptyList()
     private var stateCallback: ((PipelineState) -> Unit)? = null
 
     private val audioManager = try {
@@ -71,8 +73,6 @@ class TTSAudioPipeline(
     var currentState: PipelineState = PipelineState.Idle
         private set
 
-    private var isTitlePauseMode = false
-    private var titleSentencesCount = 0
     private var progressCallback: ((Int) -> Unit)? = null
 
     private fun setState(state: PipelineState) {
@@ -93,33 +93,21 @@ class TTSAudioPipeline(
     }
 
     /**
-     * Start reading the provided text from the beginning.
+     * Start reading with structured text chunks.
      */
-    fun startReading(
-        text: String,
-        onStateChange: ((PipelineState) -> Unit)? = null
-    ) {
-        startReading(text, onStateChange, null)
-    }
-
-    /**
-     * Start reading the provided text with both state and progress callbacks.
-     */
-    fun startReading(
-        text: String,
-        onStateChange: ((PipelineState) -> Unit)?,
-        onProgress: ((Int) -> Unit)?
+    fun startReadingChunks(
+        chunkList: List<TextChunk>,
+        onStateChange: ((PipelineState) -> Unit)? = null,
+        onProgress: ((Int) -> Unit)? = null
     ) {
         stopInternal(resetIndex = true)
         stateCallback = onStateChange
         progressCallback = onProgress
-        isTitlePauseMode = false
-        titleSentencesCount = 0
-        sentences = PcmUtils.splitIntoSentences(text)
-        totalChunks = sentences.size
+        chunks = chunkList
+        totalChunks = chunks.size
         currentChunkIndex = 0
 
-        if (sentences.isEmpty()) {
+        if (chunks.isEmpty()) {
             setState(PipelineState.Idle)
             return
         }
@@ -129,14 +117,54 @@ class TTSAudioPipeline(
     }
 
     /**
+     * Start reading the provided text from the beginning.
+     */
+    fun startReading(
+        text: String,
+        pauseConfig: PauseConfig = PauseConfig(),
+        onStateChange: ((PipelineState) -> Unit)? = null
+    ) {
+        startReading(text, onStateChange, null, pauseConfig)
+    }
+
+    fun startReading(
+        text: String,
+        onStateChange: (PipelineState) -> Unit
+    ) {
+        startReading(text, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
+    }
+
+    /**
+     * Start reading the provided text with both state and progress callbacks.
+     */
+    fun startReading(
+        text: String,
+        onStateChange: ((PipelineState) -> Unit)?,
+        onProgress: ((Int) -> Unit)?,
+        pauseConfig: PauseConfig = PauseConfig()
+    ) {
+        val chunkList = SmartTextSegmenter.segment(text, pauseConfig = pauseConfig)
+        startReadingChunks(chunkList, onStateChange, onProgress)
+    }
+
+    /**
      * Speak title, pause 1 second, then speak content.
      */
     fun startReadingWithTitlePause(
         title: String,
         content: String,
+        pauseConfig: PauseConfig = PauseConfig(),
         onStateChange: ((PipelineState) -> Unit)? = null
     ) {
-        startReadingWithTitlePause(title, content, onStateChange, null)
+        startReadingWithTitlePause(title, content, onStateChange, null, pauseConfig)
+    }
+
+    fun startReadingWithTitlePause(
+        title: String,
+        content: String,
+        onStateChange: (PipelineState) -> Unit
+    ) {
+        startReadingWithTitlePause(title, content, onStateChange = onStateChange, onProgress = null, pauseConfig = PauseConfig())
     }
 
     /**
@@ -146,28 +174,11 @@ class TTSAudioPipeline(
         title: String,
         content: String,
         onStateChange: ((PipelineState) -> Unit)?,
-        onProgress: ((Int) -> Unit)?
+        onProgress: ((Int) -> Unit)?,
+        pauseConfig: PauseConfig = PauseConfig()
     ) {
-        stopInternal(resetIndex = true)
-        stateCallback = onStateChange
-        progressCallback = onProgress
-
-        val titleList = PcmUtils.splitIntoSentences(title)
-        val contentList = PcmUtils.splitIntoSentences(content)
-
-        isTitlePauseMode = titleList.isNotEmpty()
-        titleSentencesCount = titleList.size
-        sentences = titleList + contentList
-        totalChunks = sentences.size
-        currentChunkIndex = 0
-
-        if (sentences.isEmpty()) {
-            setState(PipelineState.Idle)
-            return
-        }
-
-        requestAudioFocus()
-        startPipeline(startIndex = 0)
+        val chunkList = SmartTextSegmenter.segmentStory(title, content, pauseConfig = pauseConfig)
+        startReadingChunks(chunkList, onStateChange, onProgress)
     }
 
     /**
@@ -237,9 +248,7 @@ class TTSAudioPipeline(
         if (resetIndex) {
             currentChunkIndex = 0
             totalChunks = 0
-            sentences = emptyList()
-            isTitlePauseMode = false
-            titleSentencesCount = 0
+            chunks = emptyList()
         }
     }
 
@@ -251,25 +260,60 @@ class TTSAudioPipeline(
 
         synthesisJob = scope.launch {
             try {
-                for (i in startIndex until sentences.size) {
+                for (i in startIndex until chunks.size) {
                     if (!isActive) break
-                    val sentence = sentences[i]
-                    val phonemes = SeaG2P.phonemize(sentence)
+                    val chunk = chunks[i]
+
+                    // 1. Probe phonemization latency
+                    val g2pStart = System.currentTimeMillis()
+                    val phonemes = SeaG2P.phonemize(chunk.text)
+                    val g2pDuration = System.currentTimeMillis() - g2pStart
+                    val phonemeCount = phonemes.count { it == ' ' } + 1
                     if (!isActive) break
 
+                    // 2. Probe ONNX neural inference time
+                    val inferStart = System.currentTimeMillis()
                     val pcmFloat = withContext(NonCancellable) {
                         engine.infer(phonemes = phonemes, voiceName = voiceName)
                     }
+                    val inferDuration = System.currentTimeMillis() - inferStart
                     if (!isActive) break
 
-                    val pcm16 = PcmUtils.floatToShort(pcmFloat)
-                    chunkQueue.add(Pair(i, pcm16))
+                    // Convert to 16-bit PCM and apply micro-fade to eliminate pop/click
+                    val rawPcm16 = PcmUtils.floatToShort(pcmFloat)
+                    val speechPcm = PcmUtils.applyMicroFade(rawPcm16)
+                    val audioDurationMs = (speechPcm.size * 1000L) / VieNeuConfig.SAMPLE_RATE
+                    val pauseMs = chunk.pauseDurationMs.toLong()
 
-                    // If in title pause mode and just finished the title part, queue 1 second silence
-                    if (isTitlePauseMode && i == titleSentencesCount - 1 && i < sentences.size - 1) {
-                        val silencePcm = ShortArray(VieNeuConfig.SAMPLE_RATE)
-                        chunkQueue.add(Pair(i, silencePcm))
+                    // Record chunk synthesis metrics
+                    TtsMetricsLogger.recordChunkSynthesis(
+                        chunkIndex = i,
+                        totalChunks = totalChunks,
+                        text = chunk.text,
+                        phonemeCount = phonemeCount,
+                        phonemizeDurationMs = g2pDuration,
+                        inferenceDurationMs = inferDuration,
+                        audioDurationMs = audioDurationMs,
+                        pauseDurationMs = pauseMs
+                    )
+
+                    // Append silence if pause is specified into one unified audio buffer
+                    val combinedPcm = if (pauseMs > 0L) {
+                        val silencePcm = PcmUtils.generateSilence(chunk.pauseDurationMs)
+                        if (silencePcm.isNotEmpty()) {
+                            val combined = ShortArray(speechPcm.size + silencePcm.size)
+                            System.arraycopy(speechPcm, 0, combined, 0, speechPcm.size)
+                            System.arraycopy(silencePcm, 0, combined, speechPcm.size, silencePcm.size)
+                            combined
+                        } else {
+                            speechPcm
+                        }
+                    } else {
+                        speechPcm
                     }
+
+                    // Enqueue unified chunk buffer
+                    chunkQueue.add(Pair(i, combinedPcm))
                 }
             } catch (e: CancellationException) {
                 // Expected when paused or stopped
@@ -282,9 +326,38 @@ class TTSAudioPipeline(
         playbackJob = scope.launch {
             try {
                 var playIndex = startIndex
+                var starvationStartTime = 0L
+                var isPreBuffering = true
+
                 while (isActive && (playIndex < totalChunks || !chunkQueue.isEmpty())) {
+                    // Anti-starvation pre-buffering check
+                    if (isPreBuffering) {
+                        val currentQueueSize = chunkQueue.size
+                        val totalBufferedSamples = chunkQueue.sumOf { it.second.size.toLong() }
+                        val bufferedDurationMs = (totalBufferedSamples * 1000L) / VieNeuConfig.SAMPLE_RATE
+                        val isSynthDone = synthesisJob?.isActive != true
+
+                        val hasEnoughChunks = currentQueueSize >= minPreBufferChunks
+                        val hasEnoughDuration = bufferedDurationMs >= minPreBufferDurationMs
+
+                        if (isSynthDone || hasEnoughDuration || (hasEnoughChunks && totalChunks <= 2) || (currentQueueSize >= 2) || playIndex > 0) {
+                            isPreBuffering = false
+                        } else {
+                            delay(20)
+                            continue
+                        }
+                    }
+
                     val nextChunk = chunkQueue.poll()
                     if (nextChunk != null) {
+                        val starvationDelay = if (starvationStartTime > 0L) {
+                            val elapsed = System.currentTimeMillis() - starvationStartTime
+                            if (elapsed > 150L) elapsed else 0L
+                        } else {
+                            0L
+                        }
+                        starvationStartTime = 0L
+
                         currentChunkIndex = nextChunk.first
                         setState(PipelineState.Playing)
                         if (totalChunks > 0) {
@@ -292,7 +365,13 @@ class TTSAudioPipeline(
                             notifyProgress(pct)
                         }
 
+                        TtsMetricsLogger.recordPlaybackStart(nextChunk.first, starvationDelay)
+
+                        val playStart = System.currentTimeMillis()
                         audioPlayer.write(nextChunk.second)
+                        val playDuration = System.currentTimeMillis() - playStart
+                        TtsMetricsLogger.recordPlaybackComplete(nextChunk.first, playDuration)
+
                         currentChunkIndex = nextChunk.first + 1
                         playIndex = currentChunkIndex
 
@@ -301,12 +380,17 @@ class TTSAudioPipeline(
                             notifyProgress(pct)
                         }
                     } else {
+                        // Buffer is empty - track starvation if synthesis is still in progress
+                        if (starvationStartTime == 0L && playIndex < totalChunks) {
+                            starvationStartTime = System.currentTimeMillis()
+                        }
+
                         // Check if synthesis has finished or failed
                         val isSynthDone = synthesisJob?.isActive != true
                         if (isSynthDone && chunkQueue.isEmpty()) {
                             break
                         }
-                        delay(30)
+                        delay(20)
                     }
                 }
 
@@ -314,6 +398,7 @@ class TTSAudioPipeline(
                     audioPlayer.stop()
                     abandonAudioFocus()
                     notifyProgress(100)
+                    TtsMetricsLogger.endSession()
                     setState(PipelineState.Idle)
                 }
             } catch (e: CancellationException) {

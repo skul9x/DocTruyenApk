@@ -104,6 +104,91 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
+        // Initialize Pause and Reading Cadence Controls
+        val sliderPauseSentence = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseSentence)
+        val sliderPauseParagraph = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseParagraph)
+        val sliderPauseClause = findViewById<com.google.android.material.slider.Slider>(R.id.sliderPauseClause)
+
+        val tvPauseSentenceValue = findViewById<android.widget.TextView>(R.id.tvPauseSentenceValue)
+        val tvPauseParagraphValue = findViewById<android.widget.TextView>(R.id.tvPauseParagraphValue)
+        val tvPauseClauseValue = findViewById<android.widget.TextView>(R.id.tvPauseClauseValue)
+
+        val btnPresetStandard = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetStandard)
+        val btnPresetFast = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetFast)
+        val btnPresetEmotional = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPresetEmotional)
+
+        val switchDebugLogging = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchDebugLogging)
+        val btnViewTimingLogs = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnViewTimingLogs)
+
+        fun formatMs(ms: Int): String = "$ms ms"
+
+        fun updatePauseUIFromConfig() {
+            val sentence = UserConfig.getPauseSentence(this)
+            val paragraph = UserConfig.getPauseParagraph(this)
+            val clause = UserConfig.getPauseClause(this)
+
+            sliderPauseSentence.value = sentence.toFloat().coerceIn(sliderPauseSentence.valueFrom, sliderPauseSentence.valueTo)
+            sliderPauseParagraph.value = paragraph.toFloat().coerceIn(sliderPauseParagraph.valueFrom, sliderPauseParagraph.valueTo)
+            sliderPauseClause.value = clause.toFloat().coerceIn(sliderPauseClause.valueFrom, sliderPauseClause.valueTo)
+
+            tvPauseSentenceValue.text = formatMs(sentence)
+            tvPauseParagraphValue.text = formatMs(paragraph)
+            tvPauseClauseValue.text = formatMs(clause)
+        }
+
+        updatePauseUIFromConfig()
+
+        sliderPauseSentence.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val ms = value.toInt()
+                UserConfig.setPauseSentence(this, ms)
+                tvPauseSentenceValue.text = formatMs(ms)
+            }
+        }
+
+        sliderPauseParagraph.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val ms = value.toInt()
+                UserConfig.setPauseParagraph(this, ms)
+                tvPauseParagraphValue.text = formatMs(ms)
+            }
+        }
+
+        sliderPauseClause.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val ms = value.toInt()
+                UserConfig.setPauseClause(this, ms)
+                tvPauseClauseValue.text = formatMs(ms)
+            }
+        }
+
+        btnPresetStandard.setOnClickListener {
+            UserConfig.applyPausePreset(this, "STANDARD")
+            updatePauseUIFromConfig()
+            Toast.makeText(this, getString(R.string.preset_standard), Toast.LENGTH_SHORT).show()
+        }
+
+        btnPresetFast.setOnClickListener {
+            UserConfig.applyPausePreset(this, "FAST")
+            updatePauseUIFromConfig()
+            Toast.makeText(this, getString(R.string.preset_fast), Toast.LENGTH_SHORT).show()
+        }
+
+        btnPresetEmotional.setOnClickListener {
+            UserConfig.applyPausePreset(this, "EMOTIONAL")
+            updatePauseUIFromConfig()
+            Toast.makeText(this, getString(R.string.preset_emotional), Toast.LENGTH_SHORT).show()
+        }
+
+        switchDebugLogging.isChecked = UserConfig.isDebugLoggingEnabled(this)
+        switchDebugLogging.setOnCheckedChangeListener { _, isChecked ->
+            UserConfig.setDebugLoggingEnabled(this, isChecked)
+        }
+
+        btnViewTimingLogs.setOnClickListener {
+            startActivity(android.content.Intent(this, DebugLogActivity::class.java))
+        }
+
         btnSave.setOnClickListener {
             // ... existing save logic ...
             val newUrl = etBaseUrl.text.toString().trim()

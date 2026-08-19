@@ -1,5 +1,5 @@
 # Phase 03: Natural Pause Audio Generation & Anti-Starvation Pipeline
-Status: ⬜ Pending
+Status: ✅ Completed
 Dependencies: phase-01-timing-logger.md, phase-02-intelligent-segmentation.md
 
 ## Objective
@@ -8,14 +8,14 @@ Upgrade `TTSAudioPipeline` to generate exact acoustic silence buffers with smoot
 ## Requirements
 
 ### Functional Requirements
-- [ ] Implement silence PCM sample synthesis:
+- [x] Implement silence PCM sample synthesis:
   - Calculate silence sample count: $N = \text{sampleRate} \times \frac{\text{pauseMs}}{1000}$.
   - Append micro-fade (5ms linear/half-cosine ramp) at end of chunk speech and start of next chunk speech to eliminate pop/click discontinuities.
-- [ ] Implement Anti-Starvation Pre-Buffering:
+- [x] Implement Anti-Starvation Pre-Buffering:
   - When starting or seeking, synthesis generates the first chunk and queues it immediately.
   - Before `AudioTrack` playback unblocks, ensure buffer contains at least 1 full synthesized chunk (or $\ge 1.5$ seconds of audio) so synthesis always stays ahead of playback.
   - In case synthesis falls behind (e.g. heavy CPU load), track starvation event: record exact starvation duration in milliseconds and log to `DebugLogger`.
-- [ ] Telemetry probes in Pipeline:
+- [x] Telemetry probes in Pipeline:
   - Log chunk synthesis start & finish with inference duration and RTF.
   - Log playback start & finish with pause duration and queue depth.
   - Log session summary at completion or stop.
@@ -25,12 +25,12 @@ Upgrade `TTSAudioPipeline` to generate exact acoustic silence buffers with smoot
 - Total audio playback smoothness: 0 underflows under normal mobile CPU conditions.
 
 ## Implementation Steps
-1. [ ] Update `TTSAudioPipeline.kt` to consume `List<TextChunk>` rather than raw string list.
-2. [ ] Add acoustic silence generator and micro-fading helper in `PcmUtils.kt`.
-3. [ ] Implement pre-buffering queue check in `startPipeline()`.
-4. [ ] Wire `TtsMetricsLogger` probes throughout `synthesisJob` and `playbackJob`.
-5. [ ] Update `VieNeuTTSManager.kt` to forward pause configurations and handle title pause seamlessly through `SmartTextSegmenter`.
-6. [ ] Implement file-based test suite `TTSNaturalAudioPipelineTest.kt`.
+1. [x] Update `TTSAudioPipeline.kt` to consume `List<TextChunk>` rather than raw string list.
+2. [x] Add acoustic silence generator and micro-fading helper in `PcmUtils.kt`.
+3. [x] Implement pre-buffering queue check in `startPipeline()`.
+4. [x] Wire `TtsMetricsLogger` probes throughout `synthesisJob` and `playbackJob`.
+5. [x] Update `VieNeuTTSManager.kt` to forward pause configurations and handle title pause seamlessly through `SmartTextSegmenter`.
+6. [x] Implement file-based test suite `TTSNaturalAudioPipelineTest.kt`.
 
 ## Files to Create/Modify
 - `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt` - [MODIFY] Support `TextChunk`, silence insertion, pre-buffering, and timing logs
@@ -39,7 +39,7 @@ Upgrade `TTSAudioPipeline` to generate exact acoustic silence buffers with smoot
 - `app/src/test/java/com/skul9x/doctruyen/tts/vieneu/TTSNaturalAudioPipelineTest.kt` - [NEW] File-based verification test suite
 
 ## Test Criteria (File-Based Tests)
-- [ ] `TTSNaturalAudioPipelineTest.kt` passes with 100% assertions on:
+- [x] `TTSNaturalAudioPipelineTest.kt` passes with 100% assertions on:
   - Accurate silence PCM sample counts for various pause types (180ms, 400ms, 650ms, 1000ms)
   - Micro-fading prevents waveform clipping at boundary samples
   - Pre-buffering threshold blocks until minimum audio queue duration is reached

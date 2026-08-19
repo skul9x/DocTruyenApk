@@ -1,0 +1,119 @@
+name: Android CI/CD Build & Release
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      # 2. Tự động chuyển đổi tên ứng dụng (Slugify App Name)
+      - name: Slugify App Name
+        id: app_name
+        run: |
+          RAW_NAME="${{ github.event.repository.name }}"
+          if [ -z "$RAW_NAME" ]; then
+            RAW_NAME="doctruyen-apk"
+          fi
+          # Chuyển chữ thường, thay khoảng trắng và dấu gạch dưới (_) bằng gạch ngang (-)
+          SLUG_NAME=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[ _]+/-/g' | sed -E 's/^-+|-+$//g')
+          echo "App Slug Name: $SLUG_NAME"
+          echo "APP_NAME=$SLUG_NAME" >> $GITHUB_OUTPUT
+
+      # 3. Tự động tăng phiên bản Release (Auto-Increment Versioning)
+      - name: Determine Next Release Version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Lấy tag mới nhất từ GitHub Release (nếu có)
+          LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+
+          if [ -z "$LATEST_TAG" ]; then
+            NEW_VERSION="v1.0"
+            echo "No existing releases found. Initializing version to $NEW_VERSION"
+          else
+            echo "Latest Release Tag found: $LATEST_TAG"
+            # Bỏ ký tự 'v' ở đầu nếu có
+            CLEAN_TAG="${LATEST_TAG#v}"
+            MAJOR=$(echo "$CLEAN_TAG" | cut -d. -f1)
+            MINOR=$(echo "$CLEAN_TAG" | cut -d. -f2)
+
+            # Kiểm tra định dạng số hợp lệ
+            if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then MAJOR=1; fi
+            if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then MINOR=0; fi
+
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
+            echo "Incrementing version: $LATEST_TAG -> $NEW_VERSION"
+          fi
+
+          echo "VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      # 4. Build & Ký số APK
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/skul9x.jks
+
+      - name: Build & Sign Release APK
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PSTORE_FILE="skul9x.jks" \
+            -PSTORE_PASSWORD="${{ secrets.STORE_PASSWORD }}" \
+            -PKEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
+            -PKEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+
+      # 5. Đổi tên file APK theo chuẩn <slugified-app-name>-<version>.apk
+      - name: Prepare and Rename APK
+        id: prepare_apk
+        run: |
+          APP_NAME="${{ steps.app_name.outputs.APP_NAME }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          RELEASE_DIR="app/build/outputs/apk/release"
+          TARGET_APK="${RELEASE_DIR}/${APP_NAME}-${VERSION}.apk"
+
+          if [ -f "${RELEASE_DIR}/app-release.apk" ]; then
+            cp "${RELEASE_DIR}/app-release.apk" "$TARGET_APK"
+          else
+            # Trường hợp fallback nếu file đầu ra có tên khác
+            FIRST_APK=$(find "$RELEASE_DIR" -name "*.apk" | head -n 1)
+            cp "$FIRST_APK" "$TARGET_APK"
+          fi
+
+          echo "Prepared APK: $TARGET_APK"
+          echo "APK_PATH=$TARGET_APK" >> $GITHUB_OUTPUT
+
+      # Upload lên GitHub Release
+      - name: Create GitHub Release & Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          files: ${{ steps.prepare_apk.outputs.APK_PATH }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -184,6 +184,15 @@ class VieNeuTTSManager(
         }
     }
 
+    private fun getLoadedPauseConfig(): PauseConfig {
+        val ctx = appContext ?: return PauseConfig()
+        return PauseConfig(
+            sentencePauseMs = UserConfig.getPauseSentence(ctx),
+            paragraphPauseMs = UserConfig.getPauseParagraph(ctx),
+            clausePauseMs = UserConfig.getPauseClause(ctx)
+        )
+    }
+
     /**
      * Start speaking text content.
      */
@@ -192,7 +201,7 @@ class VieNeuTTSManager(
     /**
      * Start speaking text content.
      */
-    fun speakContent(content: String) {
+    fun speakContent(content: String, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speak(content)
             return
@@ -210,6 +219,7 @@ class VieNeuTTSManager(
             return
         }
 
+        TtsMetricsLogger.startSession(storyTitle = content.take(30))
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
         pipe.startReading(
@@ -217,14 +227,15 @@ class VieNeuTTSManager(
             onStateChange = { pipeState ->
                 handlePipelineState(pipeState)
             },
-            onProgress = onProgressChange
+            onProgress = onProgressChange,
+            pauseConfig = pauseConfig
         )
     }
 
     /**
      * Speak story title, pause 1 second, then speak content.
      */
-    fun speakWithTitlePause(title: String, content: String) {
+    fun speakWithTitlePause(title: String, content: String, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speakWithTitlePause(title, content)
             return
@@ -242,6 +253,7 @@ class VieNeuTTSManager(
             return
         }
 
+        TtsMetricsLogger.startSession(storyTitle = title)
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
         pipe.startReadingWithTitlePause(
@@ -250,7 +262,8 @@ class VieNeuTTSManager(
             onStateChange = { pipeState ->
                 handlePipelineState(pipeState)
             },
-            onProgress = onProgressChange
+            onProgress = onProgressChange,
+            pauseConfig = pauseConfig
         )
     }
 

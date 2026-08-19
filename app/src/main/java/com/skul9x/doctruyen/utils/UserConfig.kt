@@ -10,8 +10,10 @@ object UserConfig {
     // Default URL if not set
     private const val DEFAULT_URL = "https://skul9x.free.nf/truyen/"
 
+    internal var customPrefsProvider: ((Context) -> SharedPreferences)? = null
+
     private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return customPrefsProvider?.invoke(context) ?: context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     }
 
     private const val KEY_SORT_ORDER = "sort_order"
@@ -78,5 +80,86 @@ object UserConfig {
     
     fun setTtsVoice(context: Context, voiceName: String) {
         getPrefs(context).edit().putString(KEY_TTS_VOICE, voiceName).apply()
+    }
+
+    // Pause configuration
+    const val KEY_TTS_PAUSE_SENTENCE = "tts_pause_sentence"
+    const val KEY_TTS_PAUSE_PARAGRAPH = "tts_pause_paragraph"
+    const val KEY_TTS_PAUSE_CLAUSE = "tts_pause_clause"
+    const val KEY_TTS_DEBUG_LOGGING = "tts_debug_logging"
+
+    const val DEFAULT_PAUSE_SENTENCE = 400
+    const val MIN_PAUSE_SENTENCE = 150
+    const val MAX_PAUSE_SENTENCE = 1000
+
+    const val DEFAULT_PAUSE_PARAGRAPH = 650
+    const val MIN_PAUSE_PARAGRAPH = 300
+    const val MAX_PAUSE_PARAGRAPH = 1500
+
+    const val DEFAULT_PAUSE_CLAUSE = 180
+    const val MIN_PAUSE_CLAUSE = 50
+    const val MAX_PAUSE_CLAUSE = 500
+
+    const val DEFAULT_DEBUG_LOGGING = true
+
+    fun getPauseSentence(context: Context): Int {
+        val value = getPrefs(context).getInt(KEY_TTS_PAUSE_SENTENCE, DEFAULT_PAUSE_SENTENCE)
+        return value.coerceIn(MIN_PAUSE_SENTENCE, MAX_PAUSE_SENTENCE)
+    }
+
+    fun setPauseSentence(context: Context, pauseMs: Int) {
+        val clamped = pauseMs.coerceIn(MIN_PAUSE_SENTENCE, MAX_PAUSE_SENTENCE)
+        getPrefs(context).edit().putInt(KEY_TTS_PAUSE_SENTENCE, clamped).apply()
+    }
+
+    fun getPauseParagraph(context: Context): Int {
+        val value = getPrefs(context).getInt(KEY_TTS_PAUSE_PARAGRAPH, DEFAULT_PAUSE_PARAGRAPH)
+        return value.coerceIn(MIN_PAUSE_PARAGRAPH, MAX_PAUSE_PARAGRAPH)
+    }
+
+    fun setPauseParagraph(context: Context, pauseMs: Int) {
+        val clamped = pauseMs.coerceIn(MIN_PAUSE_PARAGRAPH, MAX_PAUSE_PARAGRAPH)
+        getPrefs(context).edit().putInt(KEY_TTS_PAUSE_PARAGRAPH, clamped).apply()
+    }
+
+    fun getPauseClause(context: Context): Int {
+        val value = getPrefs(context).getInt(KEY_TTS_PAUSE_CLAUSE, DEFAULT_PAUSE_CLAUSE)
+        return value.coerceIn(MIN_PAUSE_CLAUSE, MAX_PAUSE_CLAUSE)
+    }
+
+    fun setPauseClause(context: Context, pauseMs: Int) {
+        val clamped = pauseMs.coerceIn(MIN_PAUSE_CLAUSE, MAX_PAUSE_CLAUSE)
+        getPrefs(context).edit().putInt(KEY_TTS_PAUSE_CLAUSE, clamped).apply()
+    }
+
+    fun isDebugLoggingEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_TTS_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING)
+    }
+
+    fun setDebugLoggingEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_TTS_DEBUG_LOGGING, enabled).apply()
+    }
+
+    /**
+     * Preset configurations for pause cadence.
+     */
+    fun applyPausePreset(context: Context, presetName: String) {
+        when (presetName) {
+            "FAST" -> { // Đọc nhanh / Ngắt ngắn
+                setPauseSentence(context, 250)
+                setPauseParagraph(context, 400)
+                setPauseClause(context, 100)
+            }
+            "EMOTIONAL" -> { // Truyện cảm xúc / Ngắt dài
+                setPauseSentence(context, 600)
+                setPauseParagraph(context, 900)
+                setPauseClause(context, 250)
+            }
+            else -> { // STANDARD / Tự nhiên / Chuẩn
+                setPauseSentence(context, DEFAULT_PAUSE_SENTENCE)
+                setPauseParagraph(context, DEFAULT_PAUSE_PARAGRAPH)
+                setPauseClause(context, DEFAULT_PAUSE_CLAUSE)
+            }
+        }
     }
 }
