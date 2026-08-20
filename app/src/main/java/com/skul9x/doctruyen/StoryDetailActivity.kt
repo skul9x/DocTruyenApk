@@ -21,8 +21,10 @@ import com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.skul9x.doctruyen.utils.ActivityTransitionHelper
 import com.skul9x.doctruyen.utils.DebugLogger
 import com.skul9x.doctruyen.utils.LogType
+import androidx.activity.addCallback
 
 class StoryDetailActivity : AppCompatActivity() {
     
@@ -131,6 +133,7 @@ class StoryDetailActivity : AppCompatActivity() {
         
         initViews()
         setupListeners()
+        setupBackNavigation()
         loadStoryFromIntent()
         
         // Request notification permission for Android 13+
@@ -487,15 +490,16 @@ class StoryDetailActivity : AppCompatActivity() {
         }
     }
     
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Cancel active pre-warming when user navigates back
-        val service = readingService
-        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
-            DebugLogger.log(TAG, "🧹 onBackPressed: Cancelling active pre-warm", LogType.INFO)
-            service.cancelPrewarm()
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this) {
+            // Cancel active pre-warming when user navigates back and service is not playing
+            val service = readingService
+            if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
+                DebugLogger.log(TAG, "🧹 onBackPressed: Cancelling active pre-warm", LogType.INFO)
+                service.cancelPrewarm()
+            }
+            finish()
+            ActivityTransitionHelper.applyCloseTransition(this@StoryDetailActivity)
         }
-        super.onBackPressed()
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }

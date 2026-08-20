@@ -17,18 +17,23 @@ enum class LogType {
     INFO, REQUEST, RESPONSE, ERROR, TTS_TIMING
 }
 
+const val MAX_LOG_ENTRIES = 500
+
 object DebugLogger {
     private val _logs = MutableLiveData<List<LogEntry>>(emptyList())
     val logs: LiveData<List<LogEntry>> = _logs
     
-    private val logList = mutableListOf<LogEntry>()
+    private val logBuffer = ArrayDeque<LogEntry>(MAX_LOG_ENTRIES)
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     fun log(tag: String, message: String, type: LogType = LogType.INFO) {
         val entry = LogEntry(System.currentTimeMillis(), tag, message, type)
-        synchronized(logList) {
-            logList.add(entry)
-            _logs.postValue(logList.toList())
+        synchronized(logBuffer) {
+            if (logBuffer.size >= MAX_LOG_ENTRIES) {
+                logBuffer.removeFirst()
+            }
+            logBuffer.addLast(entry)
+            _logs.postValue(ArrayList(logBuffer))
         }
     }
 
@@ -38,18 +43,18 @@ object DebugLogger {
     }
 
     fun clear() {
-        synchronized(logList) {
-            logList.clear()
+        synchronized(logBuffer) {
+            logBuffer.clear()
             _logs.postValue(emptyList())
         }
     }
 
     fun getFormattedLogs(filterType: LogType? = null): String {
-        return synchronized(logList) {
+        return synchronized(logBuffer) {
             val filtered = if (filterType != null) {
-                logList.filter { it.type == filterType }
+                logBuffer.filter { it.type == filterType }
             } else {
-                logList
+                logBuffer
             }
             filtered.joinToString("\n\n") { entry ->
                 val time = dateFormat.format(Date(entry.timestamp))

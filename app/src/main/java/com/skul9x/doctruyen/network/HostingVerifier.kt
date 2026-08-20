@@ -1,12 +1,16 @@
 package com.skul9x.doctruyen.network
 
+import android.annotation.TargetApi
 import android.app.Dialog
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.view.Window
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.skul9x.doctruyen.R
@@ -80,6 +84,20 @@ object HostingVerifier {
                 // Otherwise wait for next page load
             }
             
+            @TargetApi(Build.VERSION_CODES.M)
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                if (request?.isForMainFrame == true) {
+                    dialog.dismiss()
+                    onResult(false)
+                }
+            }
+            
+            @Suppress("DEPRECATION")
             override fun onReceivedError(
                 view: WebView?,
                 errorCode: Int,

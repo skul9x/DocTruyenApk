@@ -172,10 +172,6 @@ class ReadingService : Service() {
     private fun initMediaSession() {
         try {
             val rawSession = MediaSessionCompat(this, "DocTruyenMediaSession").apply {
-                setFlags(
-                    MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-                )
                 setCallback(object : MediaSessionCompat.Callback() {
                     override fun onPlay() {
                         resumeReading()

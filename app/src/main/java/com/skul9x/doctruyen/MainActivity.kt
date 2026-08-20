@@ -386,7 +386,7 @@ class MainActivity : AppCompatActivity() {
             putExtra("story_image", story.image)
         }
         startActivity(intent)
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        com.skul9x.doctruyen.utils.ActivityTransitionHelper.applyOpenTransition(this)
     }
     
     private fun hideKeyboard() {
