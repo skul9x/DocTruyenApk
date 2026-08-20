@@ -1,6 +1,7 @@
 package com.skul9x.doctruyen
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -46,6 +47,8 @@ class StoryDetailActivity : AppCompatActivity() {
     private var isBound = false
     private var storyId: Int = 0
     private var storyContent: String = ""
+    private var loadedStoryId: Int = 0
+    private var isLoadingContent = false
     
     // Permission launcher for Android 13+ notification permission
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -175,6 +178,25 @@ class StoryDetailActivity : AppCompatActivity() {
             isBound = false
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent) // CRITICAL: update the activity's intent reference
+
+        val newStoryId = intent.getIntExtra("story_id", 0)
+
+        // If the incoming intent is for a DIFFERENT story, reload
+        if (newStoryId != storyId && newStoryId != 0) {
+            // Reset state for new story
+            isPrewarmTriggered = false
+            lastRenderedState = null
+            storyContent = ""
+            loadedStoryId = 0  // Force fresh load for new story
+
+            loadStoryFromIntent()
+        }
+        // If same story → do nothing (Activity is already showing it)
+    }
     
     private fun initViews() {
         imgStory = findViewById(R.id.imgStoryDetail)
@@ -264,38 +286,56 @@ class StoryDetailActivity : AppCompatActivity() {
     
     private fun loadStoryContent() {
         DebugLogger.log(TAG, "📥 loadStoryContent: storyId=$storyId", LogType.REQUEST)
-        
+
+        // Guard: Skip API call if we already have content for this exact story
+        if (storyContent.isNotEmpty() && loadedStoryId == storyId) {
+            DebugLogger.log(TAG, 
+                "⏭️ loadStoryContent SKIPPED: content already loaded for storyId=$storyId (${storyContent.length} chars)", 
+                LogType.INFO)
+            showContentState()
+            triggerPrewarmIfReady()
+            return
+        }
+
+        // Guard: Prevent overlapping requests
+        if (isLoadingContent) {
+            DebugLogger.log(TAG, "⏭️ loadStoryContent SKIPPED: request already in flight", LogType.INFO)
+            return
+        }
+        isLoadingContent = true
+
         // Show loading state
         showLoadingState()
-        
+
         lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
                     RetrofitClient.getApiService(this@StoryDetailActivity).getStoryDetail(id = storyId)
                 }
-                
+
                 if (response.status == "success") {
                     var rawContent = response.data.contentText ?: response.data.content ?: ""
-                    
+
                     // Fix: Handle literal "\\n" strings if they exist, and format line breaks
                     rawContent = rawContent.replace("\\\\n", "\n")
-                    
+
                     // Check if it looks like HTML already
                     if (!rawContent.contains("<br") && !rawContent.contains("<p")) {
                          rawContent = rawContent.replace("\n", "<br>")
                     }
-                    
+
                     // SECURITY: Sanitize HTML to prevent XSS
                     val sanitizedContent = sanitizeHtml(rawContent)
-                    
+
                     storyContent = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
-                    
+                    loadedStoryId = storyId
+
                     val preview = storyContent.take(50) + if (storyContent.length > 50) "..." else ""
                     DebugLogger.log(TAG, "✅ Content loaded: ${storyContent.length} chars, preview: '$preview'", LogType.RESPONSE)
-                    
+
                     // Set text with HTML rendering
                     tvContent.text = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY)
-                    
+
                     // Show content
                     showContentState()
 
@@ -312,6 +352,8 @@ class StoryDetailActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 showErrorState(getString(R.string.error_loading))
+            } finally {
+                isLoadingContent = false
             }
         }
     }
@@ -369,8 +411,6 @@ class StoryDetailActivity : AppCompatActivity() {
     }
     
     private fun handlePlayPause() {
-        DebugLogger.log(TAG, "👆 btnPlayPause clicked", LogType.INFO)
-        
         // Safe null check - with user feedback if service not ready
         val service = readingService
         if (service == null || !isBound) {

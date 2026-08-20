@@ -74,6 +74,26 @@ object UserConfig {
     // TTS Engine preference
     const val KEY_TTS_ENGINE = "tts_engine"
     const val KEY_GOOGLE_TTS_VOICE = "google_tts_voice"
+    const val KEY_TTS_PRECISION = "tts_precision"
+    const val DEFAULT_TTS_PRECISION = "INT8"
+
+    fun getTtsPrecision(context: Context): String {
+        val raw = getPrefs(context).getString(KEY_TTS_PRECISION, DEFAULT_TTS_PRECISION)
+        return when (raw?.trim()?.uppercase()) {
+            "INT8" -> "INT8"
+            "FP32" -> "FP32"
+            else -> "FP32"
+        }
+    }
+
+    fun setTtsPrecision(context: Context, precision: String) {
+        val normalized = when (precision.trim().uppercase()) {
+            "INT8" -> "INT8"
+            "FP32" -> "FP32"
+            else -> "FP32"
+        }
+        getPrefs(context).edit().putString(KEY_TTS_PRECISION, normalized).apply()
+    }
 
     fun getTtsEngine(context: Context): com.skul9x.doctruyen.tts.ITTSManager.EngineType {
         val str = getPrefs(context).getString(KEY_TTS_ENGINE, com.skul9x.doctruyen.tts.ITTSManager.EngineType.VIENEU.name)
@@ -105,6 +125,22 @@ object UserConfig {
     
     fun setTtsVoice(context: Context, voiceName: String) {
         getPrefs(context).edit().putString(KEY_TTS_VOICE, voiceName).apply()
+    }
+
+    // Pre-buffering chunk configuration
+    const val KEY_TTS_PREBUFFER_CHUNKS = "tts_prebuffer_chunks"
+    const val DEFAULT_PREBUFFER_CHUNKS = 2
+    const val MIN_PREBUFFER_CHUNKS = 1
+    const val MAX_PREBUFFER_CHUNKS = 3
+
+    fun getPrebufferChunks(context: Context): Int {
+        val value = getPrefs(context).getInt(KEY_TTS_PREBUFFER_CHUNKS, DEFAULT_PREBUFFER_CHUNKS)
+        return value.coerceIn(MIN_PREBUFFER_CHUNKS, MAX_PREBUFFER_CHUNKS)
+    }
+
+    fun setPrebufferChunks(context: Context, chunks: Int) {
+        val clamped = chunks.coerceIn(MIN_PREBUFFER_CHUNKS, MAX_PREBUFFER_CHUNKS)
+        getPrefs(context).edit().putInt(KEY_TTS_PREBUFFER_CHUNKS, clamped).apply()
     }
 
     // Pause configuration

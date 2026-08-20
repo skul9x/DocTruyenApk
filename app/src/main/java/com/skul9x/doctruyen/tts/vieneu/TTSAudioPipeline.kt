@@ -31,8 +31,15 @@ class TTSAudioPipeline(
     private val context: Context? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     var minPreBufferChunks: Int = 1,
-    var minPreBufferDurationMs: Long = 1500L
+    var minPreBufferDurationMs: Long = 7500L,
+    var quantizationType: OnnxSessionManager.QuantizationType = engine.quantizationType,
+    var preBufferChunkCount: Int = 2
 ) {
+    var targetPreBufferChunks: Int
+        get() = preBufferChunkCount
+        set(value) {
+            preBufferChunkCount = value
+        }
 
     sealed class PipelineState {
         object Idle : PipelineState()
@@ -51,6 +58,7 @@ class TTSAudioPipeline(
     private var playbackJob: Job? = null
 
     private var chunks: List<TextChunk> = emptyList()
+    private var currentStoryId: Int = 0
     private var stateCallback: ((PipelineState) -> Unit)? = null
 
     private val audioManager = try {
@@ -109,6 +117,7 @@ class TTSAudioPipeline(
         chunks = chunkList
         totalChunks = chunks.size
         currentChunkIndex = 0
+        currentStoryId = storyId
 
         if (chunks.isEmpty()) {
             setState(PipelineState.Idle)
@@ -117,7 +126,12 @@ class TTSAudioPipeline(
 
         requestAudioFocus()
         val engineThreads = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-        val quant = "FP32"
+        val quant = when (quantizationType) {
+            OnnxSessionManager.QuantizationType.INT8 -> "INT8"
+            OnnxSessionManager.QuantizationType.FP16 -> if (engine.executionProvider.contains("NNAPI")) "FP16+NNAPI" else "FP16"
+            OnnxSessionManager.QuantizationType.FP32 -> "FP32"
+        }
+        Log.i(TAG, "Starting TTS session: storyId='$storyId', quantization='$quant', EP='${engine.executionProvider}'")
         TtsMetricsLogger.startSession(
             storyId = if (storyId != 0) storyId.toString() else "",
             storyTitle = chunks.firstOrNull()?.text?.take(30) ?: "",
@@ -213,7 +227,7 @@ class TTSAudioPipeline(
     fun resume() {
         if (currentState is PipelineState.Paused && currentChunkIndex < totalChunks) {
             requestAudioFocus()
-            startPipeline(startIndex = currentChunkIndex)
+            startPipeline(startIndex = currentChunkIndex, storyId = currentStoryId)
         }
     }
 
@@ -239,10 +253,30 @@ class TTSAudioPipeline(
 
         if (wasActive && target < totalChunks) {
             requestAudioFocus()
-            startPipeline(startIndex = target)
+            startPipeline(startIndex = target, storyId = currentStoryId)
         } else {
             setState(if (target >= totalChunks) PipelineState.Idle else PipelineState.Paused)
         }
+    }
+
+    /**
+     * Compute adaptive target duration in milliseconds for the current pipeline configuration.
+     */
+    fun computeAdaptiveTargetDurationMs(
+        quantizationType: OnnxSessionManager.QuantizationType = this.quantizationType,
+        cpuCores: Int = DevicePerformanceHelper.getDeviceProfile(context).cpuCores,
+        remainingChunks: Int = 2,
+        startIndex: Int = 0,
+        targetPreBufferChunks: Int = this.preBufferChunkCount
+    ): Long {
+        return Companion.computeAdaptiveTargetDurationMs(
+            quantizationType = quantizationType,
+            cpuCores = cpuCores,
+            remainingChunks = remainingChunks,
+            startIndex = startIndex,
+            safeFallbackDurationMs = minPreBufferDurationMs,
+            targetPreBufferChunks = targetPreBufferChunks
+        )
     }
 
     /**
@@ -377,10 +411,16 @@ class TTSAudioPipeline(
                 var starvationStartTime = 0L
                 var isPreBuffering = true
 
-                // Adaptive pre-buffering thresholds
+                // Adaptive duration-based pre-buffering thresholds
                 val remainingChunks = totalChunks - startIndex
-                val requiredChunks = if (startIndex == 0 && remainingChunks > 2) 2 else 1
-                val requiredDurationMs = if (startIndex == 0 && remainingChunks > 2) 6000L else 1500L
+                val cpuCores = DevicePerformanceHelper.getDeviceProfile(context).cpuCores
+                val targetDurationMs = computeAdaptiveTargetDurationMs(
+                    quantizationType = quantizationType,
+                    cpuCores = cpuCores,
+                    remainingChunks = remainingChunks,
+                    startIndex = startIndex,
+                    targetPreBufferChunks = preBufferChunkCount
+                )
 
                 while (isActive && (playIndex < totalChunks || !chunkQueue.isEmpty())) {
                     // Anti-starvation adaptive pre-buffering check
@@ -389,15 +429,27 @@ class TTSAudioPipeline(
                         val totalBufferedSamples = chunkQueue.sumOf { it.second.size.toLong() }
                         val bufferedDurationMs = (totalBufferedSamples * 1000L) / VieNeuConfig.SAMPLE_RATE
                         val isSynthDone = synthesisJob?.isActive != true
+                        val allChunksBuffered = currentQueueSize >= remainingChunks
 
-                        val hasEnoughChunks = currentQueueSize >= requiredChunks
-                        val hasEnoughDuration = bufferedDurationMs >= requiredDurationMs
+                        val minDurationMs = when (preBufferChunkCount) {
+                            1 -> 1500L
+                            3 -> 7000L
+                            else -> 3500L // 2 chunks
+                        }
 
-                        if (isSynthDone || hasEnoughDuration || hasEnoughChunks) {
+                        val isFastMode = (quantizationType == OnnxSessionManager.QuantizationType.INT8 && cpuCores >= 4) ||
+                                (cpuCores >= 6 && quantizationType != OnnxSessionManager.QuantizationType.FP32)
+                        val hasQualifiedChunks = currentQueueSize >= preBufferChunkCount && (bufferedDurationMs >= minDurationMs || (preBufferChunkCount == 1 && isFastMode && bufferedDurationMs >= 1500L))
+                        val hasEnoughDuration = bufferedDurationMs >= targetDurationMs || hasQualifiedChunks
+                        val canStartPlayback = isSynthDone || allChunksBuffered || hasEnoughDuration
+
+                        if (canStartPlayback && currentQueueSize > 0) {
                             isPreBuffering = false
                             TtsMetricsLogger.recordPreBufferingComplete(currentQueueSize, bufferedDurationMs)
+                        } else if (isSynthDone && currentQueueSize == 0) {
+                            break
                         } else {
-                            setState(PipelineState.Buffering(bufferedChunks = currentQueueSize, targetChunks = requiredChunks))
+                            setState(PipelineState.Buffering(bufferedChunks = currentQueueSize, targetChunks = minOf(preBufferChunkCount, remainingChunks)))
                             delay(20)
                             continue
                         }
@@ -529,5 +581,47 @@ class TTSAudioPipeline(
 
     companion object {
         private const val TAG = "TTSAudioPipeline"
+
+        /**
+         * Computes initial target pre-buffering duration in milliseconds adaptively based on
+         * model quantization, available CPU cores, playback starting position, and user configured prebuffer chunk count.
+         */
+        fun computeAdaptiveTargetDurationMs(
+            quantizationType: OnnxSessionManager.QuantizationType,
+            cpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+            remainingChunks: Int = 2,
+            startIndex: Int = 0,
+            safeFallbackDurationMs: Long = 7500L,
+            targetPreBufferChunks: Int = 2
+        ): Long {
+            if (startIndex > 0 || remainingChunks <= 1) {
+                return 1500L
+            }
+            return when (targetPreBufferChunks) {
+                1 -> {
+                    if (cpuCores < 4 || quantizationType == OnnxSessionManager.QuantizationType.FP32) {
+                        safeFallbackDurationMs
+                    } else {
+                        2000L
+                    }
+                }
+                3 -> {
+                    if (cpuCores < 4 || quantizationType == OnnxSessionManager.QuantizationType.FP32) {
+                        maxOf(8000L, safeFallbackDurationMs)
+                    } else {
+                        8000L
+                    }
+                }
+                else -> { // 2 Chunks (Default)
+                    when {
+                        cpuCores < 4 || quantizationType == OnnxSessionManager.QuantizationType.FP32 -> safeFallbackDurationMs
+                        quantizationType == OnnxSessionManager.QuantizationType.INT8 && cpuCores >= 6 -> 2000L
+                        quantizationType == OnnxSessionManager.QuantizationType.INT8 -> 2500L
+                        quantizationType == OnnxSessionManager.QuantizationType.FP16 && cpuCores >= 6 -> 2500L
+                        else -> 4500L
+                    }
+                }
+            }
+        }
     }
 }

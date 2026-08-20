@@ -1,56 +1,69 @@
 {
-  "updated_at": "2026-08-19T10:28:40+07:00",
+  "updated_at": "2026-08-20T15:22:00+07:00",
   "working_on": {
-    "feature": "Android CI/CD & Automated GitHub Release",
-    "task": "GitHub Actions Setup, Keystore Decoding & Remote Push",
+    "feature": "Tri-Layer Activity Multi-Instance & Concurrency Guard",
+    "task": "Phase 01-03: SingleTop Navigation, ReadingService prepareStory Guard, StoryDetailActivity Content Cache & In-Flight Guard",
     "status": "completed",
     "files": [
-      ".github/workflows/android.yml",
-      "app/build.gradle.kts",
-      ".gitignore",
-      "README.md",
-      "CHANGELOG.md"
+      "app/src/main/AndroidManifest.xml",
+      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+      "app/src/test/java/com/skul9x/doctruyen/StoryDetailSingleTopTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/service/ReadingServicePrepareGuardTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/StoryDetailContentCacheGuardTest.kt"
     ],
     "blockers": [],
-    "notes": "Code has been built, tested, and pushed successfully to GitHub repository skul9x/DocTruyenApk with automated CI/CD pipeline."
+    "notes": "100% unit tests passing. Verified on real device via MCP ADB install: duplicate network requests reduced from 5 to 1, seamless pre-warming, 0 buffer underruns (log6.txt)."
   },
-  "pending_tasks": [],
+  "pending_tasks": [
+    { "task": "Optional G2P lookup dictionary cache optimization", "priority": "low", "notes": "Identified in AI Diagnostic log6.txt" },
+    { "task": "Native tensor & PCM buffer lifecycle cleanup audit", "priority": "low", "notes": "Identified in AI Diagnostic log6.txt" }
+  ],
   "recent_changes": [
     {
-      "timestamp": "2026-08-19T10:22:40+07:00",
-      "type": "push_to_remote",
-      "description": "Committed and pushed complete VieNeu-TTS integration, natural pause pipeline, tests, benchmark report, and GitHub Actions CI/CD to origin main",
+      "timestamp": "2026-08-20T15:17:00+07:00",
+      "type": "device_install",
+      "description": "Built assembleDebug APK and deployed to OnePlus SM8650 device via MCP ADB tool. Live log verified: 1 network call for story detail (instead of 5), seamless playback, 0 buffer underruns",
+      "files": ["app/build/outputs/apk/debug/app-debug.apk", "log6.txt"]
+    },
+    {
+      "timestamp": "2026-08-20T15:15:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 03: StoryDetailActivity content cache guard (loadedStoryId) & in-flight network request deduplication guard (isLoadingContent), plus StoryDetailContentCacheGuardTest",
       "files": [
-        ".github/workflows/android.yml",
-        "README.md",
-        "CHANGELOG.md",
-        "app/build.gradle.kts",
-        ".gitignore"
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/test/java/com/skul9x/doctruyen/StoryDetailContentCacheGuardTest.kt"
       ]
     },
     {
-      "timestamp": "2026-08-19T10:21:20+07:00",
-      "type": "ci_cd_workflow",
-      "description": "Created .github/workflows/android.yml with app name slugification, auto-increment minor versioning, keystore base64 decoding, signed assembleRelease, and softprops/action-gh-release@v2",
+      "timestamp": "2026-08-20T15:12:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02: ReadingService prepareStory idempotency guard (preparedStoryId, preparedVoice, isPreparingStory) with fast-exit and state synchronization, plus ReadingServicePrepareGuardTest",
       "files": [
-        ".github/workflows/android.yml",
-        "app/build.gradle.kts"
+        "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+        "app/src/test/java/com/skul9x/doctruyen/service/ReadingServicePrepareGuardTest.kt"
       ]
     },
     {
-      "timestamp": "2026-08-19T10:16:40+07:00",
-      "type": "documentation",
-      "description": "Rewrote README.md comprehensively with architecture diagrams, module breakdown, hardware benchmark numbers, and build instructions",
+      "timestamp": "2026-08-20T15:08:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: AndroidManifest.xml singleTop launchMode for StoryDetailActivity and onNewIntent handler for intent updating & dynamic story reload, plus StoryDetailSingleTopTest",
       "files": [
-        "README.md"
+        "app/src/main/AndroidManifest.xml",
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/test/java/com/skul9x/doctruyen/StoryDetailSingleTopTest.kt"
       ]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "Added *.jks and *.keystore to .gitignore and injected keystore dynamically via GitHub Secrets",
-      "reason": "Ensures private signing keys remain confidential while allowing fully automated release signing in CI/CD."
+      "decision": "SingleTop Launch Mode for StoryDetailActivity",
+      "reason": "Eliminates duplicate activity instances when tapping stories multiple times or returning from notifications."
+    },
+    {
+      "decision": "Tri-Layer Defense for Story Preparation & Content Fetching",
+      "reason": "Prevents redundant network calls (Layer 3), avoids duplicate ONNX background preparation jobs (Layer 2), and stops activity stacking (Layer 1)."
     }
   ]
 }

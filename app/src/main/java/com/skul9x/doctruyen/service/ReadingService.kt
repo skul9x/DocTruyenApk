@@ -103,9 +103,13 @@ class ReadingService : Service() {
         const val ACTION_PAUSE = "action_pause"
         const val ACTION_STOP = "action_stop"
         const val ACTION_SWITCH_ENGINE = "action_switch_engine"
+        const val ACTION_SWITCH_PRECISION = "com.skul9x.doctruyen.ACTION_SWITCH_PRECISION"
+        const val ACTION_SWITCH_PREBUFFER_CHUNKS = "com.skul9x.doctruyen.ACTION_SWITCH_PREBUFFER_CHUNKS"
 
         const val EXTRA_VOICE_NAME = "extra_voice_name"
         const val EXTRA_ENGINE_TYPE = "extra_engine_type"
+        const val EXTRA_PRECISION_TYPE = "precision_type"
+        const val EXTRA_PREBUFFER_CHUNKS = "prebuffer_chunks"
     }
 
     var ttsManager: ITTSManager? = null
@@ -122,6 +126,9 @@ class ReadingService : Service() {
         private set
     
     var currentStoryId: Int = 0
+        private set
+
+    var preparingStoryId: Int = 0
         private set
 
     // WakeLock for screen-off & doze mode execution
@@ -248,6 +255,65 @@ class ReadingService : Service() {
         }
     }
 
+    var ttsManagerFactory: ((Context, (ITTSManager.TTSState) -> Unit, ((Int) -> Unit)?, ITTSManager.EngineType?) -> ITTSManager)? = null
+        internal set
+
+    internal fun handleStateChange(state: ITTSManager.TTSState) {
+        DebugLogger.log("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState", LogType.INFO)
+        val previousState = currentState
+        val isStateChanged = previousState != state
+        currentState = state
+        
+        if (isStateChanged) {
+            updateMediaSessionState(state)
+
+            // Manage WakeLock based on TTS state
+            if (state == ITTSManager.TTSState.PLAYING) {
+                acquireWakeLock()
+            } else if (state == ITTSManager.TTSState.PAUSED ||
+                state == ITTSManager.TTSState.READY ||
+                state == ITTSManager.TTSState.IDLE ||
+                state == ITTSManager.TTSState.ERROR) {
+                releaseWakeLock()
+            }
+
+            // Only update notification for relevant state transitions
+            if (state == ITTSManager.TTSState.PLAYING || state == ITTSManager.TTSState.PAUSED) {
+                updateNotification(state)
+            } else if (state == ITTSManager.TTSState.READY || state == ITTSManager.TTSState.IDLE) {
+                // Determine if we finished playing naturally
+                if (previousState == ITTSManager.TTSState.PLAYING) {
+                    try {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } catch (e: Throwable) {
+                        DebugLogger.logError("ReadingService", "Failed to stopForeground: ${e.message}", e)
+                    }
+                } else {
+                    try {
+                        val manager = notificationManager ?: (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.let { AndroidNotificationManagerWrapper(it) }
+                        manager?.cancel(NOTIFICATION_ID)
+                    } catch (e: Throwable) {
+                        DebugLogger.logError("ReadingService", "Failed to cancel notification: ${e.message}", e)
+                    }
+                }
+                currentStoryId = 0
+                preparingStoryId = 0
+                lastNotifiedState = null
+                lastNotifiedTitle = null
+                // Reset progress when stopped/ready
+                progressCallback?.invoke(0)
+            } else if (state == ITTSManager.TTSState.ERROR) {
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (e: Throwable) {
+                    DebugLogger.logError("ReadingService", "Failed to stopForeground: ${e.message}", e)
+                }
+            }
+            
+            stateCallback?.invoke(state)
+        }
+    }
+
     fun initTTS(forceEngineType: ITTSManager.EngineType? = null) {
         val current = ttsManager
         if (current != null) {
@@ -257,57 +323,56 @@ class ReadingService : Service() {
         }
 
         DebugLogger.log("ReadingService", "🔧 initTTS: Creating TTSManager via TTSManagerFactory", LogType.INFO)
-        ttsManager = TTSManagerFactory.create(
-            context = this,
-            forceEngineType = forceEngineType,
-            onStateChange = { state ->
-                DebugLogger.log("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState", LogType.INFO)
-                val previousState = currentState
-                val isStateChanged = previousState != state
-                currentState = state
-                
-                if (isStateChanged) {
-                    updateMediaSessionState(state)
-
-                    // Manage WakeLock based on TTS state
-                    if (state == ITTSManager.TTSState.PLAYING) {
-                        acquireWakeLock()
-                    } else if (state == ITTSManager.TTSState.PAUSED ||
-                        state == ITTSManager.TTSState.READY ||
-                        state == ITTSManager.TTSState.IDLE ||
-                        state == ITTSManager.TTSState.ERROR) {
-                        releaseWakeLock()
-                    }
-
-                    // Only update notification for relevant state transitions
-                    if (state == ITTSManager.TTSState.PLAYING || state == ITTSManager.TTSState.PAUSED) {
-                        updateNotification(state)
-                    } else if (state == ITTSManager.TTSState.READY || state == ITTSManager.TTSState.IDLE) {
-                        // Determine if we finished playing naturally
-                        if (previousState == ITTSManager.TTSState.PLAYING) {
-                            stopForeground(STOP_FOREGROUND_REMOVE)
-                        } else {
-                             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                             manager.cancel(NOTIFICATION_ID)
-                        }
-                        // Reset progress when stopped/ready
-                        progressCallback?.invoke(0)
-                    } else if (state == ITTSManager.TTSState.ERROR) {
-                         stopForeground(STOP_FOREGROUND_REMOVE)
-                    }
-                    
-                    stateCallback?.invoke(state)
+        val customFactory = ttsManagerFactory
+        ttsManager = if (customFactory != null) {
+            customFactory(
+                this,
+                { handleStateChange(it) },
+                { progress -> progressCallback?.invoke(progress) },
+                forceEngineType
+            )
+        } else {
+            TTSManagerFactory.create(
+                context = this,
+                forceEngineType = forceEngineType,
+                onStateChange = { handleStateChange(it) },
+                onProgressChange = { progress ->
+                    progressCallback?.invoke(progress)
                 }
-            },
-            onProgressChange = { progress ->
-                progressCallback?.invoke(progress)
-            }
-        )
+            )
+        }
     }
 
     fun switchEngine(engineType: ITTSManager.EngineType) {
         UserConfig.setTtsEngine(this, engineType)
         initTTS(engineType)
+    }
+
+    fun switchPrecision(precision: String) {
+        UserConfig.setTtsPrecision(this, precision)
+        val mgr = ttsManager
+        if (mgr is com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager) {
+            DebugLogger.log("ReadingService", "🔄 Switching VieNeu precision to $precision", LogType.INFO)
+            mgr.setPrecision(precision)
+        } else {
+            DebugLogger.log("ReadingService", "ℹ️ Precision saved as $precision (active engine is not VieNeu)", LogType.INFO)
+        }
+    }
+
+    fun switchPrebufferChunks(chunks: Int) {
+        val clamped = chunks.coerceIn(UserConfig.MIN_PREBUFFER_CHUNKS, UserConfig.MAX_PREBUFFER_CHUNKS)
+        UserConfig.setPrebufferChunks(this, clamped)
+        val mgr = ttsManager
+        if (mgr is com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager) {
+            DebugLogger.log("ReadingService", "🔄 Setting VieNeu prebuffer chunks to $clamped", LogType.INFO)
+            mgr.setPrebufferChunks(clamped)
+        } else {
+            DebugLogger.log("ReadingService", "ℹ️ Prebuffer chunks saved as $clamped (active engine is not VieNeu)", LogType.INFO)
+        }
+    }
+
+    fun setPrebufferChunks(chunks: Int) {
+        switchPrebufferChunks(chunks)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -323,6 +388,14 @@ class ReadingService : Service() {
                 if (engineType != null) {
                     switchEngine(engineType)
                 }
+            }
+            ACTION_SWITCH_PRECISION -> {
+                val precision = intent.getStringExtra(EXTRA_PRECISION_TYPE) ?: UserConfig.getTtsPrecision(this)
+                switchPrecision(precision)
+            }
+            ACTION_SWITCH_PREBUFFER_CHUNKS -> {
+                val chunks = intent.getIntExtra(EXTRA_PREBUFFER_CHUNKS, UserConfig.DEFAULT_PREBUFFER_CHUNKS)
+                switchPrebufferChunks(chunks)
             }
         }
         return START_NOT_STICKY
@@ -348,6 +421,19 @@ class ReadingService : Service() {
     }
 
     fun prepareStory(storyId: Int, title: String, content: String, voice: String? = null) {
+        // Guard: Skip if already playing or preparing the exact same story
+        val currentState = ttsManager?.currentState
+        if ((currentStoryId == storyId || preparingStoryId == storyId) && 
+            (currentState == ITTSManager.TTSState.PLAYING || 
+             currentState == ITTSManager.TTSState.PAUSED ||
+             currentState == ITTSManager.TTSState.READY)) {
+            DebugLogger.log("ReadingService", 
+                "⏭️ prepareStory SKIPPED: already active on storyId=$storyId (state=$currentState)", 
+                LogType.INFO)
+            return
+        }
+        preparingStoryId = storyId
+
         val isGoogle = ttsManager?.engineType == ITTSManager.EngineType.GOOGLE_TTS
         val freshVoice = voice
             ?: (if (isGoogle) UserConfig.getGoogleTtsVoice(this) else UserConfig.getTtsVoice(this))
@@ -361,10 +447,12 @@ class ReadingService : Service() {
     }
 
     fun cancelPrewarm() {
+        preparingStoryId = 0
         ttsManager?.cancelPrewarm()
     }
 
     fun startReading(storyId: Int, title: String, content: String, voice: String? = null) {
+        preparingStoryId = 0
         val freshVoice = voice ?: (if (ttsManager?.engineType == ITTSManager.EngineType.GOOGLE_TTS) UserConfig.getGoogleTtsVoice(this) else UserConfig.getTtsVoice(this)) ?: ttsManager?.currentVoiceName ?: ""
         DebugLogger.log("ReadingService", "🔊 startReading: storyId=$storyId (prev=$currentStoryId), title='$title', contentLen=${content.length}, voice='$freshVoice'", LogType.INFO)
         
@@ -383,29 +471,47 @@ class ReadingService : Service() {
         ttsManager?.speakWithTitlePause(title, content, storyId = storyId)
         lastNotifiedState = ITTSManager.TTSState.PLAYING
         lastNotifiedTitle = title
-        startForeground(NOTIFICATION_ID, buildNotification(ITTSManager.TTSState.PLAYING))
+        try {
+            val notification = notificationBuilder?.invoke(ITTSManager.TTSState.PLAYING) ?: buildNotification(ITTSManager.TTSState.PLAYING)
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Throwable) {
+            DebugLogger.logError("ReadingService", "Failed to startForeground: ${e.message}", e)
+        }
     }
 
     fun pauseReading() {
         ttsManager?.pause()
         releaseWakeLock()
-        updateNotification(ITTSManager.TTSState.PAUSED)
+        try {
+            updateNotification(ITTSManager.TTSState.PAUSED)
+        } catch (e: Throwable) {
+            DebugLogger.logError("ReadingService", "Failed to updateNotification: ${e.message}", e)
+        }
     }
 
     fun resumeReading() {
         ttsManager?.resume()
         acquireWakeLock()
-        updateNotification(ITTSManager.TTSState.PLAYING)
+        try {
+            updateNotification(ITTSManager.TTSState.PLAYING)
+        } catch (e: Throwable) {
+            DebugLogger.logError("ReadingService", "Failed to updateNotification: ${e.message}", e)
+        }
     }
 
     fun stopReading() {
         ttsManager?.stop()
         releaseWakeLock()
         currentStoryId = 0
+        preparingStoryId = 0
         currentStoryTitle = ""
         lastNotifiedState = null
         lastNotifiedTitle = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Throwable) {
+            DebugLogger.logError("ReadingService", "Failed to stopForeground: ${e.message}", e)
+        }
     }
     
     fun shutdown() {

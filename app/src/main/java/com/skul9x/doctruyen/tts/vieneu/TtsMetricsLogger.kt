@@ -92,19 +92,23 @@ object TtsMetricsLogger {
     private val chunkQueueTimeMap = ConcurrentHashMap<Int, Long>()
     private var underrunCount: Int = 0
 
+    private var initialStoryChars: Int = 0
+
     @Synchronized
     fun startSession(
         storyId: String = "",
         storyTitle: String = "",
         deviceProfile: DeviceProfile? = null,
         startMemory: MemorySnapshot? = null,
-        startThermal: ThermalSnapshot? = null
+        startThermal: ThermalSnapshot? = null,
+        initialStoryChars: Int = 0
     ) {
         sessionStartTimeMs = System.currentTimeMillis()
         preBufferStartTimeMs = sessionStartTimeMs
         preBufferDurationMs = 0L
         firstAudioOutputTimeMs = 0L
         underrunCount = 0
+        this.initialStoryChars = initialStoryChars
         chunkTimings.clear()
         chunkQueueTimeMap.clear()
         currentSession = TtsSessionMetrics(
@@ -112,7 +116,8 @@ object TtsMetricsLogger {
             storyTitle = storyTitle,
             deviceProfile = deviceProfile,
             startMemory = startMemory,
-            startThermal = startThermal
+            startThermal = startThermal,
+            totalChars = initialStoryChars
         )
         val msg = "⏱️ [TTS Session Start] storyId='$storyId', title='$storyTitle'"
         DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
@@ -124,7 +129,8 @@ object TtsMetricsLogger {
         storyTitle: String = "",
         context: android.content.Context?,
         engineThreads: Int = 1,
-        quantization: String = "Unknown"
+        quantization: String = "Unknown",
+        initialStoryChars: Int = 0
     ) {
         val deviceProfile = DevicePerformanceHelper.getDeviceProfile(context, engineThreads, quantization)
         val startMemory = DevicePerformanceHelper.getMemorySnapshot(context)
@@ -134,8 +140,25 @@ object TtsMetricsLogger {
             storyTitle = storyTitle,
             deviceProfile = deviceProfile,
             startMemory = startMemory,
-            startThermal = startThermal
+            startThermal = startThermal,
+            initialStoryChars = initialStoryChars
         )
+    }
+
+    @Synchronized
+    fun updateActiveQuantization(quantization: String) {
+        val oldProfile = currentSession.deviceProfile
+        val updatedProfile = oldProfile?.copy(quantization = quantization)
+            ?: DeviceProfile(quantization = quantization)
+        currentSession = currentSession.copy(deviceProfile = updatedProfile)
+        DebugLogger.log(TAG, "🔄 [TtsMetrics] Active session quantization updated to $quantization", LogType.TTS_TIMING)
+    }
+
+    @Synchronized
+    fun logEngineReload(newPrecision: String) {
+        updateActiveQuantization(newPrecision)
+        val msg = "🔁 [Engine Reload] Precision switched to $newPrecision. Active session telemetry updated."
+        DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
     }
 
     fun recordPreBufferingStart() {
@@ -617,7 +640,8 @@ object TtsMetricsLogger {
 
         val totalAudio = chunkTimings.sumOf { it.audioDurationMs }
         val totalInfer = chunkTimings.sumOf { it.inferenceDurationMs }
-        val totalChars = chunkTimings.sumOf { it.charCount }
+        val sumChars = chunkTimings.sumOf { it.charCount }
+        val effectiveTotalChars = if (initialStoryChars > 0) initialStoryChars else sumChars
         val avgRtf = if (totalAudio > 0) totalInfer.toFloat() / totalAudio else 0f
 
         val snapshot = currentSession.copy(
@@ -625,7 +649,7 @@ object TtsMetricsLogger {
             averageRtf = avgRtf,
             totalAudioDurationMs = totalAudio,
             totalSynthesisDurationMs = totalInfer,
-            totalChars = if (currentSession.totalChars > 0) currentSession.totalChars else totalChars,
+            totalChars = effectiveTotalChars,
             underrunCount = underrunCount,
             chunks = ArrayList(chunkTimings)
         )

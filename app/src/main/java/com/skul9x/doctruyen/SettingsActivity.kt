@@ -1,5 +1,6 @@
 package com.skul9x.doctruyen
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -24,7 +25,57 @@ import com.skul9x.doctruyen.tts.ITTSManager
 import com.skul9x.doctruyen.tts.vieneu.VoicePresets
 import com.skul9x.doctruyen.utils.UserConfig
 
-class SettingsActivity : AppCompatActivity() {
+/**
+ * Manages lazy lifecycle and on-demand binding of GoogleTTSManager for SettingsActivity.
+ */
+class SettingsTtsHolder(
+    private val contextProvider: () -> Context,
+    private val onVoiceDisplayRefresh: () -> Unit,
+    internal var googleTtsFactory: ((Context, (ITTSManager.TTSState) -> Unit) -> GoogleTTSManager) = { ctx, callback ->
+        GoogleTTSManager(ctx, onStateChange = callback)
+    }
+) {
+    internal var tempGoogleTts: GoogleTTSManager? = null
+        private set
+
+    private var isInitializing = false
+
+    @Synchronized
+    fun getOrCreateGoogleTts(): GoogleTTSManager {
+        tempGoogleTts?.let { return it }
+        if (isInitializing) {
+            tempGoogleTts?.let { return it }
+        }
+        isInitializing = true
+        try {
+            val instance = googleTtsFactory(contextProvider()) { state ->
+                if (state == ITTSManager.TTSState.READY && !isInitializing) {
+                    onVoiceDisplayRefresh()
+                }
+            }
+            tempGoogleTts = instance
+            if (instance.currentState == ITTSManager.TTSState.READY) {
+                onVoiceDisplayRefresh()
+            }
+            return instance
+        } finally {
+            isInitializing = false
+        }
+    }
+
+    fun onEngineChanged(engine: ITTSManager.EngineType) {
+        if (engine == ITTSManager.EngineType.GOOGLE_TTS) {
+            getOrCreateGoogleTts()
+        }
+    }
+
+    fun onDestroy() {
+        tempGoogleTts?.shutdown()
+        tempGoogleTts = null
+    }
+}
+
+open class SettingsActivity : AppCompatActivity() {
 
     private lateinit var btnBack: ImageButton
     private lateinit var etBaseUrl: TextInputEditText
@@ -33,6 +84,19 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnEngineVieNeu: MaterialButton
     private lateinit var btnEngineGoogle: MaterialButton
     private lateinit var tvEngineBadge: TextView
+
+    private lateinit var cardModelPrecision: com.google.android.material.card.MaterialCardView
+    private lateinit var togglePrecisionGroup: MaterialButtonToggleGroup
+    private lateinit var btnPrecisionInt8: MaterialButton
+    private lateinit var btnPrecisionFp32: MaterialButton
+    private lateinit var tvPrecisionBadge: TextView
+
+    private lateinit var cardPrebuffering: com.google.android.material.card.MaterialCardView
+    private lateinit var togglePrebufferGroup: MaterialButtonToggleGroup
+    private lateinit var btnPrebuffer1Chunk: MaterialButton
+    private lateinit var btnPrebuffer2Chunks: MaterialButton
+    private lateinit var btnPrebuffer3Chunks: MaterialButton
+    private lateinit var tvPrebufferBadge: TextView
 
     private lateinit var tvCurrentVoice: TextView
     private lateinit var tvVoiceSubInfo: TextView
@@ -59,24 +123,27 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnViewTimingLogs: MaterialButton
     private lateinit var btnViewLogs: MaterialButton
 
-    // Temporary GoogleTTS instance for querying system/Google voices if selected
-    private var tempGoogleTts: GoogleTTSManager? = null
+    // Temporary GoogleTTS instance for querying system/Google voices if selected (lazy initialized)
+    internal val ttsHolder = SettingsTtsHolder(
+        contextProvider = { this },
+        onVoiceDisplayRefresh = { runOnUiThread { updateActiveVoiceDisplay() } }
+    )
+
+    internal val tempGoogleTts: GoogleTTSManager?
+        get() = ttsHolder.tempGoogleTts
+
+    internal fun getOrCreateGoogleTts(): GoogleTTSManager = ttsHolder.getOrCreateGoogleTts()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_settings)
 
-        // Pre-initialize GoogleTTSManager early to bind async TTS engine before user opens dialog
-        tempGoogleTts = GoogleTTSManager(this, onStateChange = {
-            runOnUiThread {
-                updateActiveVoiceDisplay()
-            }
-        })
-
         bindViews()
         setupHeaderAndConnection()
         setupEngineSelector()
+        setupPrecisionSelector()
+        setupPrebufferSelector()
         setupVoiceSelection()
         setupVoiceModulation()
         setupCadenceAndPauses()
@@ -92,6 +159,19 @@ class SettingsActivity : AppCompatActivity() {
         btnEngineVieNeu = findViewById(R.id.btnEngineVieNeu)
         btnEngineGoogle = findViewById(R.id.btnEngineGoogle)
         tvEngineBadge = findViewById(R.id.tvEngineBadge)
+
+        cardModelPrecision = findViewById(R.id.cardModelPrecision)
+        togglePrecisionGroup = findViewById(R.id.togglePrecisionGroup)
+        btnPrecisionInt8 = findViewById(R.id.btnPrecisionInt8)
+        btnPrecisionFp32 = findViewById(R.id.btnPrecisionFp32)
+        tvPrecisionBadge = findViewById(R.id.tvPrecisionBadge)
+
+        cardPrebuffering = findViewById(R.id.cardPrebuffering)
+        togglePrebufferGroup = findViewById(R.id.togglePrebufferGroup)
+        btnPrebuffer1Chunk = findViewById(R.id.btnPrebuffer1Chunk)
+        btnPrebuffer2Chunks = findViewById(R.id.btnPrebuffer2Chunks)
+        btnPrebuffer3Chunks = findViewById(R.id.btnPrebuffer3Chunks)
+        tvPrebufferBadge = findViewById(R.id.tvPrebufferBadge)
 
         tvCurrentVoice = findViewById(R.id.tvCurrentVoice)
         tvVoiceSubInfo = findViewById(R.id.tvVoiceSubInfo)
@@ -162,9 +242,13 @@ class SettingsActivity : AppCompatActivity() {
         if (currentEngine == ITTSManager.EngineType.GOOGLE_TTS) {
             toggleEngineGroup.check(R.id.btnEngineGoogle)
             tvEngineBadge.text = getString(R.string.settings_engine_google_badge)
+            cardModelPrecision.visibility = View.GONE
+            cardPrebuffering.visibility = View.GONE
         } else {
             toggleEngineGroup.check(R.id.btnEngineVieNeu)
             tvEngineBadge.text = getString(R.string.settings_engine_vieneu_badge)
+            cardModelPrecision.visibility = View.VISIBLE
+            cardPrebuffering.visibility = View.VISIBLE
         }
 
         toggleEngineGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
@@ -188,13 +272,104 @@ class SettingsActivity : AppCompatActivity() {
 
                 if (newEngine == ITTSManager.EngineType.GOOGLE_TTS) {
                     tvEngineBadge.text = getString(R.string.settings_engine_google_badge)
+                    cardModelPrecision.visibility = View.GONE
+                    cardPrebuffering.visibility = View.GONE
                     Toast.makeText(this, getString(R.string.settings_engine_switched, getString(R.string.settings_engine_google)), Toast.LENGTH_SHORT).show()
                 } else {
                     tvEngineBadge.text = getString(R.string.settings_engine_vieneu_badge)
+                    cardModelPrecision.visibility = View.VISIBLE
+                    cardPrebuffering.visibility = View.VISIBLE
                     Toast.makeText(this, getString(R.string.settings_engine_switched, getString(R.string.settings_engine_vieneu)), Toast.LENGTH_SHORT).show()
                 }
 
                 updateActiveVoiceDisplay()
+            }
+        }
+    }
+
+    private fun setupPrecisionSelector() {
+        val currentPrecision = UserConfig.getTtsPrecision(this)
+        if (currentPrecision == "FP32") {
+            togglePrecisionGroup.check(R.id.btnPrecisionFp32)
+            tvPrecisionBadge.text = getString(R.string.settings_precision_fp32_badge)
+        } else {
+            togglePrecisionGroup.check(R.id.btnPrecisionInt8)
+            tvPrecisionBadge.text = getString(R.string.settings_precision_int8_badge)
+        }
+
+        togglePrecisionGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                val newPrecision = when (checkedId) {
+                    R.id.btnPrecisionFp32 -> "FP32"
+                    else -> "INT8"
+                }
+                UserConfig.setTtsPrecision(this, newPrecision)
+
+                if (newPrecision == "FP32") {
+                    tvPrecisionBadge.text = getString(R.string.settings_precision_fp32_badge)
+                    Toast.makeText(this, getString(R.string.settings_precision_switched, "FP32"), Toast.LENGTH_SHORT).show()
+                } else {
+                    tvPrecisionBadge.text = getString(R.string.settings_precision_int8_badge)
+                    Toast.makeText(this, getString(R.string.settings_precision_switched, "INT8"), Toast.LENGTH_SHORT).show()
+                }
+
+                // Propagate to ReadingService
+                try {
+                    val serviceIntent = android.content.Intent(this, com.skul9x.doctruyen.service.ReadingService::class.java).apply {
+                        action = com.skul9x.doctruyen.service.ReadingService.ACTION_SWITCH_PRECISION
+                        putExtra(com.skul9x.doctruyen.service.ReadingService.EXTRA_PRECISION_TYPE, newPrecision)
+                    }
+                    startService(serviceIntent)
+                } catch (e: Throwable) {
+                    // Ignore if service cannot be started directly
+                }
+            }
+        }
+    }
+
+    private fun setupPrebufferSelector() {
+        val currentChunks = UserConfig.getPrebufferChunks(this)
+        when (currentChunks) {
+            1 -> {
+                togglePrebufferGroup.check(R.id.btnPrebuffer1Chunk)
+                tvPrebufferBadge.text = getString(R.string.settings_prebuffer_1chunk_badge)
+            }
+            3 -> {
+                togglePrebufferGroup.check(R.id.btnPrebuffer3Chunks)
+                tvPrebufferBadge.text = getString(R.string.settings_prebuffer_3chunks_badge)
+            }
+            else -> {
+                togglePrebufferGroup.check(R.id.btnPrebuffer2Chunks)
+                tvPrebufferBadge.text = getString(R.string.settings_prebuffer_2chunks_badge)
+            }
+        }
+
+        togglePrebufferGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                val newChunks = when (checkedId) {
+                    R.id.btnPrebuffer1Chunk -> 1
+                    R.id.btnPrebuffer3Chunks -> 3
+                    else -> 2
+                }
+                UserConfig.setPrebufferChunks(this, newChunks)
+
+                when (newChunks) {
+                    1 -> tvPrebufferBadge.text = getString(R.string.settings_prebuffer_1chunk_badge)
+                    3 -> tvPrebufferBadge.text = getString(R.string.settings_prebuffer_3chunks_badge)
+                    else -> tvPrebufferBadge.text = getString(R.string.settings_prebuffer_2chunks_badge)
+                }
+                Toast.makeText(this, getString(R.string.settings_prebuffer_switched, newChunks), Toast.LENGTH_SHORT).show()
+
+                // Propagate to ReadingService
+                try {
+                    val serviceIntent = android.content.Intent(this, com.skul9x.doctruyen.service.ReadingService::class.java).apply {
+                        action = com.skul9x.doctruyen.service.ReadingService.ACTION_SWITCH_PREBUFFER_CHUNKS
+                        putExtra(com.skul9x.doctruyen.service.ReadingService.EXTRA_PREBUFFER_CHUNKS, newChunks)
+                    }
+                    startService(serviceIntent)
+                } catch (e: Throwable) {
+                    // Ignore if service cannot be started directly
+                }
             }
         }
     }
@@ -213,13 +388,11 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateActiveVoiceDisplay() {
+    internal fun updateActiveVoiceDisplay() {
         val engine = UserConfig.getTtsEngine(this)
         if (engine == ITTSManager.EngineType.GOOGLE_TTS) {
             val savedGoogleVoice = UserConfig.getGoogleTtsVoice(this)
-            val googleTts = tempGoogleTts ?: GoogleTTSManager(this, onStateChange = {}).also {
-                tempGoogleTts = it
-            }
+            val googleTts = getOrCreateGoogleTts()
             val available = googleTts.getAvailableVoices()
             val matched = if (!savedGoogleVoice.isNullOrEmpty()) {
                 available.find { it.id == savedGoogleVoice }
@@ -227,17 +400,25 @@ class SettingsActivity : AppCompatActivity() {
                 available.firstOrNull()
             }
             val displayVoice = matched?.displayName ?: savedGoogleVoice ?: "Google Tiếng Việt (Mặc định)"
-            tvCurrentVoice.text = getString(R.string.settings_voice_active, displayVoice)
-            tvVoiceSubInfo.text = matched?.description ?: "Google TTS • Hệ thống Android • Chuẩn ngôn ngữ Tiếng Việt"
+            if (::tvCurrentVoice.isInitialized) {
+                tvCurrentVoice.text = getString(R.string.settings_voice_active, displayVoice)
+            }
+            if (::tvVoiceSubInfo.isInitialized) {
+                tvVoiceSubInfo.text = matched?.description ?: "Google TTS • Hệ thống Android • Chuẩn ngôn ngữ Tiếng Việt"
+            }
         } else {
             val activeVoice = UserConfig.getTtsVoice(this) ?: VoicePresets.defaultVoiceName
             val preset = VoicePresets.getVoice(activeVoice)
-            tvCurrentVoice.text = getString(R.string.settings_voice_active, activeVoice)
-            if (preset != null) {
-                val formattedDesc = preset.getFormattedDescription()
-                tvVoiceSubInfo.text = if (formattedDesc.isNotEmpty()) formattedDesc else "Neural TTS • Giọng đọc AI tự nhiên"
-            } else {
-                tvVoiceSubInfo.text = "Neural TTS • Giọng đọc AI tự nhiên"
+            if (::tvCurrentVoice.isInitialized) {
+                tvCurrentVoice.text = getString(R.string.settings_voice_active, activeVoice)
+            }
+            if (::tvVoiceSubInfo.isInitialized) {
+                if (preset != null) {
+                    val formattedDesc = preset.getFormattedDescription()
+                    tvVoiceSubInfo.text = if (formattedDesc.isNotEmpty()) formattedDesc else "Neural TTS • Giọng đọc AI tự nhiên"
+                } else {
+                    tvVoiceSubInfo.text = "Neural TTS • Giọng đọc AI tự nhiên"
+                }
             }
         }
     }
@@ -326,10 +507,8 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun showGoogleVoicePickerDialog() {
-        val googleTts = tempGoogleTts ?: GoogleTTSManager(this, onStateChange = {}).also {
-            tempGoogleTts = it
-        }
+    internal fun showGoogleVoicePickerDialog() {
+        val googleTts = getOrCreateGoogleTts()
 
         val availableVoices = googleTts.getAvailableVoices()
         if (availableVoices.isEmpty()) {
@@ -472,7 +651,6 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        tempGoogleTts?.shutdown()
-        tempGoogleTts = null
+        ttsHolder.onDestroy()
     }
 }

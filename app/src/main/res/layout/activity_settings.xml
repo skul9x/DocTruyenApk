@@ -135,6 +135,183 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 1b. Model Precision Card (VieNeu TTS Only) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardModelPrecision"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/background_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_precision_title"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_precision_desc"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp" />
+
+                    <!-- Toggle Button Group for Precision Selection -->
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/togglePrecisionGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPrecisionInt8"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_precision_int8"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPrecisionFp32"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_precision_fp32"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <!-- Precision Information Badge -->
+                    <TextView
+                        android:id="@+id/tvPrecisionBadge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/badge_background"
+                        android:padding="8dp"
+                        android:text="@string/settings_precision_int8_badge"
+                        android:textSize="12sp"
+                        android:textColor="@color/primary"
+                        android:textStyle="italic" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 1c. Pre-buffering Buffer Depth Card (VieNeu TTS Only) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardPrebuffering"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/background_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_prebuffer_title"
+                        android:textSize="17sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_prebuffer_desc"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp" />
+
+                    <!-- Toggle Button Group for Pre-buffering Chunk Selection -->
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/togglePrebufferGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        app:singleSelection="true"
+                        app:selectionRequired="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPrebuffer1Chunk"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_prebuffer_1chunk"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPrebuffer2Chunks"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_prebuffer_2chunks"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPrebuffer3Chunks"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_prebuffer_3chunks"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:paddingVertical="10dp" />
+
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <!-- Pre-buffering Strategy Badge -->
+                    <TextView
+                        android:id="@+id/tvPrebufferBadge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/badge_background"
+                        android:padding="8dp"
+                        android:text="@string/settings_prebuffer_2chunks_badge"
+                        android:textSize="12sp"
+                        android:textColor="@color/primary"
+                        android:textStyle="italic" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 2. Voice Selection Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardVoiceSelection"

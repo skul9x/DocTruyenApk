@@ -102,4 +102,24 @@
     <string name="settings_reset_pitch_speed_done">Đã đặt lại tốc độ &amp; cao độ về 1.0x</string>
     <string name="settings_engine_switched">Đã chuyển sang %s</string>
     <string name="settings_voice_active">Giọng hiện tại: %s</string>
+
+    <!-- Model Precision Settings -->
+    <string name="settings_precision_title">🎯 Độ chính xác mô hình AI (Precision)</string>
+    <string name="settings_precision_desc">Lựa chọn chế độ lượng tử hóa phù hợp với hiệu năng máy.</string>
+    <string name="settings_precision_int8">⚡ INT8 (Nhanh &amp; Mát máy)</string>
+    <string name="settings_precision_fp32">🎯 FP32 (Chất lượng gốc)</string>
+    <string name="settings_precision_int8_badge">⚡ Dynamic INT8: Tốc độ cao gấp 2x, RTF ~0.5x, tiết kiệm RAM &amp; pin (Khuyên dùng cho mọi thiết bị).</string>
+    <string name="settings_precision_fp32_badge">🎯 FP32 Original: Chất lượng âm thanh chuẩn nguyên bản, tiêu tốn CPU hơn.</string>
+    <string name="settings_precision_switched">Đã đổi chế độ mô hình sang %s</string>
+
+    <!-- Pre-buffering Settings -->
+    <string name="settings_prebuffer_title">⚡ Bộ đệm khởi động (Pre-buffering)</string>
+    <string name="settings_prebuffer_desc">Chọn số đoạn âm thanh AI cần chuẩn bị trước khi bắt đầu phát.</string>
+    <string name="settings_prebuffer_1chunk">1 Chunk</string>
+    <string name="settings_prebuffer_2chunks">2 Chunks</string>
+    <string name="settings_prebuffer_3chunks">3 Chunks</string>
+    <string name="settings_prebuffer_1chunk_badge">🚀 1 Chunk (Siêu nhanh / TTFT ~1.8s): Phát âm thanh tức thì, thích hợp máy cấu hình tốt.</string>
+    <string name="settings_prebuffer_2chunks_badge">⚖️ 2 Chunks (Cân bằng / Khuyên dùng): Phát sau ~3.5s, mượt mà và không lo ngắt quãng.</string>
+    <string name="settings_prebuffer_3chunks_badge">🛡️ 3 Chunks (Ổn định tối đa / Chống ngắt): Phát sau ~8.0s, đệm dày tối đa chống gián đoạn khi nghe lâu.</string>
+    <string name="settings_prebuffer_switched">Đã đổi bộ đệm phát sang %d chunk</string>
 </resources>

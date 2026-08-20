@@ -9,6 +9,7 @@ import com.skul9x.doctruyen.tts.VoiceInfo
 import com.skul9x.doctruyen.utils.DebugLogger
 import com.skul9x.doctruyen.utils.LogType
 import com.skul9x.doctruyen.utils.UserConfig
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,8 +91,11 @@ class VieNeuTTSManager(
         if (customEngine != null && customPipeline != null) {
             engine = customEngine
             pipeline = customPipeline
-            notifyStateChange(TTSState.READY)
-            checkPendingSpeech()
+            if (pendingTitle != null || pendingContent != null) {
+                checkPendingSpeech()
+            } else {
+                notifyStateChange(TTSState.READY)
+            }
             return
         }
 
@@ -119,17 +123,23 @@ class VieNeuTTSManager(
                     }
                 }
 
+                val prebufferChunks = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: UserConfig.DEFAULT_PREBUFFER_CHUNKS
                 val loadedPipeline = TTSAudioPipeline(
                     engine = loadedEngine,
                     voiceName = voiceName,
                     context = appContext,
-                    dispatcher = Dispatchers.Default
+                    dispatcher = Dispatchers.Default,
+                    quantizationType = loadedEngine.quantizationType,
+                    preBufferChunkCount = prebufferChunks
                 )
                 pipeline = loadedPipeline
 
                 DebugLogger.log(TAG, "✅ VieNeuOnnxEngine & TTSAudioPipeline ready. Voice: $voiceName", LogType.INFO)
-                notifyStateChange(TTSState.READY)
-                checkPendingSpeech()
+                if (pendingTitle != null || pendingContent != null) {
+                    checkPendingSpeech()
+                } else {
+                    notifyStateChange(TTSState.READY)
+                }
             } catch (e: Throwable) {
                 DebugLogger.logError(TAG, "❌ Failed to initialize VieNeu engine: ${e.message}. Attempting Android TTS fallback...", e)
                 Log.e(TAG, "Failed to initialize VieNeuOnnxEngine", e)
@@ -165,9 +175,11 @@ class VieNeuTTSManager(
                 fallbackManager?.speakWithTitlePause(pendingTitle!!, pendingContent!!)
                 pendingTitle = null
                 pendingContent = null
+                pendingStoryId = 0
             } else if (pendingContent != null) {
                 fallbackManager?.speak(pendingContent!!)
                 pendingContent = null
+                pendingStoryId = 0
             }
         } catch (e: Throwable) {
             DebugLogger.logError(TAG, "❌ Android TTS fallback initialization also failed: ${e.message}")
@@ -295,7 +307,7 @@ class VieNeuTTSManager(
             return
         }
 
-        if (currentState == TTSState.INITIALIZING) {
+        if (currentState == TTSState.INITIALIZING && (pipeline == null || engine == null)) {
             pendingTitle = null
             pendingContent = content
             pendingStoryId = storyId
@@ -310,6 +322,7 @@ class VieNeuTTSManager(
 
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
+        pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
         val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
         pipe.startReading(
             text = content,
@@ -333,7 +346,7 @@ class VieNeuTTSManager(
             return
         }
 
-        if (currentState == TTSState.INITIALIZING) {
+        if (currentState == TTSState.INITIALIZING && (pipeline == null || engine == null)) {
             pendingTitle = title
             pendingContent = content
             pendingStoryId = storyId
@@ -348,6 +361,7 @@ class VieNeuTTSManager(
 
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
+        pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
         val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
         pipe.startReadingWithTitlePause(
             title = title,
@@ -507,6 +521,120 @@ class VieNeuTTSManager(
         prewarmJob = null
     }
 
+    fun setPrebufferChunks(chunks: Int) {
+        val clamped = chunks.coerceIn(UserConfig.MIN_PREBUFFER_CHUNKS, UserConfig.MAX_PREBUFFER_CHUNKS)
+        pipeline?.preBufferChunkCount = clamped
+        appContext?.let { UserConfig.setPrebufferChunks(it, clamped) }
+    }
+
+    fun getPrebufferChunks(): Int {
+        return pipeline?.preBufferChunkCount ?: appContext?.let { UserConfig.getPrebufferChunks(it) } ?: UserConfig.DEFAULT_PREBUFFER_CHUNKS
+    }
+
+    /**
+     * Dynamic precision switching and hot-reloading at runtime.
+     * Atomically stops active synthesis/playback, closes existing engine,
+     * invalidates PrewarmedChunkCache, creates new VieNeuOnnxEngine with target precision,
+     * reconnects TTSAudioPipeline, and notifies READY state.
+     */
+    fun setPrecision(precision: String) {
+        val ctx = appContext
+        if (ctx != null) {
+            UserConfig.setTtsPrecision(ctx, precision)
+        }
+        reloadEngine(precision)
+    }
+
+    @Synchronized
+    fun reloadEngine(precision: String = appContext?.let { UserConfig.getTtsPrecision(it) } ?: "INT8") {
+        val normPrecision = when (precision.trim().uppercase()) {
+            "INT8" -> "INT8"
+            "FP32" -> "FP32"
+            else -> "FP32"
+        }
+
+        DebugLogger.log(TAG, "🔄 Dynamic engine reload requested [Target Precision: $normPrecision]", LogType.INFO)
+
+        // 1. Cancel background prewarm job
+        cancelPrewarm()
+
+        // 2. Atomically stop active synthesis and playback
+        pipeline?.stop()
+        notifyStateChange(TTSState.INITIALIZING)
+
+        // 3. Clear prewarmed cache across model architectures
+        PrewarmedChunkCache.clear()
+
+        // 4. Release old pipeline and ONNX sessions cleanly
+        pipeline?.release()
+        pipeline = null
+        engine?.close()
+        engine = null
+
+        val ctx = appContext
+        scope.launch {
+            try {
+                val newEngine = withContext(Dispatchers.IO) {
+                    if (ctx != null) {
+                        VieNeuOnnxEngine.create(ctx, precision = normPrecision)
+                    } else {
+                        val baseAssetsDir = File("src/main/assets/vieneu")
+                        val backboneDir = OnnxSessionManager.getBackboneDir(baseAssetsDir, normPrecision)
+                        val codecDir = File(baseAssetsDir, "codec")
+                        val sessionManager = OnnxSessionManager.createFromFiles(
+                            backboneDir = backboneDir,
+                            codecDir = codecDir,
+                            threads = 2,
+                            precision = normPrecision
+                        )
+                        val configFile = File(backboneDir, "config.json")
+                        val config = VieNeuConfig.fromJson(configFile.readText(Charsets.UTF_8))
+                        val tokenizerFile = File(backboneDir, "tokenizer.json")
+                        val tokenizer = VieNeuTokenizer.fromFile(tokenizerFile)
+                        val headsFile = File(backboneDir, "vieneu_v3_heads.npz")
+                        val headsReader = NpzReader.read(headsFile)
+                        VieNeuOnnxEngine(
+                            sessionManager = sessionManager,
+                            config = config,
+                            tokenizer = tokenizer,
+                            textEmbeddings = headsReader.get2D("text_emb")!!,
+                            audioEmbeddings = headsReader.get3D("audio_emb")!!,
+                            xvecW = headsReader.get2D("xvec_w"),
+                            xvecB = headsReader.getFloatArray("xvec_b"),
+                            xvecLnW = headsReader.getFloatArray("xvec_ln_w"),
+                            xvecLnB = headsReader.getFloatArray("xvec_ln_b"),
+                            xvecLnEps = headsReader.getScalarFloat("xvec_ln_eps") ?: 1e-5f
+                        )
+                    }
+                }
+                engine = newEngine
+
+                val prebufferChunks = ctx?.let { UserConfig.getPrebufferChunks(it) } ?: UserConfig.DEFAULT_PREBUFFER_CHUNKS
+                val newPipeline = TTSAudioPipeline(
+                    engine = newEngine,
+                    voiceName = voiceName,
+                    context = appContext,
+                    dispatcher = Dispatchers.Default,
+                    quantizationType = newEngine.quantizationType,
+                    preBufferChunkCount = prebufferChunks
+                )
+                pipeline = newPipeline
+
+                TtsMetricsLogger.logEngineReload(normPrecision)
+                DebugLogger.log(TAG, "✅ VieNeuOnnxEngine hot-reloaded successfully with precision: $normPrecision [EP: ${newEngine.executionProvider}]", LogType.INFO)
+
+                if (pendingTitle != null || pendingContent != null) {
+                    checkPendingSpeech()
+                } else {
+                    notifyStateChange(TTSState.READY)
+                }
+            } catch (e: Throwable) {
+                DebugLogger.logError(TAG, "❌ Failed to reload VieNeu engine with precision $normPrecision: ${e.message}", e)
+                tryFallbackAndroidTTS()
+            }
+        }
+    }
+
     /**
      * Release all TTS resources and ONNX engine sessions.
      */
@@ -521,6 +649,8 @@ class VieNeuTTSManager(
         fallbackManager = null
         notifyStateChange(TTSState.IDLE)
     }
+
+    internal fun getEngineForTesting(): VieNeuOnnxEngine? = engine
 
     companion object {
         private const val TAG = "VieNeuTTSManager"

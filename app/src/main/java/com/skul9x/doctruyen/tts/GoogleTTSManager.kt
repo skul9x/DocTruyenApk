@@ -139,12 +139,11 @@ class GoogleTTSManager(
     }
 
     private fun initTTS() {
-        notifyStateChange(ITTSManager.TTSState.INITIALIZING)
-
         if (engineWrapper != null) {
             configureEngine()
             return
         }
+        notifyStateChange(ITTSManager.TTSState.INITIALIZING)
 
         val listener = TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -212,47 +211,82 @@ class GoogleTTSManager(
         checkPendingSpeech()
     }
 
+    @Synchronized
     private fun setupUtteranceListener() {
         engineWrapper?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                notifyStateChange(ITTSManager.TTSState.PLAYING)
+                synchronized(this@GoogleTTSManager) {
+                    if (isPausedByUser || currentState == ITTSManager.TTSState.READY || currentState == ITTSManager.TTSState.IDLE) {
+                        return
+                    }
+                    if (utteranceId != null && utteranceId.startsWith("seg_")) {
+                        notifyStateChange(ITTSManager.TTSState.PLAYING)
+                    }
+                }
             }
 
             override fun onDone(utteranceId: String?) {
-                if (isPausedByUser) {
-                    return
-                }
+                synchronized(this@GoogleTTSManager) {
+                    if (isPausedByUser || currentState == ITTSManager.TTSState.READY || currentState == ITTSManager.TTSState.IDLE) {
+                        return
+                    }
 
-                if (utteranceId != null && utteranceId.startsWith("seg_")) {
-                    val nextIndex = currentSegmentIndex + 1
-                    if (nextIndex < segments.size) {
-                        currentSegmentIndex = nextIndex
-                        playSegment(currentSegmentIndex)
-                    } else {
-                        // All chunks done
-                        resetReadingState()
-                        notifyStateChange(ITTSManager.TTSState.READY)
-                        onProgressChange?.invoke(100)
+                    // Only advance on valid segment completion, silence utterances are chained automatically in queue
+                    if (utteranceId != null && utteranceId.startsWith("seg_")) {
+                        val segIndex = utteranceId.removePrefix("seg_").toIntOrNull()
+                        // Ignore stale callbacks from older segments
+                        if (segIndex == null || segIndex != currentSegmentIndex) {
+                            return
+                        }
+
+                        val nextIndex = currentSegmentIndex + 1
+                        if (nextIndex < segments.size) {
+                            currentSegmentIndex = nextIndex
+                            playSegment(currentSegmentIndex)
+                        } else {
+                            // All chunks completed - guard against duplicate completion
+                            resetReadingState()
+                            notifyStateChange(ITTSManager.TTSState.READY)
+                            onProgressChange?.invoke(100)
+                        }
                     }
                 }
             }
 
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
                 super.onRangeStart(utteranceId, start, end, frame)
-                if (utteranceId != null && utteranceId.startsWith("seg_")) {
-                    calculateAndReportProgress(currentSegmentIndex, start)
+                synchronized(this@GoogleTTSManager) {
+                    if (isPausedByUser || currentState == ITTSManager.TTSState.READY || currentState == ITTSManager.TTSState.IDLE) {
+                        return
+                    }
+                    if (utteranceId != null && utteranceId.startsWith("seg_")) {
+                        val segIndex = utteranceId.removePrefix("seg_").toIntOrNull()
+                        if (segIndex != null && segIndex == currentSegmentIndex) {
+                            calculateAndReportProgress(currentSegmentIndex, start)
+                        }
+                    }
                 }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                DebugLogger.logError(TAG, "TTS utterance error: $utteranceId")
-                notifyStateChange(ITTSManager.TTSState.ERROR)
+                synchronized(this@GoogleTTSManager) {
+                    if (isPausedByUser || currentState == ITTSManager.TTSState.READY || currentState == ITTSManager.TTSState.IDLE) {
+                        return
+                    }
+                    DebugLogger.logError(TAG, "TTS utterance error: $utteranceId")
+                    notifyStateChange(ITTSManager.TTSState.ERROR)
+                }
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                DebugLogger.logError(TAG, "TTS utterance error $utteranceId with code $errorCode")
-                notifyStateChange(ITTSManager.TTSState.ERROR)
+                synchronized(this@GoogleTTSManager) {
+                    if (isPausedByUser || currentState == ITTSManager.TTSState.READY || currentState == ITTSManager.TTSState.IDLE) {
+                        return
+                    }
+                    DebugLogger.logError(TAG, "TTS utterance error $utteranceId with code $errorCode")
+                    notifyStateChange(ITTSManager.TTSState.ERROR)
+                }
             }
         })
     }
@@ -483,7 +517,7 @@ class GoogleTTSManager(
         if (res == TextToSpeech.SUCCESS) {
             appContext?.let { UserConfig.setGoogleTtsVoice(it, voiceName) }
         } else {
-            val allVoices = wrapper.getVoices()
+            val allVoices = try { wrapper.getVoices() } catch (e: Throwable) { null }
             val matchedVoice = allVoices?.find { it.name == voiceName }
             if (matchedVoice != null) {
                 wrapper.setVoice(matchedVoice)
@@ -497,6 +531,19 @@ class GoogleTTSManager(
         val customInfoList = eng.getVoiceInfoList()
         if (customInfoList != null) {
             return customInfoList
+        }
+
+        if (currentState == ITTSManager.TTSState.INITIALIZING || currentState == ITTSManager.TTSState.IDLE) {
+            return listOf(
+                VoiceInfo(
+                    id = "vi-vn-default",
+                    displayName = "Google Tiếng Việt (Mặc định)",
+                    description = "Giọng đọc hệ thống Tiếng Việt",
+                    gender = "Tiêu chuẩn",
+                    region = "Việt Nam",
+                    isDefault = true
+                )
+            )
         }
 
         val allVoices: Set<Voice>? = try {

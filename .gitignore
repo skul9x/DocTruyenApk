@@ -34,7 +34,16 @@ target/
 # Local logs & AI artifacts
 log.txt
 *.log
+log*.txt
+abc.txt
 .brain/
+
+# Large model assets
+app/src/main/assets/vieneu/backbone_int8/
+*.onnx.data
+*.data
+*.bin
+*.npz
 
 # Excluded per user request
 1.md
@@ -42,3 +51,4 @@ log.txt
 test_phase01_setup.sh
 jdk21/
 /jdk21/
+

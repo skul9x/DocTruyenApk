@@ -52,7 +52,7 @@ data class TextChunk(
  */
 object SmartTextSegmenter {
 
-    const val DEFAULT_MAX_CHARS: Int = 180
+    const val DEFAULT_MAX_CHARS: Int = 75
 
     // Common Vietnamese abbreviations, honorifics, titles, and acronyms
     private val PROTECTED_ABBREVIATIONS = listOf(
@@ -118,7 +118,7 @@ object SmartTextSegmenter {
                         trimmedSent.startsWith("— ")
 
                 // Sub-split sentence if length exceeds maxCharsPerChunk
-                val subParts = splitSentenceIntoSubClauses(trimmedSent, maxCharsPerChunk)
+                val subParts = splitSentenceIntoSubClauses(trimmedSent, maxCharsPerChunk, placeholders)
 
                 for ((pIdx, part) in subParts.withIndex()) {
                     val isLastSubPart = (pIdx == subParts.size - 1)
@@ -200,7 +200,7 @@ object SmartTextSegmenter {
     private val HTML_TAG_REGEX = Regex("<[^>]+>")
     private val NEWLINES_REGEX = Regex("\n+")
     private val SENTENCE_SPLIT_REGEX = Regex("(?<=[.!?…])\\s+")
-    private val CLAUSE_SPLIT_REGEX = Regex("(?<=[,;:—–-])\\s+")
+    private val CLAUSE_SPLIT_REGEX = Regex("(?<=[,;:—–-])\\s+|(?<=[—–])(?=[^\\s])")
     private val WHITESPACE_REGEX = Regex("\\s+")
 
     private val NUM_DOT_REGEX = Regex("(\\b\\d+)\\.(\\d+\\b)")
@@ -266,27 +266,40 @@ object SmartTextSegmenter {
         return Pair(protected, placeholders)
     }
 
+    private val PLACEHOLDER_REGEX = Regex("___ABBR_PH_[ANT]_\\d+___")
+
     private fun restoreSpecialPatterns(text: String, placeholders: Map<String, String>): String {
         if (!text.contains(PLACEHOLDER_PREFIX)) return text
-        var restored = text
-        for ((key, original) in placeholders) {
-            if (restored.contains(key)) {
-                restored = restored.replace(key, original)
+        return PLACEHOLDER_REGEX.replace(text) { match ->
+            placeholders[match.value] ?: match.value
+        }
+    }
+
+    private fun getRestoredLength(text: String, placeholders: Map<String, String>): Int {
+        if (!text.contains(PLACEHOLDER_PREFIX)) return text.length
+        var len = text.length
+        for (match in PLACEHOLDER_REGEX.findAll(text)) {
+            val orig = placeholders[match.value]
+            if (orig != null) {
+                len = len - match.value.length + orig.length
             }
         }
-        return restored
+        return len
     }
 
     /**
      * Split a long sentence into sub-clauses respecting punctuation and word boundaries.
      */
-    private fun splitSentenceIntoSubClauses(sentence: String, maxChars: Int): List<String> {
-        if (sentence.length <= maxChars) {
+    private fun splitSentenceIntoSubClauses(
+        sentence: String,
+        maxChars: Int,
+        placeholders: Map<String, String> = emptyMap()
+    ): List<String> {
+        if (getRestoredLength(sentence, placeholders) <= maxChars) {
             return listOf(sentence)
         }
 
         val subChunks = mutableListOf<String>()
-        // Split clauses at comma, semicolon, colon, dashes
         val clauses = sentence.split(CLAUSE_SPLIT_REGEX)
         var current = StringBuilder()
 
@@ -294,40 +307,58 @@ object SmartTextSegmenter {
             val trimmedClause = clause.trim()
             if (trimmedClause.isEmpty()) continue
 
-            if (current.isEmpty()) {
-                current.append(trimmedClause)
-            } else if (current.length + 1 + trimmedClause.length <= maxChars) {
-                current.append(" ").append(trimmedClause)
-            } else {
+            val clauseLen = getRestoredLength(trimmedClause, placeholders)
+
+            if (clauseLen > maxChars) {
+                // Clause itself exceeds maxChars -> flush current if any, then split clause by words
                 if (current.isNotEmpty()) {
                     subChunks.add(current.toString())
                     current = StringBuilder()
                 }
-                if (trimmedClause.length <= maxChars) {
-                    current.append(trimmedClause)
-                } else {
-                    // Split clause by words
-                    val words = trimmedClause.split(WHITESPACE_REGEX)
-                    var wordBuf = StringBuilder()
-                    for (word in words) {
-                        if (wordBuf.isEmpty()) {
-                            wordBuf.append(word)
-                        } else if (wordBuf.length + 1 + word.length <= maxChars) {
-                            wordBuf.append(" ").append(word)
-                        } else {
+
+                val words = trimmedClause.split(WHITESPACE_REGEX)
+                var wordBuf = StringBuilder()
+                for (word in words) {
+                    val wordLen = getRestoredLength(word, placeholders)
+                    if (wordLen > maxChars) {
+                        if (wordBuf.isNotEmpty()) {
                             subChunks.add(wordBuf.toString())
-                            wordBuf = StringBuilder(word)
+                            wordBuf = StringBuilder()
                         }
+                        val parts = word.chunked(maxChars)
+                        for (i in 0 until parts.size - 1) {
+                            subChunks.add(parts[i])
+                        }
+                        wordBuf.append(parts.last())
+                    } else if (wordBuf.isEmpty()) {
+                        wordBuf.append(word)
+                    } else if (getRestoredLength(wordBuf.toString(), placeholders) + 1 + wordLen <= maxChars) {
+                        wordBuf.append(" ").append(word)
+                    } else {
+                        subChunks.add(wordBuf.toString())
+                        wordBuf = StringBuilder(word)
                     }
-                    if (wordBuf.isNotEmpty()) {
-                        current = wordBuf
-                    }
+                }
+                if (wordBuf.isNotEmpty()) {
+                    current = wordBuf
+                }
+            } else {
+                // Clause fits within maxChars
+                if (current.isEmpty()) {
+                    current.append(trimmedClause)
+                } else if (getRestoredLength(current.toString(), placeholders) + 1 + clauseLen <= maxChars) {
+                    current.append(" ").append(trimmedClause)
+                } else {
+                    subChunks.add(current.toString())
+                    current = StringBuilder(trimmedClause)
                 }
             }
         }
+
         if (current.isNotEmpty()) {
             subChunks.add(current.toString())
         }
+
         return subChunks
     }
 }

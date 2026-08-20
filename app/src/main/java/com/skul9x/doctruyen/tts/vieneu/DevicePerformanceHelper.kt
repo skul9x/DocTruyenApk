@@ -135,6 +135,36 @@ object DevicePerformanceHelper {
         )
     }
 
+    fun getBigCoreCount(): Int {
+        val totalCores = try {
+            Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        } catch (_: Throwable) {
+            1
+        }
+        try {
+            val cpuDir = java.io.File("/sys/devices/system/cpu")
+            if (cpuDir.exists() && cpuDir.isDirectory) {
+                val freqs = mutableListOf<Long>()
+                for (i in 0 until totalCores) {
+                    val maxFreqFile = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq")
+                    if (maxFreqFile.exists()) {
+                        val freq = maxFreqFile.readText().trim().toLongOrNull()
+                        if (freq != null && freq > 0) freqs.add(freq)
+                    }
+                }
+                if (freqs.isNotEmpty()) {
+                    val maxFreq = freqs.maxOrNull() ?: 0L
+                    val bigCores = freqs.count { it >= maxFreq * 0.9 }
+                    if (bigCores > 0) {
+                        return bigCores.coerceIn(1, totalCores)
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+
+        return (totalCores / 2).coerceIn(1, 8)
+    }
+
     fun getMemorySnapshot(context: Context?): MemorySnapshot {
         val bytesToMb = 1024f * 1024f
         

@@ -105,7 +105,7 @@ class TTSNaturalAudioPipelineTest {
         assertEquals(48000, titleSilence.size)
 
         // Content paragraph 1 chunk should end with PARAGRAPH_BREAK (650ms -> 31200 samples)
-        val para1Chunk = chunks[1]
+        val para1Chunk = chunks.first { it.isParagraphEnd && it != titleChunk }
         assertEquals(PauseType.PARAGRAPH_BREAK, para1Chunk.pauseType)
         val para1Silence = PcmUtils.generateSilence(para1Chunk.pauseDurationMs)
         assertEquals(31200, para1Silence.size)

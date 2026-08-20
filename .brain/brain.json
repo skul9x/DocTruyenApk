@@ -3,36 +3,36 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-19T10:28:00+07:00"
+    "updated_at": "2026-08-20T15:22:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Production Ready with CI/CD Auto-Release & On-Device AI Benchmark Verified",
+    "status": "Tri-Layer Concurrency & Activity Guard Implemented & Verified",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
     "mobile_app": {
       "platform": "Android (Min SDK 24, Target SDK 35)",
       "language": "Kotlin 2.0",
-      "architecture": "MVVM + Foreground Service (ReadingService)",
+      "architecture": "MVVM + SingleTop Activities + Bound Foreground Service (ReadingService)",
       "onnx_runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.20.0",
       "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM Mono)"
     },
     "tts_engine": {
       "model": "VieNeu-TTS v3 Turbo",
-      "precision": "int8 ONNX (CPU Execution Provider)",
+      "precision": "Multi-precision support (User-selectable Dynamic INT8 / FP32 via XNNPACK EP, FP16 via NNAPI EP)",
       "sample_rate": 48000,
       "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk)",
       "codec": "MOSS-Audio-Tokenizer-Nano-ONNX"
     },
     "text_segmentation": {
       "module": "SmartTextSegmenter",
-      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing, protected abbreviations (TP.HCM, BS., TS., GS.), numbers, and time formats"
+      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=100 chars), protected abbreviations, numbers, and time formats"
     },
-    "telemetry": {
-      "module": "TtsMetricsLogger & DebugLogger",
-      "metrics": "TTFT, RTF, inference time, audio duration, buffer underruns, queue dwell time"
+    "telemetry_diagnostics": {
+      "module": "TtsMetricsLogger, DevicePerformanceHelper & DebugLogger",
+      "features": "AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), thermal & memory profiling"
     },
     "ci_cd": {
       "runner": "GitHub Actions (ubuntu-latest, JDK 17)",
@@ -41,73 +41,96 @@
     }
   },
   "model_artifacts": {
-    "total_size_mb": 290,
-    "backbone_dir": "app/src/main/assets/vieneu/backbone/",
+    "total_size_mb": 420,
+    "backbone_fp32_dir": "app/src/main/assets/vieneu/backbone/",
+    "backbone_int8_dir": "app/src/main/assets/vieneu/backbone_int8/",
+    "codec_dir": "app/src/main/assets/vieneu/codec/",
+    "quantization_pipeline": "tools/quantize_models.py",
     "files": [
-      "vieneu_prefill.onnx (1.1MB)",
-      "vieneu_decode_step.onnx (1.1MB)",
-      "vieneu_acoustic_cached.onnx (6.9MB)",
-      "vieneu_backbone_shared.data (100MB)",
-      "vieneu_v3_heads.npz (50MB)",
-      "moss_audio_tokenizer_decode_full.onnx (668KB)",
-      "moss_audio_tokenizer_decode_shared.data (43MB)",
-      "moss_audio_tokenizer_decode_step.onnx (344KB)",
-      "denoiser.onnx (41MB)",
-      "sea_g2p.bin (60MB)"
+      "vieneu_prefill.onnx",
+      "vieneu_decode_step.onnx",
+      "vieneu_acoustic_cached.onnx",
+      "vieneu_backbone_shared.data",
+      "vieneu_v3_heads.npz",
+      "moss_audio_tokenizer_decode_full.onnx",
+      "moss_audio_tokenizer_decode_shared.data",
+      "moss_audio_tokenizer_decode_step.onnx",
+      "denoiser.onnx",
+      "sea_g2p.bin"
     ]
   },
   "features": [
     {
-      "name": "TTS Timing Diagnostics & Telemetry",
-      "status": "Implemented",
-      "components": ["TtsMetricsLogger", "DebugLogger", "SettingsActivity"]
+      "name": "Tri-Layer Concurrency Defense & Activity Guard",
+      "status": "Implemented & Verified",
+      "components": [
+        "AndroidManifest.xml (singleTop launchMode)",
+        "StoryDetailActivity.onNewIntent",
+        "ReadingService.prepareStory (preparedStoryId guard)",
+        "StoryDetailActivity.loadStoryContent (loadedStoryId & isLoadingContent guards)"
+      ]
     },
     {
-      "name": "Smart Vietnamese Text Segmentation",
-      "status": "Implemented",
-      "components": ["SmartTextSegmenter", "TextChunk", "PauseType", "PauseConfig"]
+      "name": "User-Selectable AI Model Precision (INT8 / FP32)",
+      "status": "Implemented & Verified",
+      "components": [
+        "cardModelPrecision (SettingsActivity)",
+        "UserConfig.KEY_TTS_PRECISION",
+        "ReadingService.ACTION_SWITCH_PRECISION",
+        "VieNeuTTSManager.setPrecision",
+        "OnnxSessionManager.getBackboneDir"
+      ]
     },
     {
-      "name": "Natural Pause & Anti-Starvation Audio Pipeline",
-      "status": "Implemented",
-      "components": ["TTSAudioPipeline", "PcmUtils (generateSilence, applyMicroFade)", "AudioPlayer"]
+      "name": "AI Performance Diagnostic & Self-Logging Engine",
+      "status": "Implemented & Verified",
+      "components": ["TtsMetricsLogger", "DevicePerformanceHelper", "AiDiagnosticFlag", "StageLatencyBreakdown"]
     },
     {
-      "name": "Cadence & Pause Customization in Settings",
-      "status": "Implemented",
-      "components": ["UserConfig", "SettingsActivity", "activity_settings.xml"]
+      "name": "Model Quantization Pipeline (Dynamic INT8 & FP16 NNAPI)",
+      "status": "Implemented & Verified",
+      "components": ["quantize_models.py", "test_quantization_pipeline.py"]
     },
     {
-      "name": "End-to-End On-Device Hardware Testing & Benchmarking",
-      "status": "Implemented & Passed",
-      "components": ["TTSNaturalReadingDeviceTest (Story 118 on Android 15)", "benchmark_report.md"]
+      "name": "Quantized Engine Integration & Execution Provider Selection",
+      "status": "Implemented & Verified",
+      "components": ["OnnxSessionManager", "VieNeuOnnxEngine", "DevicePerformanceHelper.getBigCoreCount"]
     },
     {
-      "name": "Automated CI/CD & Signed Release Pipeline",
-      "status": "Implemented & Active",
-      "components": [".github/workflows/android.yml", "app/build.gradle.kts (signingConfigs)"]
+      "name": "Dynamic Adaptive Pre-Buffering (7500ms Target)",
+      "status": "Implemented & Verified",
+      "components": ["TTSAudioPipeline", "PrewarmedChunkCache"]
+    },
+    {
+      "name": "Optimized Vietnamese Text Chunking",
+      "status": "Implemented & Verified",
+      "components": ["SmartTextSegmenter", "TextChunk", "PauseConfig"]
     }
   ],
   "decisions_made": [
     {
-      "decision": "100% Offline On-Device on Android Phone",
-      "reason": "Saves PC electricity (0 VND electricity/server cost), reads stories completely offline anywhere."
+      "decision": "SingleTop Launch Mode for StoryDetailActivity",
+      "reason": "Eliminates duplicate activity instances when tapping stories multiple times or returning from notifications."
     },
     {
-      "decision": "Use CPU ONNX int8 for VieNeu",
-      "reason": "Extremely lightweight (~500MB RAM, 0% GPU VRAM overhead), fast enough on mobile CPU."
+      "decision": "Tri-Layer Defense for Story Preparation & Content Fetching",
+      "reason": "Prevents redundant network calls (Layer 3), avoids duplicate ONNX background preparation jobs (Layer 2), and stops activity stacking (Layer 1)."
     },
     {
-      "decision": "Chunking & Pre-buffering Pipeline",
-      "reason": "Sentence-level chunking ensures time-to-first-audio ~2.2s and gapless playback between sentences."
+      "decision": "Default Precision set to INT8",
+      "reason": "Saves ~30% RAM (802MB vs 1148MB) and improves RTF to ~0.83-0.90x on mobile devices without perceptible audio degradation."
     },
     {
-      "decision": "Unified Audio Buffer per Chunk",
-      "reason": "Combining synthesized speech with pause silence in a single buffer avoids polling starvation glitches."
+      "decision": "Dynamic INT8 on CPU / XNNPACK Execution Provider",
+      "reason": "Quantizes MatMul/Gemm while preserving Conv float precision, achieving ~50% model size reduction with high audio quality."
     },
     {
-      "decision": "Exclude private Keystore from Git",
-      "reason": "Keystore is injected at build-time via GitHub Secrets Base64 decoding, preventing credential exposure."
+      "decision": "Dynamic Precision Hot-Reloading in VieNeuTTSManager",
+      "reason": "Invalidates prewarmed cache, recreates ONNX session manager without service restart, and emits telemetry update."
+    },
+    {
+      "decision": "Precision Card Visibility Binding to VieNeu Engine",
+      "reason": "Automatically hides precision selector when Google TTS is active and shows when VieNeu TTS is active."
     }
   ]
 }

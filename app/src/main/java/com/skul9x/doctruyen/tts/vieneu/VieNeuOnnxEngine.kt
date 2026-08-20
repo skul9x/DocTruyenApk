@@ -31,6 +31,12 @@ class VieNeuOnnxEngine(
     val xvecLnEps: Float = 1e-5f
 ) : AutoCloseable {
 
+    val quantizationType: OnnxSessionManager.QuantizationType
+        get() = sessionManager.quantizationType
+
+    val executionProvider: String
+        get() = sessionManager.executionProvider
+
     private val lock = ReentrantLock()
     private val env: OrtEnvironment get() = sessionManager.env
 
@@ -902,8 +908,12 @@ class VieNeuOnnxEngine(
     companion object {
         private const val TAG = "VieNeuOnnxEngine"
 
-        fun create(context: Context, threads: Int = 0): VieNeuOnnxEngine {
-            val sessionManager = OnnxSessionManager.create(context, threads)
+        fun create(
+            context: Context,
+            threads: Int = 0,
+            precision: String = "INT8"
+        ): VieNeuOnnxEngine {
+            val sessionManager = OnnxSessionManager.create(context, threads, precision)
 
             val configStr = context.assets.open("${VieNeuConfig.BACKBONE_DIR}/config.json")
                 .bufferedReader(Charsets.UTF_8).use { it.readText() }
