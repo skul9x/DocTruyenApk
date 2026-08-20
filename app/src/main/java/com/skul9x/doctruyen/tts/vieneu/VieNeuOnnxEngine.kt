@@ -57,6 +57,18 @@ class VieNeuOnnxEngine(
         FloatArray(audioEmbeddings[ch].size)
     }
 
+    data class InferenceTiming(
+        val backboneDurationMs: Long,
+        val codecDurationMs: Long
+    ) {
+        val totalDurationMs: Long get() = backboneDurationMs + codecDurationMs
+    }
+
+    data class EngineInferenceResult(
+        val pcm: FloatArray,
+        val timing: InferenceTiming
+    )
+
     fun infer(
         phonemes: String,
         voiceName: String = "Trúc Ly",
@@ -66,19 +78,15 @@ class VieNeuOnnxEngine(
         maxNewFrames: Int = 600,
         repetitionPenalty: Float = 1.2f
     ): FloatArray {
-        val preset = VoicePresets.getVoice(voiceName)
-        val spkEmb = preset?.speakerEmb
-        val refCodes = preset?.codes
-        return infer(
+        return inferWithTiming(
             phonemes = phonemes,
-            speakerEmb = spkEmb,
-            refCodes = refCodes,
+            voiceName = voiceName,
             temperature = temperature,
             topK = topK,
             topP = topP,
             maxNewFrames = maxNewFrames,
             repetitionPenalty = repetitionPenalty
-        )
+        ).pcm
     }
 
     fun infer(
@@ -90,7 +98,54 @@ class VieNeuOnnxEngine(
         topP: Float = 0.95f,
         maxNewFrames: Int = 600,
         repetitionPenalty: Float = 1.2f
-    ): FloatArray = lock.withLock {
+    ): FloatArray {
+        return inferWithTiming(
+            phonemes = phonemes,
+            speakerEmb = speakerEmb,
+            refCodes = refCodes,
+            temperature = temperature,
+            topK = topK,
+            topP = topP,
+            maxNewFrames = maxNewFrames,
+            repetitionPenalty = repetitionPenalty
+        ).pcm
+    }
+
+    fun inferWithTiming(
+        phonemes: String,
+        voiceName: String = "Trúc Ly",
+        temperature: Float = 0.8f,
+        topK: Int = 25,
+        topP: Float = 0.95f,
+        maxNewFrames: Int = 600,
+        repetitionPenalty: Float = 1.2f
+    ): EngineInferenceResult {
+        val preset = VoicePresets.getVoice(voiceName)
+        val spkEmb = preset?.speakerEmb
+        val refCodes = preset?.codes
+        return inferWithTiming(
+            phonemes = phonemes,
+            speakerEmb = spkEmb,
+            refCodes = refCodes,
+            temperature = temperature,
+            topK = topK,
+            topP = topP,
+            maxNewFrames = maxNewFrames,
+            repetitionPenalty = repetitionPenalty
+        )
+    }
+
+    fun inferWithTiming(
+        phonemes: String,
+        speakerEmb: FloatArray?,
+        refCodes: Array<IntArray>?,
+        temperature: Float = 0.8f,
+        topK: Int = 25,
+        topP: Float = 0.95f,
+        maxNewFrames: Int = 600,
+        repetitionPenalty: Float = 1.2f
+    ): EngineInferenceResult = lock.withLock {
+        val backboneStart = System.currentTimeMillis()
         val anchor = speakerAnchor(speakerEmb)
         val styleId = config.defaultStyleTokenId
         val rows = buildRows(phonemes, refCodes, styleId)
@@ -230,12 +285,30 @@ class VieNeuOnnxEngine(
         for (ct in pastK) ct.recycle()
         for (ct in pastV) ct.recycle()
 
+        val backboneDuration = System.currentTimeMillis() - backboneStart
+
         if (frames.isEmpty()) {
-            return FloatArray(0)
+            return EngineInferenceResult(
+                pcm = FloatArray(0),
+                timing = InferenceTiming(
+                    backboneDurationMs = backboneDuration,
+                    codecDurationMs = 0L
+                )
+            )
         }
 
         // 3. MOSS Codec Decode
-        return decodeCodes(frames)
+        val codecStart = System.currentTimeMillis()
+        val pcm = decodeCodes(frames)
+        val codecDuration = System.currentTimeMillis() - codecStart
+
+        return EngineInferenceResult(
+            pcm = pcm,
+            timing = InferenceTiming(
+                backboneDurationMs = backboneDuration,
+                codecDurationMs = codecDuration
+            )
+        )
     }
 
     private fun acousticFrame(

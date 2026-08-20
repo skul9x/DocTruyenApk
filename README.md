@@ -68,17 +68,22 @@ flowchart TD
 
 ---
 
-## 📊 Kết Quả Benchmark Trên Thiết Bị Thật (Physical Device)
+## 📊 Kết Quả Đo Đạc Thực Tế Trên Thiết Bị Hàng Ngày (Real-World Device)
 
-Được đo đạc thực tế trên thiết bị Android vật lý (Android 15, ARM64-v8a) qua test suite `TTSNaturalReadingDeviceTest`:
+Được ghi nhận trực tiếp từ telemetry telemetry engine (`TtsMetricsLogger`) trên thiết bị Android thực tế hàng ngày (Android 10 Mobile, đọc truyện *"Một trí khôn hơn trăm trí khôn"* - 19 chunks, 75.3s audio):
 
-| Chỉ số (Metric) | Kết quả thực tế | Mục tiêu thiết kế | Đánh giá |
+| Chỉ số (Metric) | Kết quả thực tế (Thiết bị hàng ngày) | Mức chuẩn mong muốn | Đánh giá & Hiện trạng |
 | :--- | :--- | :--- | :--- |
-| **Time To First Track (TTFT)** | **2,242 ms** | < 3,000 ms | 🟢 **Xuất sắc (Đạt)** |
-| **Mean Real-Time Factor (RTF)** | **0.443x** | < 0.650x | 🟢 **Nhanh hơn thời gian thực 2.25x** |
-| **Buffer Underruns / Giật lag** | **0 lần** | 0 lần | 🟢 **Mượt mà hoàn toàn** |
-| **P90 Chunk Inference** | **1,812 ms** | < 2,500 ms | 🟢 **Đạt chuẩn** |
-| **Bộ nhớ RAM sử dụng (Peak RAM)** | **~520 MB** | < 800 MB | 🟢 **Ổn định, không leak** |
+| **Time To First Audio (TTFT)** | **5,009 ms** (~5.0s) | < 3,000 ms | ⚠️ **Hơi chậm ở câu đầu tiên** |
+| **Mean Real-Time Factor (Avg RTF)** | **0.94x** (Có câu lên **1.01x**) | < 0.650x | ⚠️ **Tiệm cận 1.0x (CPU chạy 94.1% thời gian)** |
+| **P90 Chunk Inference** | **6,805 ms – 7,511 ms** | < 2,500 ms | ⚠️ **Câu dài (~120 ký tự) mất ~7.5s xử lý** |
+| **Tổng thời gian CPU chạy AI** | **70,828 ms / 75,280 ms** | Nghỉ > 50% | 🔴 **CPU chạy 94.1% liên tục $\rightarrow$ Gây nóng máy** |
+| **Buffer Underruns / Khựng âm** | **1 lần** (Trễ 167ms ở Chunk #2) | 0 lần | ⚠️ **Cần tối ưu Pacing & Pre-buffering** |
+| **Bộ nhớ RAM sử dụng (Peak RAM)** | **~520 MB** | < 800 MB | 🟢 **Ổn định, không leak RAM** |
+
+> 💡 **Nhận xét & Khuyến nghị thực tế:** 
+> - Trên các thiết bị tầm trung/thông dụng, mô hình AI VieNeu chạy liên tục trên CPU khiến máy bị ấm lên do tải tính toán cao (RTF ~0.94x).
+> - Để máy luôn mát và tiết kiệm pin, người dùng có thể linh hoạt chuyển sang **Google TTS** trong Cài đặt (CPU < 2%, máy hoàn toàn mát lạnh).
 
 ---
 

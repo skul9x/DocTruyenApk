@@ -78,6 +78,21 @@ class AndroidMediaSession(private val mediaSession: MediaSessionCompat) : IMedia
         get() = mediaSession.sessionToken
 }
 
+interface INotificationManagerWrapper {
+    fun notify(id: Int, notification: Notification)
+    fun cancel(id: Int)
+}
+
+class AndroidNotificationManagerWrapper(private val manager: NotificationManager) : INotificationManagerWrapper {
+    override fun notify(id: Int, notification: Notification) {
+        manager.notify(id, notification)
+    }
+
+    override fun cancel(id: Int) {
+        manager.cancel(id)
+    }
+}
+
 class ReadingService : Service() {
 
     companion object {
@@ -117,6 +132,12 @@ class ReadingService : Service() {
     var mediaSession: IMediaSessionWrapper? = null
         internal set
 
+    var notificationManager: INotificationManagerWrapper? = null
+        internal set
+
+    private var lastNotifiedState: ITTSManager.TTSState? = null
+    private var lastNotifiedTitle: String? = null
+
     inner class ReadingBinder : Binder() {
         fun getService(): ReadingService = this@ReadingService
     }
@@ -125,8 +146,20 @@ class ReadingService : Service() {
         super.onCreate()
         initWakeLock()
         initMediaSession()
+        initNotificationManager()
         createNotificationChannel()
         initTTS()
+    }
+
+    private fun initNotificationManager() {
+        try {
+            val rawManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (rawManager != null) {
+                notificationManager = AndroidNotificationManagerWrapper(rawManager)
+            }
+        } catch (e: Throwable) {
+            DebugLogger.logError("ReadingService", "Failed to initialize NotificationManager wrapper: ${e.message}", e)
+        }
     }
 
     private fun initWakeLock() {
@@ -230,38 +263,41 @@ class ReadingService : Service() {
             onStateChange = { state ->
                 DebugLogger.log("ReadingService", "📡 TTSManager callback: state=$state, previousState=$currentState", LogType.INFO)
                 val previousState = currentState
+                val isStateChanged = previousState != state
                 currentState = state
                 
-                updateMediaSessionState(state)
+                if (isStateChanged) {
+                    updateMediaSessionState(state)
 
-                // Manage WakeLock based on TTS state
-                if (state == ITTSManager.TTSState.PLAYING) {
-                    acquireWakeLock()
-                } else if (state == ITTSManager.TTSState.PAUSED ||
-                    state == ITTSManager.TTSState.READY ||
-                    state == ITTSManager.TTSState.IDLE ||
-                    state == ITTSManager.TTSState.ERROR) {
-                    releaseWakeLock()
-                }
-
-                // Only update notification for relevant states
-                if (state == ITTSManager.TTSState.PLAYING || state == ITTSManager.TTSState.PAUSED) {
-                    updateNotification(state)
-                } else if (state == ITTSManager.TTSState.READY || state == ITTSManager.TTSState.IDLE) {
-                    // Determine if we finished playing naturally
-                    if (previousState == ITTSManager.TTSState.PLAYING) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    } else {
-                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                         manager.cancel(NOTIFICATION_ID)
+                    // Manage WakeLock based on TTS state
+                    if (state == ITTSManager.TTSState.PLAYING) {
+                        acquireWakeLock()
+                    } else if (state == ITTSManager.TTSState.PAUSED ||
+                        state == ITTSManager.TTSState.READY ||
+                        state == ITTSManager.TTSState.IDLE ||
+                        state == ITTSManager.TTSState.ERROR) {
+                        releaseWakeLock()
                     }
-                    // Reset progress when stopped/ready
-                    progressCallback?.invoke(0)
-                } else if (state == ITTSManager.TTSState.ERROR) {
-                     stopForeground(STOP_FOREGROUND_REMOVE)
+
+                    // Only update notification for relevant state transitions
+                    if (state == ITTSManager.TTSState.PLAYING || state == ITTSManager.TTSState.PAUSED) {
+                        updateNotification(state)
+                    } else if (state == ITTSManager.TTSState.READY || state == ITTSManager.TTSState.IDLE) {
+                        // Determine if we finished playing naturally
+                        if (previousState == ITTSManager.TTSState.PLAYING) {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                        } else {
+                             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                             manager.cancel(NOTIFICATION_ID)
+                        }
+                        // Reset progress when stopped/ready
+                        progressCallback?.invoke(0)
+                    } else if (state == ITTSManager.TTSState.ERROR) {
+                         stopForeground(STOP_FOREGROUND_REMOVE)
+                    }
+                    
+                    stateCallback?.invoke(state)
                 }
-                
-                stateCallback?.invoke(state)
             },
             onProgressChange = { progress ->
                 progressCallback?.invoke(progress)
@@ -345,6 +381,8 @@ class ReadingService : Service() {
         }
         // Use speakWithTitlePause for natural pause between title and content
         ttsManager?.speakWithTitlePause(title, content, storyId = storyId)
+        lastNotifiedState = ITTSManager.TTSState.PLAYING
+        lastNotifiedTitle = title
         startForeground(NOTIFICATION_ID, buildNotification(ITTSManager.TTSState.PLAYING))
     }
 
@@ -365,6 +403,8 @@ class ReadingService : Service() {
         releaseWakeLock()
         currentStoryId = 0
         currentStoryTitle = ""
+        lastNotifiedState = null
+        lastNotifiedTitle = null
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
     
@@ -386,14 +426,24 @@ class ReadingService : Service() {
         }
     }
 
+    var notificationBuilder: ((ITTSManager.TTSState) -> Notification)? = null
+        internal set
+
     private fun updateNotification(state: ITTSManager.TTSState) {
         if (state == ITTSManager.TTSState.PLAYING || state == ITTSManager.TTSState.PAUSED) {
-            val notification = buildNotification(state)
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, notification)
+            if (lastNotifiedState == state && lastNotifiedTitle == currentStoryTitle) {
+                return
+            }
+            lastNotifiedState = state
+            lastNotifiedTitle = currentStoryTitle
+            val notification = notificationBuilder?.invoke(state) ?: buildNotification(state)
+            val manager = notificationManager ?: (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.let { AndroidNotificationManagerWrapper(it) }
+            manager?.notify(NOTIFICATION_ID, notification)
         } else {
-             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-             manager.cancel(NOTIFICATION_ID)
+            lastNotifiedState = null
+            lastNotifiedTitle = null
+            val manager = notificationManager ?: (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.let { AndroidNotificationManagerWrapper(it) }
+            manager?.cancel(NOTIFICATION_ID)
         }
     }
 

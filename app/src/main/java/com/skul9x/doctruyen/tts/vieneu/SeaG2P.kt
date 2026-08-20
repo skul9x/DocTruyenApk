@@ -8,15 +8,23 @@ object SeaG2P {
             val fallbackPaths = listOf(
                 "sea-g2p-android/target/release/libsea_g2p_android.so",
                 "../sea-g2p-android/target/release/libsea_g2p_android.so",
-                "/home/skul9x/Desktop/Test_code/DocTruyenApk-main/sea-g2p-android/target/release/libsea_g2p_android.so"
+                "/home/skul9x/Desktop/Test_code/DocTruyenApk-main/sea-g2p-android/target/release/libsea_g2p_android.so",
+                "src/main/jniLibs/x86_64/libsea_g2p_android.so",
+                "app/src/main/jniLibs/x86_64/libsea_g2p_android.so",
+                "../app/src/main/jniLibs/x86_64/libsea_g2p_android.so",
+                "/home/skul9x/Desktop/Test_code/DocTruyenApk-main/app/src/main/jniLibs/x86_64/libsea_g2p_android.so"
             )
             var loaded = false
             for (path in fallbackPaths) {
                 val file = java.io.File(path)
                 if (file.exists()) {
-                    System.load(file.absolutePath)
-                    loaded = true
-                    break
+                    try {
+                        System.load(file.absolutePath)
+                        loaded = true
+                        break
+                    } catch (t: Throwable) {
+                        // Try next fallback path
+                    }
                 }
             }
             if (!loaded) {

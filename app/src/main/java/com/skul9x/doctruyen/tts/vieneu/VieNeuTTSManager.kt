@@ -67,6 +67,9 @@ class VieNeuTTSManager(
     }
 
     private fun notifyStateChange(state: ITTSManager.TTSState) {
+        if (currentState == state) {
+            return
+        }
         currentState = state
         try {
             onStateChange(state)
@@ -305,7 +308,6 @@ class VieNeuTTSManager(
             return
         }
 
-        TtsMetricsLogger.startSession(storyTitle = content.take(30))
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
         val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
@@ -344,7 +346,6 @@ class VieNeuTTSManager(
             return
         }
 
-        TtsMetricsLogger.startSession(storyTitle = title)
         notifyStateChange(TTSState.PLAYING)
         pipe.voiceName = voiceName
         val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()

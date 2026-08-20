@@ -127,6 +127,9 @@ class GoogleTTSManager(
     }
 
     private fun notifyStateChange(state: ITTSManager.TTSState) {
+        if (currentState == state) {
+            return
+        }
         currentState = state
         try {
             onStateChange(state)

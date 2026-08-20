@@ -63,6 +63,9 @@ class StoryDetailActivity : AppCompatActivity() {
     // Pre-warming state
     private var isPrewarmTriggered = false
     
+    // UI state cache to prevent redundant widget re-rendering
+    private var lastRenderedState: com.skul9x.doctruyen.tts.ITTSManager.TTSState? = null
+    
     private val serviceConnection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
             DebugLogger.log(TAG, "✅ Service connected", LogType.INFO)
@@ -417,6 +420,10 @@ class StoryDetailActivity : AppCompatActivity() {
     }
     
     private fun updateTTSUI(state: com.skul9x.doctruyen.tts.ITTSManager.TTSState) {
+        if (lastRenderedState == state) {
+            return
+        }
+        lastRenderedState = state
         DebugLogger.log(TAG, "🎨 updateTTSUI: state=$state", LogType.INFO)
         
         val progressTts = findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.progressTts)

@@ -77,6 +77,7 @@ class TTSAudioPipeline(
     private var progressCallback: ((Int) -> Unit)? = null
 
     private fun setState(state: PipelineState) {
+        if (currentState == state) return
         currentState = state
         try {
             stateCallback?.invoke(state)
@@ -115,6 +116,15 @@ class TTSAudioPipeline(
         }
 
         requestAudioFocus()
+        val engineThreads = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val quant = "FP32"
+        TtsMetricsLogger.startSession(
+            storyId = if (storyId != 0) storyId.toString() else "",
+            storyTitle = chunks.firstOrNull()?.text?.take(30) ?: "",
+            context = context,
+            engineThreads = engineThreads,
+            quantization = quant
+        )
         startPipeline(startIndex = 0, storyId = storyId)
     }
 
@@ -214,6 +224,7 @@ class TTSAudioPipeline(
         stopInternal(resetIndex = true)
         abandonAudioFocus()
         notifyProgress(0)
+        TtsMetricsLogger.endSession(context)
         setState(PipelineState.Idle)
     }
 
@@ -300,31 +311,23 @@ class TTSAudioPipeline(
                     val phonemeCount = phonemes.count { it == ' ' } + 1
                     if (!isActive) break
 
-                    // 2. Probe ONNX neural inference time
+                    // 2. Probe ONNX neural inference time (backbone + codec)
                     val inferStart = System.currentTimeMillis()
-                    val pcmFloat = withContext(NonCancellable) {
-                        engine.infer(phonemes = phonemes, voiceName = voiceName)
+                    val inferResult = withContext(NonCancellable) {
+                        engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName)
                     }
                     val inferDuration = System.currentTimeMillis() - inferStart
+                    val pcmFloat = inferResult.pcm
+                    val backboneDuration = inferResult.timing.backboneDurationMs
+                    val codecDuration = inferResult.timing.codecDurationMs
                     if (!isActive) break
 
-                    // Convert to 16-bit PCM and apply micro-fade to eliminate pop/click
+                    // 3. Audio/PCM post-processing (floatToShort conversion, applyMicroFade, and generateSilence concatenation)
+                    val audioProcessStart = System.currentTimeMillis()
                     val rawPcm16 = PcmUtils.floatToShort(pcmFloat)
                     val speechPcm = PcmUtils.applyMicroFade(rawPcm16)
                     val audioDurationMs = (speechPcm.size * 1000L) / VieNeuConfig.SAMPLE_RATE
                     val pauseMs = chunk.pauseDurationMs.toLong()
-
-                    // Record chunk synthesis metrics
-                    TtsMetricsLogger.recordChunkSynthesis(
-                        chunkIndex = i,
-                        totalChunks = totalChunks,
-                        text = chunk.text,
-                        phonemeCount = phonemeCount,
-                        phonemizeDurationMs = g2pDuration,
-                        inferenceDurationMs = inferDuration,
-                        audioDurationMs = audioDurationMs,
-                        pauseDurationMs = pauseMs
-                    )
 
                     // Append silence if pause is specified into one unified audio buffer
                     val combinedPcm = if (pauseMs > 0L) {
@@ -340,6 +343,22 @@ class TTSAudioPipeline(
                     } else {
                         speechPcm
                     }
+                    val audioProcessDuration = System.currentTimeMillis() - audioProcessStart
+
+                    // Record chunk synthesis metrics with complete stage breakdown
+                    TtsMetricsLogger.recordChunkSynthesis(
+                        chunkIndex = i,
+                        totalChunks = totalChunks,
+                        text = chunk.text,
+                        phonemeCount = phonemeCount,
+                        phonemizeDurationMs = g2pDuration,
+                        inferenceDurationMs = inferDuration,
+                        audioDurationMs = audioDurationMs,
+                        pauseDurationMs = pauseMs,
+                        backboneDurationMs = backboneDuration,
+                        codecDurationMs = codecDuration,
+                        audioProcessDurationMs = audioProcessDuration
+                    )
 
                     // Enqueue unified chunk buffer
                     chunkQueue.add(Pair(i, combinedPcm))
@@ -434,7 +453,7 @@ class TTSAudioPipeline(
                     audioPlayer.stop()
                     abandonAudioFocus()
                     notifyProgress(100)
-                    TtsMetricsLogger.endSession()
+                    TtsMetricsLogger.endSession(context)
                     setState(PipelineState.Idle)
                 }
             } catch (e: CancellationException) {
