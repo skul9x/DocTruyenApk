@@ -10,8 +10,10 @@ import java.nio.IntBuffer
 import java.nio.LongBuffer
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -238,6 +240,7 @@ class VieNeuOnnxEngine(
         }
 
         // 2. Autoregressive Loop
+        val effectiveMaxFrames = min(maxNewFrames, maxExpectedFrames(phonemes))
         val frames = ArrayList<IntArray>()
         val hist = if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f) {
             Array(config.nVq) { HashSet<Int>() }
@@ -248,7 +251,7 @@ class VieNeuOnnxEngine(
         val nextKList = ArrayList<CacheTensor>(L)
         val nextVList = ArrayList<CacheTensor>(L)
 
-        for (t in 0 until maxNewFrames) {
+        for (t in 0 until effectiveMaxFrames) {
             val (codes, eos) = acousticFrame(
                 h = h,
                 temperature = temperature,
@@ -971,6 +974,23 @@ class VieNeuOnnxEngine(
 
     companion object {
         private const val TAG = "VieNeuOnnxEngine"
+
+        const val MAX_FRAMES_PER_PHONE: Double = 2.0
+        const val FRAME_CAP_SLACK: Int = 24
+        const val SINGLE_WORD_MAX_FRAMES: Int = 13
+        const val SINGLE_WORD_MAX_PHONES: Int = 24
+        private val FRAME_MARKUP_RE = Regex("""<\|emotion_\d+\|>|</?en>""")
+
+        fun maxExpectedFrames(phonemes: String): Int {
+            val stripped = FRAME_MARKUP_RE.replace(phonemes, "")
+            val effLen = stripped.length
+            var cap = FRAME_CAP_SLACK + ceil(MAX_FRAMES_PER_PHONE * effLen).toInt()
+            val words = stripped.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+            if (words.size <= 1 && effLen <= SINGLE_WORD_MAX_PHONES && !phonemes.contains("<|emotion_")) {
+                cap = min(cap, SINGLE_WORD_MAX_FRAMES)
+            }
+            return cap
+        }
 
         fun create(
             context: Context,

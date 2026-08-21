@@ -1,5 +1,24 @@
 # Changelog - DocTruyen Android App
 
+## [v1.11] - [2026-08-21] Đồng Bộ VieNeu-TTS v3 Turbo Upstream: Voice Presets, Adaptive Frame Capping, Quote-Aware Segmentation & Punc Normalization
+### Added & Improved
+- **Đồng Bộ Hóa 10 Giọng Đọc Chuẩn Upstream (`VoicePresets.kt`, `voices_v3_turbo.json`)**:
+  - Cập nhật đầy đủ 10 voice presets chuẩn v3 Turbo: `vi_female_1_v3_turbo` -> `vi_female_5_v3_turbo` và `vi_male_1_v3_turbo` -> `vi_male_5_v3_turbo` với metadata tên hiển thị, giới tính, vùng miền và mô tả chi tiết.
+  - Tự động chuyển đổi an toàn các voice key cũ (`hn_female_x`, `sg_male_x`) về voice v3 turbo tương ứng.
+- **Cắt Khung Thích Ứng Chống Lặp Âm Vô Tận (`VieNeuOnnxEngine.kt`)**:
+  - Porting công thức upstream: `maxFrames = max(80, min(1000, round(phoneCount * 2.2 + 20)))`.
+  - Giới hạn động số bước sinh âm thanh theo độ dài chuỗi âm vị đầu vào, triệt tiêu hoàn toàn nguy cơ suy luận vô tận (runaway inference) và tiết kiệm tài nguyên vi xử lý.
+- **Phân Đoạn Nhận Biết Trích Dẫn & Lời Thoại (`SmartTextSegmenter.kt`)**:
+  - Triển khai bộ quét ký tự `scanSentences()` O(n) thay thế regex, theo dõi độ sâu các cặp dấu ngoặc `( )`, `[ ]`, `{ }`, `“ ”`, `‘ ’`, `« »`, `‹ ›`, `「 」`, `『 』` và dấu nháy kép đối xứng `" "`.
+  - Ngăn chặn ngắt đôi câu đối thoại bên trong lời thoại (ví dụ: *Lan hỏi: "Anh đi đâu đấy?", rồi quay đi.* luôn là một câu thống nhất).
+  - Dự phòng thông minh (fallback `quoteAware = false`) khi gặp dấu nháy/ngoặc bị lệch trong văn bản.
+  - Bảo vệ số thập phân (`3.5 triệu`, `8.30 sáng`) và dấu lược tiếng Anh (`don't`).
+- **Chuẩn Hóa Dấu Câu Ngắt Nghỉ (`puncNorm` trong `SmartTextSegmenter.kt`)**:
+  - Chốt dấu kết câu `.` cho các đoạn ngắn (< 5 từ) và bổ sung dấu câu kết thúc cho các đoạn thiếu dấu để đảm bảo ngữ điệu (intonation) tự nhiên nhất.
+  - Gắn chặt dấu đóng ngoặc/nháy sau dấu câu vào vế trước.
+- **Bộ Kiểm Thử Toàn Diện**:
+  - Thêm `VoicePresetsSyncTest.kt`, `AdaptiveFrameCappingTest.kt`, `SmartDialogueSegmentationTest.kt` kiểm tra toàn bộ luồng chức năng.
+
 ## [v1.9] - [2026-08-21] Runtime Stability, Instant Cancellation & UI Optimization
 ### Added & Improved
 - **Phản Hồi Dừng Tức Thì & Giới Hạn Luồng CPU (`TTSAudioPipeline.kt`, `OnnxSessionManager.kt`)**:

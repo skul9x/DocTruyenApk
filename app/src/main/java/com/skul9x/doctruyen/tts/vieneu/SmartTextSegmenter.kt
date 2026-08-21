@@ -101,8 +101,8 @@ object SmartTextSegmenter {
             val trimmedPara = paragraph.trim()
             if (trimmedPara.isEmpty()) continue
 
-            // Split paragraph into sentences by [.!?…] followed by space or end of string
-            val rawSentences = trimmedPara.split(SENTENCE_SPLIT_REGEX)
+            // Split paragraph into sentences with quote/bracket depth awareness
+            val rawSentences = splitIntoSentences(trimmedPara)
 
             val paraChunks = mutableListOf<Pair<String, PauseType>>()
 
@@ -139,10 +139,11 @@ object SmartTextSegmenter {
                 val isParaEnd = (pIdx == paraChunks.size - 1)
                 val restoredText = restoreSpecialPatterns(item.first, placeholders).trim()
                 if (restoredText.isNotEmpty()) {
+                    val normalizedText = puncNorm(restoredText)
                     chunks.add(
                         TextChunk(
                             index = chunkIndex++,
-                            text = restoredText,
+                            text = normalizedText,
                             pauseType = item.second,
                             pauseDurationMs = pauseConfig.getDurationFor(item.second),
                             isParagraphEnd = isParaEnd
@@ -192,6 +193,129 @@ object SmartTextSegmenter {
         return result
     }
 
+    private val OPEN_TO_CLOSE: Map<Char, Char> = mapOf(
+        '(' to ')',
+        '[' to ']',
+        '{' to '}',
+        '“' to '”',
+        '‘' to '’',
+        '«' to '»',
+        '‹' to '›',
+        '「' to '」',
+        '『' to '』'
+    )
+    private val OPENERS: Set<Char> = OPEN_TO_CLOSE.keys
+    private val CLOSERS: Set<Char> = OPEN_TO_CLOSE.values.toSet()
+    private const val SYMMETRIC_QUOTE: Char = '"'
+    private val SENT_END_CHARS: Set<Char> = setOf('.', '!', '?', '…')
+    private val TRAILING_CLOSE: Set<Char> = CLOSERS + setOf('"', '\'', '’', '”')
+
+    /**
+     * Scan [text] character by character to split sentences at terminal punctuation
+     * (. ! ? …) that does NOT occur within quotes or brackets.
+     *
+     * @return Pair of (sentences, isBalanced). When isBalanced is false, brackets/quotes were unbalanced.
+     */
+    fun scanSentences(text: String, quoteAware: Boolean = true): Pair<List<String>, Boolean> {
+        if (text.isBlank()) return Pair(emptyList(), true)
+        val sentences = mutableListOf<String>()
+        val n = text.length
+        var start = 0
+        var i = 0
+        var depth = 0
+        var inQuote = false
+
+        while (i < n) {
+            val ch = text[i]
+            if (quoteAware && ch == SYMMETRIC_QUOTE) {
+                inQuote = !inQuote
+            } else if (quoteAware && ch in OPENERS) {
+                depth++
+            } else if (quoteAware && ch in CLOSERS) {
+                if (depth > 0) {
+                    depth--
+                }
+            } else if (ch in SENT_END_CHARS && depth == 0 && !inQuote) {
+                var j = i + 1
+                while (j < n && text[j] in SENT_END_CHARS) {
+                    j++
+                }
+                while (j < n && text[j] in TRAILING_CLOSE) {
+                    j++
+                }
+                // Sentence boundary only if followed by whitespace or end of string (protects decimals like 3.5)
+                if (j >= n || text[j].isWhitespace()) {
+                    val sent = text.substring(start, j).trim()
+                    if (sent.isNotEmpty()) {
+                        sentences.add(sent)
+                    }
+                    start = j
+                    i = j
+                    continue
+                }
+                i = j
+                continue
+            }
+            i++
+        }
+
+        if (start < n) {
+            val sent = text.substring(start).trim()
+            if (sent.isNotEmpty()) {
+                sentences.add(sent)
+            }
+        }
+
+        val isBalanced = (depth == 0 && !inQuote)
+        return Pair(sentences, isBalanced)
+    }
+
+    /**
+     * Split text into sentences with quote awareness and fallback on unbalanced quotes.
+     */
+    fun splitIntoSentences(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        val (sentences, balanced) = scanSentences(text, quoteAware = true)
+        if (!balanced) {
+            return scanSentences(text, quoteAware = false).first
+        }
+        return sentences
+    }
+
+    /**
+     * Normalize chunk terminal punctuation according to VieNeu rules:
+     * - Short chunks (< 5 words) are guaranteed to end with a terminal period '.'.
+     * - Chunks missing terminal punctuation (., !, ?, …, ,) automatically append '.'.
+     * - Attached closing quotes or brackets (e.g. bao giờ?", thế à!)) stay bound with the preceding sentence.
+     */
+    fun puncNorm(chunk: String): String {
+        val trimmed = chunk.trim()
+        if (trimmed.isEmpty()) return ""
+
+        val words = trimmed.split(WHITESPACE_REGEX).filter { it.isNotEmpty() }
+        val lastChar = trimmed.last()
+
+        return if (words.size < 5) {
+            if (lastChar in SENT_END_CHARS || lastChar == ',') {
+                var i = trimmed.length - 1
+                while (i >= 0 && (trimmed[i] in SENT_END_CHARS || trimmed[i] == ',')) {
+                    i--
+                }
+                trimmed.substring(0, i + 1) + "."
+            } else if (lastChar in TRAILING_CLOSE) {
+                trimmed + "."
+            } else {
+                trimmed + "."
+            }
+        } else {
+            if (lastChar in SENT_END_CHARS || lastChar == ',') {
+                trimmed
+            } else {
+                trimmed + "."
+            }
+        }
+    }
+
     private val BR_REGEX = Regex("(?i)<br\\s*/?>")
     private val P_CLOSE_REGEX = Regex("(?i)</p>")
     private val DIV_CLOSE_REGEX = Regex("(?i)</div>")
@@ -199,7 +323,6 @@ object SmartTextSegmenter {
     private val TR_CLOSE_REGEX = Regex("(?i)</tr>")
     private val HTML_TAG_REGEX = Regex("<[^>]+>")
     private val NEWLINES_REGEX = Regex("\n+")
-    private val SENTENCE_SPLIT_REGEX = Regex("(?<=[.!?…])\\s+")
     private val CLAUSE_SPLIT_REGEX = Regex("(?<=[,;:—–-])\\s+|(?<=[—–])(?=[^\\s])")
     private val WHITESPACE_REGEX = Regex("\\s+")
 
