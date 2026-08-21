@@ -173,7 +173,6 @@ class PrecisionAssetAndConfigTest {
         val int8BackboneDir = File(assetsDir, "backbone_int8")
 
         assertTrue("FP32 backbone directory must exist", fp32BackboneDir.exists())
-        assertTrue("INT8 backbone_int8 directory must exist", int8BackboneDir.exists())
 
         // Verify FP32 models detection
         val fp32Prefill = File(fp32BackboneDir, "vieneu_prefill.onnx")
@@ -188,23 +187,25 @@ class PrecisionAssetAndConfigTest {
         assertEquals(OnnxSessionManager.QuantizationType.FP32, OnnxSessionManager.detectQuantizationType(fp32Decode.absolutePath))
         assertEquals(OnnxSessionManager.QuantizationType.FP32, OnnxSessionManager.detectQuantizationType(fp32Acoustic.absolutePath))
 
-        // Verify INT8 models detection (via embedded metadata_props or naming)
-        val int8Prefill = File(int8BackboneDir, "vieneu_prefill.onnx")
-        val int8Decode = File(int8BackboneDir, "vieneu_decode_step.onnx")
-        val int8Acoustic = File(int8BackboneDir, "vieneu_acoustic_cached.onnx")
+        // Verify INT8 models detection (if generated on disk)
+        if (int8BackboneDir.exists() && int8BackboneDir.list()?.isNotEmpty() == true) {
+            val int8Prefill = File(int8BackboneDir, "vieneu_prefill.onnx")
+            val int8Decode = File(int8BackboneDir, "vieneu_decode_step.onnx")
+            val int8Acoustic = File(int8BackboneDir, "vieneu_acoustic_cached.onnx")
 
-        assertTrue("INT8 prefill model exists", int8Prefill.exists())
-        assertTrue("INT8 decode model exists", int8Decode.exists())
-        assertTrue("INT8 acoustic model exists", int8Acoustic.exists())
+            assertTrue("INT8 prefill model exists", int8Prefill.exists())
+            assertTrue("INT8 decode model exists", int8Decode.exists())
+            assertTrue("INT8 acoustic model exists", int8Acoustic.exists())
 
-        assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Prefill.absolutePath))
-        assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Decode.absolutePath))
-        assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Acoustic.absolutePath))
+            assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Prefill.absolutePath))
+            assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Decode.absolutePath))
+            assertEquals(OnnxSessionManager.QuantizationType.INT8, OnnxSessionManager.detectQuantizationType(int8Acoustic.absolutePath))
 
-        // Ancillary files in int8 folder
-        assertTrue(File(int8BackboneDir, "config.json").exists())
-        assertTrue(File(int8BackboneDir, "tokenizer.json").exists())
-        assertTrue(File(int8BackboneDir, "vieneu_v3_heads.npz").exists())
+            // Ancillary files in int8 folder
+            assertTrue(File(int8BackboneDir, "config.json").exists())
+            assertTrue(File(int8BackboneDir, "tokenizer.json").exists())
+            assertTrue(File(int8BackboneDir, "vieneu_v3_heads.npz").exists())
+        }
     }
 
     @Test
@@ -214,10 +215,15 @@ class PrecisionAssetAndConfigTest {
             File("app/src/main/assets/vieneu")
         )
         val baseDir = rootDirs.first { it.exists() }
+        val int8Dir = File(baseDir, "backbone_int8")
 
-        // INT8 precision resolves to backbone_int8
+        // INT8 precision resolves to backbone_int8 if present, otherwise fallback to backbone
         val resolvedInt8 = OnnxSessionManager.getBackboneDir(baseDir, "INT8")
-        assertEquals(File(baseDir, "backbone_int8").absolutePath, resolvedInt8.absolutePath)
+        if (int8Dir.exists() && int8Dir.list()?.isNotEmpty() == true) {
+            assertEquals(int8Dir.absolutePath, resolvedInt8.absolutePath)
+        } else {
+            assertEquals(File(baseDir, "backbone").absolutePath, resolvedInt8.absolutePath)
+        }
 
         // FP32 precision resolves to backbone
         val resolvedFp32 = OnnxSessionManager.getBackboneDir(baseDir, "FP32")

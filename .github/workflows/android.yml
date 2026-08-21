@@ -98,6 +98,33 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > app/skul9x.jks
           cp app/skul9x.jks skul9x.jks
 
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Quantization Dependencies
+        run: |
+          pip install -r tools/requirements.txt
+
+      - name: Quantize VieNeu ONNX Models to Dynamic INT8
+        run: |
+          python tools/quantize_models.py \
+            --input-dir app/src/main/assets/vieneu/backbone \
+            --output-dir app/src/main/assets/vieneu/backbone_int8 \
+            --format int8
+
+      - name: Verify Quantized Assets
+        run: |
+          echo "=== Verifying Quantized INT8 Assets ==="
+          ls -lh app/src/main/assets/vieneu/backbone_int8 || true
+          if [ ! -d "app/src/main/assets/vieneu/backbone_int8" ] || [ -z "$(ls -A app/src/main/assets/vieneu/backbone_int8 2>/dev/null)" ]; then
+            echo "::warning::Quantized INT8 assets directory is missing or empty. Build will proceed with default assets."
+          else
+            echo "Quantized assets verified successfully."
+          fi
+
       - name: Build & Sign Release APK
         env:
           STORE_FILE: skul9x.jks

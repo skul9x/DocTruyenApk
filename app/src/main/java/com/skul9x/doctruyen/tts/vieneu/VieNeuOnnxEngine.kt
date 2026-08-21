@@ -940,15 +940,35 @@ class VieNeuOnnxEngine(
         ): VieNeuOnnxEngine {
             val sessionManager = OnnxSessionManager.create(context, threads, precision)
 
-            val configStr = context.assets.open("${VieNeuConfig.BACKBONE_DIR}/config.json")
+            val normPrecision = when (precision.trim().uppercase()) {
+                "INT8" -> "INT8"
+                "FP32" -> "FP32"
+                else -> "FP32"
+            }
+            val int8Assets = try { context.assets.list("vieneu/backbone_int8") } catch (_: Exception) { null }
+            val backboneAssetDir = if (normPrecision == "INT8" && !int8Assets.isNullOrEmpty()) {
+                "vieneu/backbone_int8"
+            } else {
+                VieNeuConfig.BACKBONE_DIR
+            }
+
+            fun openBackboneAsset(filename: String): java.io.InputStream {
+                return try {
+                    context.assets.open("$backboneAssetDir/$filename")
+                } catch (_: Exception) {
+                    context.assets.open("${VieNeuConfig.BACKBONE_DIR}/$filename")
+                }
+            }
+
+            val configStr = openBackboneAsset("config.json")
                 .bufferedReader(Charsets.UTF_8).use { it.readText() }
             val config = VieNeuConfig.fromJson(configStr)
 
-            val tokenizer = context.assets.open("${VieNeuConfig.BACKBONE_DIR}/tokenizer.json").use {
+            val tokenizer = openBackboneAsset("tokenizer.json").use {
                 VieNeuTokenizer.fromInputStream(it)
             }
 
-            val headsReader = context.assets.open("${VieNeuConfig.BACKBONE_DIR}/vieneu_v3_heads.npz").use {
+            val headsReader = openBackboneAsset("vieneu_v3_heads.npz").use {
                 NpzReader.read(it)
             }
 

@@ -269,6 +269,24 @@ class OnnxSessionManager(
             )
         }
 
+        @androidx.annotation.VisibleForTesting
+        var assetListProvider: ((Context, String) -> Array<String>?)? = null
+
+        @androidx.annotation.VisibleForTesting
+        var assetOpenProvider: ((Context, String) -> InputStream)? = null
+
+        private fun listAssets(context: Context, path: String): Array<String>? {
+            return assetListProvider?.invoke(context, path) ?: try {
+                context.assets.list(path)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        private fun openAssetStream(context: Context, path: String): InputStream {
+            return assetOpenProvider?.invoke(context, path) ?: context.assets.open(path)
+        }
+
         fun ensureAssetsExtracted(context: Context, precision: String = "INT8"): File {
             val targetBase = File(context.filesDir, "vieneu")
             val normPrecision = when (precision.trim().uppercase()) {
@@ -277,7 +295,7 @@ class OnnxSessionManager(
                 else -> "FP32"
             }
 
-            val int8Assets = try { context.assets.list("vieneu/backbone_int8") } catch (_: Exception) { null }
+            val int8Assets = listAssets(context, "vieneu/backbone_int8")
             val assetFolder = if (normPrecision == "INT8") {
                 if (!int8Assets.isNullOrEmpty()) {
                     Log.i(TAG, "Found INT8 assets in 'vieneu/backbone_int8' (${int8Assets.size} files). Selecting INT8 backbone.")
@@ -295,12 +313,12 @@ class OnnxSessionManager(
             copyAssetFolder(context, assetFolder, File(targetBase, targetSubdir))
 
             // Ensure other common folders and root files are extracted
-            val children = try { context.assets.list("vieneu") } catch (_: Exception) { null } ?: emptyArray()
+            val children = listAssets(context, "vieneu") ?: emptyArray()
             for (child in children) {
                 if (child != "backbone" && child != "backbone_int8") {
                     val childPath = "vieneu/$child"
                     val subTarget = File(targetBase, child)
-                    val subChildren = try { context.assets.list(childPath) } catch (_: Exception) { null }
+                    val subChildren = listAssets(context, childPath)
                     if (subChildren != null && subChildren.isNotEmpty()) {
                         copyAssetFolder(context, childPath, subTarget)
                     } else {
@@ -313,8 +331,7 @@ class OnnxSessionManager(
         }
 
         private fun copyAssetFolder(context: Context, assetPath: String, targetDir: File) {
-            val assetManager = context.assets
-            val children = assetManager.list(assetPath) ?: return
+            val children = listAssets(context, assetPath) ?: return
 
             if (children.isEmpty()) {
                 // It's a file
@@ -327,7 +344,7 @@ class OnnxSessionManager(
                 for (child in children) {
                     val subAssetPath = if (assetPath.isEmpty()) child else "$assetPath/$child"
                     val subTarget = File(targetDir, child)
-                    val subChildren = assetManager.list(subAssetPath)
+                    val subChildren = listAssets(context, subAssetPath)
                     if (subChildren != null && subChildren.isNotEmpty()) {
                         copyAssetFolder(context, subAssetPath, subTarget)
                     } else {
@@ -343,7 +360,7 @@ class OnnxSessionManager(
                 return
             }
             targetFile.parentFile?.mkdirs()
-            context.assets.open(assetPath).use { input ->
+            openAssetStream(context, assetPath).use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)
                 }
