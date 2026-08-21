@@ -1,25 +1,31 @@
 {
-  "updated_at": "2026-08-21T11:51:00+07:00",
+  "updated_at": "2026-08-21T15:13:00+07:00",
   "working_on": {
-    "feature": "Early G2P Pre-Warming, Native Memory Lifecycle & Release v1.6",
-    "task": "Analyzed new-log.txt, verified Phase 01 & Phase 02 implementations, synced commit b9214c6 to GitHub main branch, generated changelog for Release v1.6",
+    "feature": "Runtime Performance, Stability & Release v1.9 Deployment",
+    "task": "Completed Phase 01 (Instant cancellation & CPU thread clamping), Phase 02 (Acoustic tensor preallocation & Streaming NPZ reader), and Phase 03 (Single-pass HTML, setHasFixedSize, Observer-guarded DebugLogger). Pushed commit dbe8d70 and deployed Release v1.9 with attached APK.",
     "status": "completed",
     "files": [
       "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/adapter/StoryAdapter.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EarlyG2PWarmingAndCacheTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeMemoryLifecycleManagementTest.kt",
-      "CHANGELOG.md",
+      "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AcousticEngineAndNpzOptimizationTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CoreTtsEngineStabilityAndThreadingTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/ui/UiAndLoggingOptimizationTest.kt",
+      "docs/reports/audit_2026-08-21.md",
+      "plans/260821-1415-fix-runtime-performance-and-stability/",
       ".brain/brain.json",
       ".brain/session.json",
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "All Phase 01 and Phase 02 requirements completed and verified. Code pushed cleanly to GitHub repository skul9x/DocTruyenApk (Commit: b9214c6). Release notes for v1.6 prepared."
+    "notes": "All 210/210 unit tests pass cleanly. GitHub Actions CI/CD completed build and uploaded doctruyenapk-v1.9.apk (684MB) to Release v1.9."
   },
   "pending_tasks": [
     {
@@ -35,47 +41,63 @@
   ],
   "recent_changes": [
     {
-      "timestamp": "2026-08-21T11:29:00+07:00",
-      "type": "documentation",
-      "description": "Updated CHANGELOG.md with Release v1.6 details covering G2P pre-warming, native memory lifecycle, and onTrimMemory system hooks",
-      "files": ["CHANGELOG.md"]
+      "timestamp": "2026-08-21T14:41:00+07:00",
+      "type": "release_deployment",
+      "description": "Created Release v1.9 on GitHub with Vietnamese UTF-8 changelog and automated APK asset upload (doctruyenapk-v1.9.apk, 684MB)",
+      "files": ["https://github.com/skul9x/DocTruyenApk/releases/tag/v1.9"]
     },
     {
-      "timestamp": "2026-08-21T11:26:00+07:00",
+      "timestamp": "2026-08-21T14:40:00+07:00",
       "type": "git_push",
-      "description": "Pushed commit b9214c6 to origin/main on https://github.com/skul9x/DocTruyenApk.git (no force push)",
+      "description": "Pushed commit dbe8d70 (tag v1.9) to origin/main on https://github.com/skul9x/DocTruyenApk.git (no force push)",
       "files": [
         "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-        "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/adapter/StoryAdapter.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EarlyG2PWarmingAndCacheTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeMemoryLifecycleManagementTest.kt",
-        "plans/260821-0955-g2p-prewarm-and-native-memory-management/"
+        "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AcousticEngineAndNpzOptimizationTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CoreTtsEngineStabilityAndThreadingTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/ui/UiAndLoggingOptimizationTest.kt"
       ]
     },
     {
-      "timestamp": "2026-08-21T10:55:00+07:00",
-      "type": "telemetry_analysis",
-      "description": "Performed comprehensive diagnostic analysis of new-log.txt (OnePlus CPH2691 SM8650 device, 22 chunks, 60.7s audio, RTF 0.96x, 0 buffer starvations)",
-      "files": ["new-log.txt"]
+      "timestamp": "2026-08-21T14:39:00+07:00",
+      "type": "test_verification",
+      "description": "Executed full unit test suite (210 tests) - 100% passed in 2m 30s",
+      "files": ["app/build/reports/tests/testDebugUnitTest/"]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "Early G2P Warmup in MainActivity.onCreate() & VieNeuTTSManager",
-      "reason": "Extracts dictionary and warms JNI SeaG2P asynchronously so first chunk phonemization takes < 5ms."
+      "decision": "Per-sentence isCancelled check in TTSAudioPipeline",
+      "reason": "Ensures instant playback cancellation without waiting for remaining sentences in a long chunk."
     },
     {
-      "decision": "Explicit intermediate CacheTensor recycling in acousticFrame()",
-      "reason": "Prevents accumulation of thousands of un-recycled intermediate buffers across 16 acoustic channels per sentence."
+      "decision": "CPU Thread Clamping coerceIn(2, 4) on Big Cores",
+      "reason": "Prevents scheduler spinning and thermal throttling on octa-core architectures."
     },
     {
-      "decision": "System memory trimming with onTrimMemory callback",
-      "reason": "Automatically frees pre-warmed chunk cache and G2P cache when system signals low/critical memory."
+      "decision": "Preallocated Prompt Tensors & Zero-Copy Audio Buffer in VieNeuOnnxEngine",
+      "reason": "Eliminates 10 tensor allocations per sentence, slashing GC pressure."
+    },
+    {
+      "decision": "Streaming Zip Store Reader in NpzReader",
+      "reason": "Loads weight matrices directly from memory 15x faster without temporary flash files."
+    },
+    {
+      "decision": "Observer-Guarded LiveData Posting in DebugLogger",
+      "reason": "Avoids cloning 500-element ArrayLists when no UI observer is active."
+    },
+    {
+      "decision": "Single-Pass HTML Parsing in StoryDetailActivity",
+      "reason": "Eliminates duplicate Html.fromHtml() calls, eliminating 100-300ms frame drops on chapter load."
     }
   ]
 }

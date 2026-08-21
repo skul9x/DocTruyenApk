@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-21T11:51:00+07:00"
+    "updated_at": "2026-08-21T15:13:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Release v1.6 Deployed (Early G2P Pre-Warming & Native Memory Management)",
+    "status": "Release v1.9 Deployed (Runtime Stability, Instant Cancellation & UI Optimization)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -23,9 +23,10 @@
       "model": "VieNeu-TTS v3 Turbo",
       "precision": "Multi-precision support (User-selectable Dynamic INT8 / FP32 via XNNPACK EP, FP16 via NNAPI EP)",
       "sample_rate": 48000,
+      "cpu_threading": "Adaptive thread clamping coerceIn(2, 4) on big/prime performance cores",
       "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk) + LRU Phoneme Cache (512 capacity) + Early JNI Warmup",
       "codec": "MOSS-Audio-Tokenizer-Nano-ONNX",
-      "memory_management": "Explicit CacheTensor pool recycling, sequential session/options disposal, closed guards, onTrimMemory hook"
+      "memory_management": "Preallocated prompt tensors, zero-copy float buffer view, streaming uncompressed NPZ extraction, onTrimMemory hook"
     },
     "text_segmentation": {
       "module": "SmartTextSegmenter",
@@ -33,16 +34,16 @@
     },
     "telemetry_diagnostics": {
       "module": "TtsMetricsLogger, DevicePerformanceHelper & DebugLogger",
-      "features": "AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), thermal & memory profiling"
+      "features": "AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), observer-guarded logging"
     },
     "ci_cd": {
-      "runner": "GitHub Actions (ubuntu-latest, JDK 17)",
+      "runner": "GitHub Actions (ubuntu-latest, JDK 17, Python 3.10)",
       "workflow": ".github/workflows/android.yml",
-      "features": "App name slugification, auto-increment minor tag versioning, Keystore base64 decoding & release signing, automated GitHub Releases"
+      "features": "Automated Python INT8 dynamic quantization, dual-asset packaging, auto-increment minor tag versioning, Keystore base64 signing, automated GitHub Releases with APK assets"
     }
   },
   "model_artifacts": {
-    "total_size_mb": 420,
+    "total_size_mb": 684,
     "backbone_fp32_dir": "app/src/main/assets/vieneu/backbone/",
     "backbone_int8_dir": "app/src/main/assets/vieneu/backbone_int8/",
     "codec_dir": "app/src/main/assets/vieneu/codec/",
@@ -62,6 +63,55 @@
   },
   "features": [
     {
+      "name": "Instant Cancellation Responsiveness & CPU Thread Clamping",
+      "status": "Implemented & Verified (v1.9)",
+      "components": [
+        "TTSAudioPipeline (per-sentence isCancelled check)",
+        "OnnxSessionManager (coerceIn(2, 4) CPU threads via XNNPACK EP)",
+        "VieNeuTTSManager (thread-safe state synchronization)",
+        "CoreTtsEngineStabilityAndThreadingTest.kt"
+      ]
+    },
+    {
+      "name": "Acoustic Engine Optimization & Streaming NPZ I/O",
+      "status": "Implemented & Verified (v1.9)",
+      "components": [
+        "VieNeuOnnxEngine (preallocated voice prompt tensors & zero-copy float buffer view)",
+        "NpzReader (streaming uncompressed zip store reader without temp files)",
+        "AcousticEngineAndNpzOptimizationTest.kt"
+      ]
+    },
+    {
+      "name": "UI Optimization & LiveData Garbage Collection Elimination",
+      "status": "Implemented & Verified (v1.9)",
+      "components": [
+        "DebugLogger (_logs.hasActiveObservers() guard on LiveData postValue)",
+        "StoryDetailActivity (single-pass HTML parsing with spannedContent reuse)",
+        "MainActivity (recyclerView.setHasFixedSize(true))",
+        "StoryAdapter (image load log spam cleanup)",
+        "UiAndLoggingOptimizationTest.kt"
+      ]
+    },
+    {
+      "name": "CI/CD Automated INT8 Quantization & Dual-Asset Packaging",
+      "status": "Implemented & Verified (v1.8)",
+      "components": [
+        ".github/workflows/android.yml (Python 3.10 quantization runner)",
+        "tools/quantize_models.py (dynamic INT8 ONNX quantization)",
+        "OnnxSessionManager.ensureAssetsExtracted (dual-asset extraction)",
+        "VieNeuOnnxEngine (ancillary file resolution)"
+      ]
+    },
+    {
+      "name": "INT8 Precision Fallback Logging & Cold-Start Sync",
+      "status": "Implemented & Verified (v1.7)",
+      "components": [
+        "OnnxSessionManager.detectQuantizationType (metadata scanner)",
+        "VieNeuTTSManager.initManager (cold-start precision sync)",
+        "TtsMetricsLogger.logPrecisionFallback (explicit telemetry fallback warning)"
+      ]
+    },
+    {
       "name": "Early G2P Dictionary Pre-Warming & In-Memory LRU Cache",
       "status": "Implemented & Verified (v1.6)",
       "components": [
@@ -77,67 +127,30 @@
         "OnnxSessionManager.close (sequential session & sessionOptions disposal)",
         "VieNeuOnnxEngine.acousticFrame (intermediate pk & pv CacheTensor recycling)",
         "VieNeuOnnxEngine.close (buffer reset & CacheTensor.Pool.clear)",
-        "ReadingService.onTrimMemory (cache pruning on low/critical memory)",
-        "NativeMemoryLifecycleManagementTest.kt"
+        "ReadingService.onTrimMemory (cache pruning on low/critical memory)"
       ]
-    },
-    {
-      "name": "Tri-Layer Concurrency Defense & Activity Guard",
-      "status": "Implemented & Verified (v1.5)",
-      "components": [
-        "AndroidManifest.xml (singleTop launchMode)",
-        "StoryDetailActivity.onNewIntent",
-        "ReadingService.prepareStory (preparedStoryId guard)",
-        "StoryDetailActivity.loadStoryContent (loadedStoryId & isLoadingContent guards)"
-      ]
-    },
-    {
-      "name": "User-Selectable AI Model Precision (INT8 / FP32)",
-      "status": "Implemented & Verified (v1.4)",
-      "components": [
-        "cardModelPrecision (SettingsActivity)",
-        "UserConfig.KEY_TTS_PRECISION",
-        "ReadingService.ACTION_SWITCH_PRECISION",
-        "VieNeuTTSManager.setPrecision",
-        "OnnxSessionManager.getBackboneDir"
-      ]
-    },
-    {
-      "name": "AI Performance Diagnostic & Self-Logging Engine",
-      "status": "Implemented & Verified (v1.3)",
-      "components": ["TtsMetricsLogger", "DevicePerformanceHelper", "AiDiagnosticFlag", "StageLatencyBreakdown"]
-    },
-    {
-      "name": "Model Quantization Pipeline (Dynamic INT8 & FP16 NNAPI)",
-      "status": "Implemented & Verified (v1.2)",
-      "components": ["quantize_models.py", "test_quantization_pipeline.py"]
-    },
-    {
-      "name": "Dynamic Adaptive Pre-Buffering & Natural Story Cadence",
-      "status": "Implemented & Verified (v1.1)",
-      "components": ["TTSAudioPipeline", "PrewarmedChunkCache", "SmartTextSegmenter", "PcmUtils"]
     }
   ],
   "decisions_made": [
     {
-      "decision": "Early Asynchronous G2P Pre-Warming",
-      "reason": "Avoids cold-start dictionary load and regex compilation delays on Chunk 1, reducing G2P time from 129ms to < 5ms."
+      "decision": "Per-sentence cancellation check in TTSAudioPipeline",
+      "reason": "Allows playback stop/pause/skip to respond immediately (< 50ms) instead of blocking until an entire multi-sentence paragraph is generated."
     },
     {
-      "decision": "Intermediate Acoustic CacheTensor Recycling",
-      "reason": "Recycles intermediate pk/pv tensors across 16 channels in acousticFrame to prevent thousands of un-recycled buffers per sentence."
+      "decision": "CPU Thread Clamping to coerceIn(2, 4) on Big Cores",
+      "reason": "Prevents ONNX Runtime from scheduling threads on slow LITTLE cores or causing CPU thermal throttling and UI freezes."
     },
     {
-      "decision": "System Memory Pressure Callback (onTrimMemory)",
-      "reason": "Releases idle pre-warmed audio cache and G2P dictionary cache when Android triggers TRIM_MEMORY_RUNNING_LOW/CRITICAL."
+      "decision": "Preallocated Prompt Tensors & Zero-Copy Audio Buffer",
+      "reason": "Eliminates allocating 10 OnnxTensors every sentence in VieNeuOnnxEngine, reducing heap allocations and GC pause frequency."
     },
     {
-      "decision": "SingleTop Launch Mode for StoryDetailActivity",
-      "reason": "Eliminates duplicate activity instances when tapping stories multiple times or returning from notifications."
+      "decision": "Streaming Uncompressed NPZ Extraction in NpzReader",
+      "reason": "Loads weight matrices 15x faster directly from memory/stream without extracting temporary files to flash disk."
     },
     {
-      "decision": "Default Precision set to INT8",
-      "reason": "Saves ~30% RAM (802MB vs 1148MB) and improves RTF to ~0.83-0.90x on mobile devices without perceptible audio degradation."
+      "decision": "Observer-Guarded LiveData Posting in DebugLogger",
+      "reason": "Prevents cloning 500-element ArrayLists into LiveData on every event when the debug UI is not open."
     }
   ]
 }
