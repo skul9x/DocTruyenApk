@@ -139,11 +139,11 @@ class GoogleTTSManager(
     }
 
     private fun initTTS() {
+        notifyStateChange(ITTSManager.TTSState.INITIALIZING)
         if (engineWrapper != null) {
             configureEngine()
             return
         }
-        notifyStateChange(ITTSManager.TTSState.INITIALIZING)
 
         val listener = TextToSpeech.OnInitListener { status ->
             if (status == TextToSpeech.SUCCESS) {

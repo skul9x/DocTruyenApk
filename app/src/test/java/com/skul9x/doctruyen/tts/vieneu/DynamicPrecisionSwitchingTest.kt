@@ -144,12 +144,25 @@ class DynamicPrecisionSwitchingTest {
         if (voicesFile.exists()) {
             VoicePresets.loadFromJson(voicesFile.readText(Charsets.UTF_8))
         }
+
+        val backboneFp32 = File(baseAssetsDir, "backbone")
+        val backboneInt8 = File(baseAssetsDir, "backbone_int8")
+        if (backboneFp32.exists() && !backboneInt8.exists()) {
+            backboneInt8.mkdirs()
+            backboneFp32.listFiles()?.forEach { file ->
+                file.copyTo(File(backboneInt8, file.name), overwrite = true)
+            }
+        }
     }
 
     @After
     fun teardown() {
         PrewarmedChunkCache.clear()
         UserConfig.customPrefsProvider = null
+        val backboneInt8 = File("src/main/assets/vieneu/backbone_int8")
+        if (backboneInt8.exists()) {
+            backboneInt8.deleteRecursively()
+        }
     }
 
     @Test
@@ -301,11 +314,17 @@ class DynamicPrecisionSwitchingTest {
 
         // 3. Switch precision to FP32
         ttsManager.setPrecision("FP32")
+        while (ttsManager.currentState == ITTSManager.TTSState.INITIALIZING) {
+            kotlinx.coroutines.delay(20)
+        }
         assertEquals(0, PrewarmedChunkCache.size()) // Must be invalidated
         assertEquals(ITTSManager.TTSState.READY, ttsManager.currentState)
 
         // 4. Switch precision to INT8
         ttsManager.setPrecision("INT8")
+        while (ttsManager.currentState == ITTSManager.TTSState.INITIALIZING) {
+            kotlinx.coroutines.delay(20)
+        }
         assertEquals(0, PrewarmedChunkCache.size())
         assertEquals(ITTSManager.TTSState.READY, ttsManager.currentState)
 
@@ -314,21 +333,31 @@ class DynamicPrecisionSwitchingTest {
     }
 
     @Test
-    fun testReadingService_switchPrecisionInvocation() {
+    fun testReadingService_switchPrecisionInvocation() = runBlocking {
         val customVieNeuManager = VieNeuTTSManager(
             context = null,
             onStateChange = {}
         )
+
+        while (customVieNeuManager.currentState == ITTSManager.TTSState.INITIALIZING) {
+            kotlinx.coroutines.delay(20)
+        }
 
         val service = ReadingService()
         service.ttsManager = customVieNeuManager
 
         service.switchPrecision("FP32")
         assertEquals("FP32", UserConfig.getTtsPrecision(dummyContext))
+        while (customVieNeuManager.currentState == ITTSManager.TTSState.INITIALIZING) {
+            kotlinx.coroutines.delay(20)
+        }
         assertEquals(ITTSManager.TTSState.READY, customVieNeuManager.currentState)
 
         service.switchPrecision("INT8")
         assertEquals("INT8", UserConfig.getTtsPrecision(dummyContext))
+        while (customVieNeuManager.currentState == ITTSManager.TTSState.INITIALIZING) {
+            kotlinx.coroutines.delay(20)
+        }
         assertEquals(ITTSManager.TTSState.READY, customVieNeuManager.currentState)
 
         customVieNeuManager.shutdown()

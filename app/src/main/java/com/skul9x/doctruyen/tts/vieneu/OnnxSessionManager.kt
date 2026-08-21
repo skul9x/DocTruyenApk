@@ -145,7 +145,7 @@ class OnnxSessionManager(
                             sessionOptions.addXnnpack(mapOf("intra_op_num_threads" to effectiveThreads.toString()))
                             epUsed = "XNNPACK (Fallback)"
                         } catch (_: Throwable) {
-                            val intra = if (threads > 0) threads else (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 8)
+                            val intra = effectiveThreads
                             sessionOptions.setIntraOpNumThreads(intra)
                             epUsed = "CPU (Fallback)"
                         }
@@ -161,7 +161,7 @@ class OnnxSessionManager(
                         Log.i(TAG, "Configured XNNPACK EP with $effectiveThreads threads for $quantizationType model")
                     } catch (e: Throwable) {
                         Log.w(TAG, "Failed to add XNNPACK EP: ${e.message}. Falling back to standard CPU thread pool.")
-                        val intra = if (threads > 0) threads else (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 8)
+                        val intra = effectiveThreads
                         sessionOptions.setIntraOpNumThreads(intra)
                         epUsed = "CPU"
                     }

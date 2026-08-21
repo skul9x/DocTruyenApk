@@ -77,10 +77,8 @@ class StoryAdapter(
             } else {
                 null
             }
-            
-            // Debug log
+
             val cookie = RetrofitClient.cookie
-            com.skul9x.doctruyen.utils.DebugLogger.log("IMAGE", "Loading: $imageUrl | Cookie: ${cookie.take(30)}...")
 
             // Load image with Glide using headers
             val glideUrl = if (imageUrl != null && cookie.isNotEmpty()) {

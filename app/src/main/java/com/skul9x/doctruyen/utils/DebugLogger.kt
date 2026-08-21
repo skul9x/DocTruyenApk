@@ -33,7 +33,9 @@ object DebugLogger {
                 logBuffer.removeFirst()
             }
             logBuffer.addLast(entry)
-            _logs.postValue(ArrayList(logBuffer))
+            if (_logs.hasActiveObservers()) {
+                _logs.postValue(ArrayList(logBuffer))
+            }
         }
     }
 
@@ -45,7 +47,9 @@ object DebugLogger {
     fun clear() {
         synchronized(logBuffer) {
             logBuffer.clear()
-            _logs.postValue(emptyList())
+            if (_logs.hasActiveObservers()) {
+                _logs.postValue(emptyList())
+            }
         }
     }
 

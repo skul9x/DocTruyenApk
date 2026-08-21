@@ -80,7 +80,7 @@ class NpzReader private constructor(
                 while (entry != null) {
                     val name = entry.name
                     val key = if (name.endsWith(".npy")) name.substring(0, name.length - 4) else name
-                    val bytes = readAllBytes(zis)
+                    val bytes = readAllBytes(zis, entry.size)
                     if (bytes.isNotEmpty()) {
                         val npy = parseNpy(bytes)
                         if (npy != null) {
@@ -151,7 +151,18 @@ class NpzReader private constructor(
             return parts.map { it.toInt() }.toIntArray()
         }
 
-        private fun readAllBytes(inputStream: InputStream): ByteArray {
+        fun readAllBytes(inputStream: InputStream, expectedSize: Long = -1L): ByteArray {
+            if (expectedSize > 0 && expectedSize <= Int.MAX_VALUE) {
+                val size = expectedSize.toInt()
+                val bytes = ByteArray(size)
+                var totalRead = 0
+                while (totalRead < size) {
+                    val read = inputStream.read(bytes, totalRead, size - totalRead)
+                    if (read == -1) break
+                    totalRead += read
+                }
+                return if (totalRead == size) bytes else bytes.copyOf(totalRead)
+            }
             val buffer = ByteArray(8192)
             val baos = ByteArrayOutputStream()
             var len: Int

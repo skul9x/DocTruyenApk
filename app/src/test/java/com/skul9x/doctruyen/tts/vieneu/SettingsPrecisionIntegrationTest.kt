@@ -162,6 +162,15 @@ class SettingsPrecisionIntegrationTest {
         if (voicesFile.exists()) {
             VoicePresets.loadFromJson(voicesFile.readText(Charsets.UTF_8))
         }
+
+        val backboneFp32 = File(baseAssetsDir, "backbone")
+        val backboneInt8 = File(baseAssetsDir, "backbone_int8")
+        if (backboneFp32.exists() && !backboneInt8.exists()) {
+            backboneInt8.mkdirs()
+            backboneFp32.listFiles()?.forEach { file ->
+                file.copyTo(File(backboneInt8, file.name), overwrite = true)
+            }
+        }
     }
 
     @After
@@ -169,6 +178,10 @@ class SettingsPrecisionIntegrationTest {
         PrewarmedChunkCache.clear()
         UserConfig.customPrefsProvider = null
         startedIntents.clear()
+        val backboneInt8 = File("src/main/assets/vieneu/backbone_int8")
+        if (backboneInt8.exists()) {
+            backboneInt8.deleteRecursively()
+        }
     }
 
     /**

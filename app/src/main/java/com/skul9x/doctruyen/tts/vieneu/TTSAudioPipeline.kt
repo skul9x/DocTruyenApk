@@ -125,7 +125,7 @@ class TTSAudioPipeline(
         }
 
         requestAudioFocus()
-        val engineThreads = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val engineThreads = DevicePerformanceHelper.getBigCoreCount().coerceIn(2, 4)
         val quant = when (quantizationType) {
             OnnxSessionManager.QuantizationType.INT8 -> "INT8"
             OnnxSessionManager.QuantizationType.FP16 -> if (engine.executionProvider.contains("NNAPI")) "FP16+NNAPI" else "FP16"
@@ -588,7 +588,7 @@ class TTSAudioPipeline(
          */
         fun computeAdaptiveTargetDurationMs(
             quantizationType: OnnxSessionManager.QuantizationType,
-            cpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+            cpuCores: Int = DevicePerformanceHelper.getBigCoreCount().coerceIn(2, 4),
             remainingChunks: Int = 2,
             startIndex: Int = 0,
             safeFallbackDurationMs: Long = 7500L,

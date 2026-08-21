@@ -327,14 +327,15 @@ class StoryDetailActivity : AppCompatActivity() {
                     // SECURITY: Sanitize HTML to prevent XSS
                     val sanitizedContent = sanitizeHtml(rawContent)
 
-                    storyContent = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+                    val spannedContent = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY)
+                    storyContent = spannedContent.toString()
                     loadedStoryId = storyId
 
                     val preview = storyContent.take(50) + if (storyContent.length > 50) "..." else ""
                     DebugLogger.log(TAG, "✅ Content loaded: ${storyContent.length} chars, preview: '$preview'", LogType.RESPONSE)
 
                     // Set text with HTML rendering
-                    tvContent.text = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY)
+                    tvContent.text = spannedContent
 
                     // Show content
                     showContentState()

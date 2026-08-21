@@ -108,6 +108,7 @@ class MainActivity : AppCompatActivity() {
             openStoryDetail(story)
         }
         
+        recyclerView.setHasFixedSize(true)
         recyclerView.layoutManager = GridLayoutManager(this, 2)
         recyclerView.adapter = adapter
         

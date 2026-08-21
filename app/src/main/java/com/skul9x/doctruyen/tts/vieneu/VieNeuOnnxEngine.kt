@@ -67,6 +67,39 @@ class VieNeuOnnxEngine(
         FloatArray(audioEmbeddings[ch].size)
     }
 
+    private var cachedEmptyPastK: OnnxTensor? = null
+    private var cachedEmptyPastV: OnnxTensor? = null
+
+    @Synchronized
+    fun getOrCreateEmptyPastK(): OnnxTensor {
+        val tensor = cachedEmptyPastK
+        if (tensor != null) return tensor
+        val nHLoc = config.localNumAttentionHeads.toLong()
+        val hdLoc = config.localHeadDim.toLong()
+        val newTensor = OnnxTensor.createTensor(
+            env,
+            FloatBuffer.wrap(FloatArray(0)),
+            longArrayOf(1, nHLoc, 0, hdLoc)
+        )
+        cachedEmptyPastK = newTensor
+        return newTensor
+    }
+
+    @Synchronized
+    fun getOrCreateEmptyPastV(): OnnxTensor {
+        val tensor = cachedEmptyPastV
+        if (tensor != null) return tensor
+        val nHLoc = config.localNumAttentionHeads.toLong()
+        val hdLoc = config.localHeadDim.toLong()
+        val newTensor = OnnxTensor.createTensor(
+            env,
+            FloatBuffer.wrap(FloatArray(0)),
+            longArrayOf(1, nHLoc, 0, hdLoc)
+        )
+        cachedEmptyPastV = newTensor
+        return newTensor
+    }
+
     data class InferenceTiming(
         val backboneDurationMs: Long,
         val codecDurationMs: Long
@@ -346,8 +379,8 @@ class VieNeuOnnxEngine(
         val feed0 = HashMap<String, OnnxTensor>()
         val tokTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(tok), longArrayOf(1, 2, H.toLong()))
         val posTensor0 = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(0L, 1L)), longArrayOf(1, 2))
-        val emptyPastK = OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(0)), longArrayOf(1, nHLoc.toLong(), 0, hdLoc.toLong()))
-        val emptyPastV = OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(0)), longArrayOf(1, nHLoc.toLong(), 0, hdLoc.toLong()))
+        val emptyPastK = getOrCreateEmptyPastK()
+        val emptyPastV = getOrCreateEmptyPastV()
 
         feed0["token_emb"] = tokTensor
         feed0["position_ids"] = posTensor0
@@ -362,8 +395,6 @@ class VieNeuOnnxEngine(
         sessionManager.acousticSession.run(feed0).use { out0 ->
             tokTensor.close()
             posTensor0.close()
-            emptyPastK.close()
-            emptyPastV.close()
 
             val hiddenTensor = out0.get(0) as OnnxTensor
             val hiddenFb = hiddenTensor.floatBuffer
@@ -844,6 +875,14 @@ class VieNeuOnnxEngine(
         lock.withLock {
             if (closed) return
             closed = true
+            try {
+                cachedEmptyPastK?.close()
+                cachedEmptyPastK = null
+            } catch (_: Exception) {}
+            try {
+                cachedEmptyPastV?.close()
+                cachedEmptyPastV = null
+            } catch (_: Exception) {}
             try {
                 sessionManager.close()
             } catch (_: Exception) {}

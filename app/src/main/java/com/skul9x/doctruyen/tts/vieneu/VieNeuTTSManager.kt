@@ -142,6 +142,9 @@ class VieNeuTTSManager(
                 } else {
                     notifyStateChange(TTSState.READY)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                DebugLogger.log(TAG, "VieNeu initialization cancelled normally: ${e.message}", LogType.INFO)
+                throw e
             } catch (e: Throwable) {
                 DebugLogger.logError(TAG, "❌ Failed to initialize VieNeu engine: ${e.message}. Attempting Android TTS fallback...", e)
                 Log.e(TAG, "Failed to initialize VieNeuOnnxEngine", e)
@@ -635,6 +638,9 @@ class VieNeuTTSManager(
                 } else {
                     notifyStateChange(TTSState.READY)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                DebugLogger.log(TAG, "VieNeu reload cancelled normally: ${e.message}", LogType.INFO)
+                throw e
             } catch (e: Throwable) {
                 DebugLogger.logError(TAG, "❌ Failed to reload VieNeu engine with precision $normPrecision: ${e.message}", e)
                 tryFallbackAndroidTTS()
