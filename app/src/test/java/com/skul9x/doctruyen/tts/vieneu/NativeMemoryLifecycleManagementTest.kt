@@ -257,9 +257,6 @@ class NativeMemoryLifecycleManagementTest {
         VieNeuOnnxEngine.CacheTensor.Pool.clear()
     }
 
-    @get:org.junit.Rule
-    val instantTaskExecutorRule = androidx.arch.core.executor.testing.InstantTaskExecutorRule()
-
     @Test
     fun testVieNeuTTSManagerReloadAndShutdownLifecycle() = runBlocking {
         val initialEngine = createTestEngine("INT8")

@@ -82,10 +82,10 @@ class OnnxSessionManager(
                 Log.w(TAG, "Failed scanning ONNX metadata in $modelPath: ${e.message}")
             }
 
-            val lowerName = File(modelPath).name.lowercase()
+            val lowerPath = modelPath.lowercase()
             return when {
-                lowerName.contains("int8") -> QuantizationType.INT8
-                lowerName.contains("fp16") -> QuantizationType.FP16
+                lowerPath.contains("int8") -> QuantizationType.INT8
+                lowerPath.contains("fp16") -> QuantizationType.FP16
                 else -> QuantizationType.FP32
             }
         }
@@ -187,6 +187,14 @@ class OnnxSessionManager(
             val codecPath = File(codecDir, "moss_audio_tokenizer_decode_full.onnx").absolutePath
 
             val detectedQuant = detectQuantizationType(prefillPath)
+            val normPrecision = when (precision.trim().uppercase()) {
+                "INT8" -> "INT8"
+                "FP32" -> "FP32"
+                else -> "FP32"
+            }
+            if (normPrecision != detectedQuant.name) {
+                Log.w(TAG, "⚠️ Precision mismatch: Requested $precision ($normPrecision) but detected quantization is $detectedQuant on $prefillPath. INT8 model assets may be missing from APK.")
+            }
             val (sessionOptions, epUsed) = configureSessionOptions(detectedQuant, threads)
 
             Log.i(TAG, "Creating ONNX sessions [Quantization: $detectedQuant, EP: $epUsed, Precision: $precision]...")
@@ -270,8 +278,14 @@ class OnnxSessionManager(
             }
 
             val int8Assets = try { context.assets.list("vieneu/backbone_int8") } catch (_: Exception) { null }
-            val assetFolder = if (normPrecision == "INT8" && !int8Assets.isNullOrEmpty()) {
-                "vieneu/backbone_int8"
+            val assetFolder = if (normPrecision == "INT8") {
+                if (!int8Assets.isNullOrEmpty()) {
+                    Log.i(TAG, "Found INT8 assets in 'vieneu/backbone_int8' (${int8Assets.size} files). Selecting INT8 backbone.")
+                    "vieneu/backbone_int8"
+                } else {
+                    Log.w(TAG, "⚠️ INT8 precision requested, but 'vieneu/backbone_int8' assets not found or empty. Falling back to FP32 backbone. INT8 model assets may be missing from APK.")
+                    "vieneu/backbone"
+                }
             } else {
                 "vieneu/backbone"
             }

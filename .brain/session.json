@@ -1,68 +1,81 @@
 {
-  "updated_at": "2026-08-21T10:45:00+07:00",
+  "updated_at": "2026-08-21T11:51:00+07:00",
   "working_on": {
-    "feature": "APK Build, ADB Deployment & GitHub Releases Changelog",
-    "task": "Build debug APK with JDK 17, check ADB device status, sync full detailed changelogs to GitHub Releases v1.0-v1.5",
+    "feature": "Early G2P Pre-Warming, Native Memory Lifecycle & Release v1.6",
+    "task": "Analyzed new-log.txt, verified Phase 01 & Phase 02 implementations, synced commit b9214c6 to GitHub main branch, generated changelog for Release v1.6",
     "status": "completed",
     "files": [
-      "app/build/outputs/apk/debug/app-debug.apk",
+      "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EarlyG2PWarmingAndCacheTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeMemoryLifecycleManagementTest.kt",
       "CHANGELOG.md",
       ".brain/brain.json",
       ".brain/session.json",
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "APK built successfully (~419MB). GitHub Releases v1.0 to v1.5 updated with comprehensive structured changelogs."
+    "notes": "All Phase 01 and Phase 02 requirements completed and verified. Code pushed cleanly to GitHub repository skul9x/DocTruyenApk (Commit: b9214c6). Release notes for v1.6 prepared."
   },
   "pending_tasks": [
-    { "task": "Optional G2P lookup dictionary cache optimization", "priority": "low", "notes": "Identified in AI Diagnostic log6.txt" },
-    { "task": "Native tensor & PCM buffer lifecycle cleanup audit", "priority": "low", "notes": "Identified in AI Diagnostic log6.txt" }
+    {
+      "task": "Fast-Start Pre-buffering Optimization (TTFT < 1.2s)",
+      "priority": "medium",
+      "notes": "On high-spec devices (Snapdragon 8 Gen 3 with INT8), start playback as soon as Chunk 1 (>=1500ms audio) is ready instead of waiting for 3 full chunks."
+    },
+    {
+      "task": "SmartTextSegmenter target chunk length tuning",
+      "priority": "low",
+      "notes": "Reduce DEFAULT_MAX_CHARS from 75 to 45 chars to prevent RTF from exceeding 1.0x on long sentences."
+    }
   ],
   "recent_changes": [
     {
-      "timestamp": "2026-08-20T15:17:00+07:00",
-      "type": "device_install",
-      "description": "Built assembleDebug APK and deployed to OnePlus SM8650 device via MCP ADB tool. Live log verified: 1 network call for story detail (instead of 5), seamless playback, 0 buffer underruns",
-      "files": ["app/build/outputs/apk/debug/app-debug.apk", "log6.txt"]
+      "timestamp": "2026-08-21T11:29:00+07:00",
+      "type": "documentation",
+      "description": "Updated CHANGELOG.md with Release v1.6 details covering G2P pre-warming, native memory lifecycle, and onTrimMemory system hooks",
+      "files": ["CHANGELOG.md"]
     },
     {
-      "timestamp": "2026-08-20T15:15:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 03: StoryDetailActivity content cache guard (loadedStoryId) & in-flight network request deduplication guard (isLoadingContent), plus StoryDetailContentCacheGuardTest",
+      "timestamp": "2026-08-21T11:26:00+07:00",
+      "type": "git_push",
+      "description": "Pushed commit b9214c6 to origin/main on https://github.com/skul9x/DocTruyenApk.git (no force push)",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-        "app/src/test/java/com/skul9x/doctruyen/StoryDetailContentCacheGuardTest.kt"
-      ]
-    },
-    {
-      "timestamp": "2026-08-20T15:12:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 02: ReadingService prepareStory idempotency guard (preparedStoryId, preparedVoice, isPreparingStory) with fast-exit and state synchronization, plus ReadingServicePrepareGuardTest",
-      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
         "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
-        "app/src/test/java/com/skul9x/doctruyen/service/ReadingServicePrepareGuardTest.kt"
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EarlyG2PWarmingAndCacheTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeMemoryLifecycleManagementTest.kt",
+        "plans/260821-0955-g2p-prewarm-and-native-memory-management/"
       ]
     },
     {
-      "timestamp": "2026-08-20T15:08:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 01: AndroidManifest.xml singleTop launchMode for StoryDetailActivity and onNewIntent handler for intent updating & dynamic story reload, plus StoryDetailSingleTopTest",
-      "files": [
-        "app/src/main/AndroidManifest.xml",
-        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-        "app/src/test/java/com/skul9x/doctruyen/StoryDetailSingleTopTest.kt"
-      ]
+      "timestamp": "2026-08-21T10:55:00+07:00",
+      "type": "telemetry_analysis",
+      "description": "Performed comprehensive diagnostic analysis of new-log.txt (OnePlus CPH2691 SM8650 device, 22 chunks, 60.7s audio, RTF 0.96x, 0 buffer starvations)",
+      "files": ["new-log.txt"]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "SingleTop Launch Mode for StoryDetailActivity",
-      "reason": "Eliminates duplicate activity instances when tapping stories multiple times or returning from notifications."
+      "decision": "Early G2P Warmup in MainActivity.onCreate() & VieNeuTTSManager",
+      "reason": "Extracts dictionary and warms JNI SeaG2P asynchronously so first chunk phonemization takes < 5ms."
     },
     {
-      "decision": "Tri-Layer Defense for Story Preparation & Content Fetching",
-      "reason": "Prevents redundant network calls (Layer 3), avoids duplicate ONNX background preparation jobs (Layer 2), and stops activity stacking (Layer 1)."
+      "decision": "Explicit intermediate CacheTensor recycling in acousticFrame()",
+      "reason": "Prevents accumulation of thousands of un-recycled intermediate buffers across 16 acoustic channels per sentence."
+    },
+    {
+      "decision": "System memory trimming with onTrimMemory callback",
+      "reason": "Automatically frees pre-warmed chunk cache and G2P cache when system signals low/critical memory."
     }
   ]
 }

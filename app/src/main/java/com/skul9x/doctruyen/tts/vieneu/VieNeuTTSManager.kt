@@ -109,8 +109,9 @@ class VieNeuTTSManager(
             try {
                 DebugLogger.log(TAG, "🚀 Initializing VieNeuOnnxEngine...", LogType.INFO)
                 val loadedEngine = withContext(Dispatchers.IO) {
+                    val savedPrecision = UserConfig.getTtsPrecision(ctx)
                     SeaG2P.warmUp(ctx)
-                    VieNeuOnnxEngine.create(ctx)
+                    VieNeuOnnxEngine.create(ctx, precision = savedPrecision)
                 }
                 engine = loadedEngine
 

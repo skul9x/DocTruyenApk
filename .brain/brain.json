@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-21T10:45:00+07:00"
+    "updated_at": "2026-08-21T11:51:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Tri-Layer Concurrency & Activity Guard Implemented & Verified",
+    "status": "Release v1.6 Deployed (Early G2P Pre-Warming & Native Memory Management)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -23,12 +23,13 @@
       "model": "VieNeu-TTS v3 Turbo",
       "precision": "Multi-precision support (User-selectable Dynamic INT8 / FP32 via XNNPACK EP, FP16 via NNAPI EP)",
       "sample_rate": 48000,
-      "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk)",
-      "codec": "MOSS-Audio-Tokenizer-Nano-ONNX"
+      "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk) + LRU Phoneme Cache (512 capacity) + Early JNI Warmup",
+      "codec": "MOSS-Audio-Tokenizer-Nano-ONNX",
+      "memory_management": "Explicit CacheTensor pool recycling, sequential session/options disposal, closed guards, onTrimMemory hook"
     },
     "text_segmentation": {
       "module": "SmartTextSegmenter",
-      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=100 chars), protected abbreviations, numbers, and time formats"
+      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=75 chars), protected abbreviations, numbers, and time formats"
     },
     "telemetry_diagnostics": {
       "module": "TtsMetricsLogger, DevicePerformanceHelper & DebugLogger",
@@ -61,8 +62,28 @@
   },
   "features": [
     {
+      "name": "Early G2P Dictionary Pre-Warming & In-Memory LRU Cache",
+      "status": "Implemented & Verified (v1.6)",
+      "components": [
+        "SeaG2P.warmUp (MainActivity.onCreate & VieNeuTTSManager.initManager)",
+        "SeaG2P LRU Phoneme Cache (capacity 512)",
+        "EarlyG2PWarmingAndCacheTest.kt"
+      ]
+    },
+    {
+      "name": "Native Memory Lifecycle Management & Safe Resource Teardown",
+      "status": "Implemented & Verified (v1.6)",
+      "components": [
+        "OnnxSessionManager.close (sequential session & sessionOptions disposal)",
+        "VieNeuOnnxEngine.acousticFrame (intermediate pk & pv CacheTensor recycling)",
+        "VieNeuOnnxEngine.close (buffer reset & CacheTensor.Pool.clear)",
+        "ReadingService.onTrimMemory (cache pruning on low/critical memory)",
+        "NativeMemoryLifecycleManagementTest.kt"
+      ]
+    },
+    {
       "name": "Tri-Layer Concurrency Defense & Activity Guard",
-      "status": "Implemented & Verified",
+      "status": "Implemented & Verified (v1.5)",
       "components": [
         "AndroidManifest.xml (singleTop launchMode)",
         "StoryDetailActivity.onNewIntent",
@@ -72,7 +93,7 @@
     },
     {
       "name": "User-Selectable AI Model Precision (INT8 / FP32)",
-      "status": "Implemented & Verified",
+      "status": "Implemented & Verified (v1.4)",
       "components": [
         "cardModelPrecision (SettingsActivity)",
         "UserConfig.KEY_TTS_PRECISION",
@@ -83,54 +104,40 @@
     },
     {
       "name": "AI Performance Diagnostic & Self-Logging Engine",
-      "status": "Implemented & Verified",
+      "status": "Implemented & Verified (v1.3)",
       "components": ["TtsMetricsLogger", "DevicePerformanceHelper", "AiDiagnosticFlag", "StageLatencyBreakdown"]
     },
     {
       "name": "Model Quantization Pipeline (Dynamic INT8 & FP16 NNAPI)",
-      "status": "Implemented & Verified",
+      "status": "Implemented & Verified (v1.2)",
       "components": ["quantize_models.py", "test_quantization_pipeline.py"]
     },
     {
-      "name": "Quantized Engine Integration & Execution Provider Selection",
-      "status": "Implemented & Verified",
-      "components": ["OnnxSessionManager", "VieNeuOnnxEngine", "DevicePerformanceHelper.getBigCoreCount"]
-    },
-    {
-      "name": "Dynamic Adaptive Pre-Buffering (7500ms Target)",
-      "status": "Implemented & Verified",
-      "components": ["TTSAudioPipeline", "PrewarmedChunkCache"]
-    },
-    {
-      "name": "Optimized Vietnamese Text Chunking",
-      "status": "Implemented & Verified",
-      "components": ["SmartTextSegmenter", "TextChunk", "PauseConfig"]
+      "name": "Dynamic Adaptive Pre-Buffering & Natural Story Cadence",
+      "status": "Implemented & Verified (v1.1)",
+      "components": ["TTSAudioPipeline", "PrewarmedChunkCache", "SmartTextSegmenter", "PcmUtils"]
     }
   ],
   "decisions_made": [
+    {
+      "decision": "Early Asynchronous G2P Pre-Warming",
+      "reason": "Avoids cold-start dictionary load and regex compilation delays on Chunk 1, reducing G2P time from 129ms to < 5ms."
+    },
+    {
+      "decision": "Intermediate Acoustic CacheTensor Recycling",
+      "reason": "Recycles intermediate pk/pv tensors across 16 channels in acousticFrame to prevent thousands of un-recycled buffers per sentence."
+    },
+    {
+      "decision": "System Memory Pressure Callback (onTrimMemory)",
+      "reason": "Releases idle pre-warmed audio cache and G2P dictionary cache when Android triggers TRIM_MEMORY_RUNNING_LOW/CRITICAL."
+    },
     {
       "decision": "SingleTop Launch Mode for StoryDetailActivity",
       "reason": "Eliminates duplicate activity instances when tapping stories multiple times or returning from notifications."
     },
     {
-      "decision": "Tri-Layer Defense for Story Preparation & Content Fetching",
-      "reason": "Prevents redundant network calls (Layer 3), avoids duplicate ONNX background preparation jobs (Layer 2), and stops activity stacking (Layer 1)."
-    },
-    {
       "decision": "Default Precision set to INT8",
       "reason": "Saves ~30% RAM (802MB vs 1148MB) and improves RTF to ~0.83-0.90x on mobile devices without perceptible audio degradation."
-    },
-    {
-      "decision": "Dynamic INT8 on CPU / XNNPACK Execution Provider",
-      "reason": "Quantizes MatMul/Gemm while preserving Conv float precision, achieving ~50% model size reduction with high audio quality."
-    },
-    {
-      "decision": "Dynamic Precision Hot-Reloading in VieNeuTTSManager",
-      "reason": "Invalidates prewarmed cache, recreates ONNX session manager without service restart, and emits telemetry update."
-    },
-    {
-      "decision": "Precision Card Visibility Binding to VieNeu Engine",
-      "reason": "Automatically hides precision selector when Google TTS is active and shows when VieNeu TTS is active."
     }
   ]
 }

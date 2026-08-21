@@ -51,4 +51,6 @@ app/src/main/assets/vieneu/backbone_int8/
 test_phase01_setup.sh
 jdk21/
 /jdk21/
+scratch/
+/scratch/
 
