@@ -42,32 +42,46 @@ jobs:
           echo "App Slug Name: $SLUG_NAME"
           echo "APP_NAME=$SLUG_NAME" >> $GITHUB_OUTPUT
 
-      # 3. Tự động tăng phiên bản Release (Auto-Increment Versioning)
+      # 3. Tự động xác định hoặc tăng phiên bản Release (Smart Versioning)
       - name: Determine Next Release Version
         id: version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Lấy tag mới nhất từ GitHub Release (nếu có)
-          LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
-
-          if [ -z "$LATEST_TAG" ]; then
-            NEW_VERSION="v1.0"
-            echo "No existing releases found. Initializing version to $NEW_VERSION"
+          # 1. Kiểm tra nếu commit hiện tại đã được gắn tag cụ thể (ví dụ: v1.7)
+          EXACT_TAG=$(git describe --tags --exact-match 2>/dev/null || true)
+          if [ -n "$EXACT_TAG" ]; then
+            NEW_VERSION="$EXACT_TAG"
+            echo "Current commit has exact tag: $NEW_VERSION"
           else
-            echo "Latest Release Tag found: $LATEST_TAG"
-            # Bỏ ký tự 'v' ở đầu nếu có
-            CLEAN_TAG="${LATEST_TAG#v}"
-            MAJOR=$(echo "$CLEAN_TAG" | cut -d. -f1)
-            MINOR=$(echo "$CLEAN_TAG" | cut -d. -f2)
+            # 2. Lấy tag mới nhất từ GitHub Release (nếu có)
+            LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
 
-            # Kiểm tra định dạng số hợp lệ
-            if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then MAJOR=1; fi
-            if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then MINOR=0; fi
+            if [ -z "$LATEST_TAG" ]; then
+              NEW_VERSION="v1.0"
+              echo "No existing releases found. Initializing version to $NEW_VERSION"
+            else
+              echo "Latest Release Tag found: $LATEST_TAG"
+              # Kiểm tra xem release mới nhất đã có file APK đính kèm chưa
+              HAS_APK=$(gh release view "$LATEST_TAG" --json assets -q '.assets[] | select(.name | endswith(".apk")) | .name' 2>/dev/null || true)
+              if [ -z "$HAS_APK" ]; then
+                NEW_VERSION="$LATEST_TAG"
+                echo "Latest release $LATEST_TAG does not have APK asset yet. Attaching to $NEW_VERSION"
+              else
+                # Bỏ ký tự 'v' ở đầu nếu có
+                CLEAN_TAG="${LATEST_TAG#v}"
+                MAJOR=$(echo "$CLEAN_TAG" | cut -d. -f1)
+                MINOR=$(echo "$CLEAN_TAG" | cut -d. -f2)
 
-            NEW_MINOR=$((MINOR + 1))
-            NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
-            echo "Incrementing version: $LATEST_TAG -> $NEW_VERSION"
+                # Kiểm tra định dạng số hợp lệ
+                if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then MAJOR=1; fi
+                if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then MINOR=0; fi
+
+                NEW_MINOR=$((MINOR + 1))
+                NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
+                echo "Incrementing version: $LATEST_TAG -> $NEW_VERSION"
+              fi
+            fi
           fi
 
           echo "VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
@@ -119,7 +133,7 @@ jobs:
           echo "APK_PATH=$TARGET_APK" >> $GITHUB_OUTPUT
 
       # Upload lên GitHub Release
-      - name: Create GitHub Release & Upload APK
+      - name: Create or Update GitHub Release & Upload APK
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.VERSION }}
@@ -127,6 +141,12 @@ jobs:
         run: |
           echo "Publishing release $VERSION with asset $APK_PATH"
           ls -lh "$APK_PATH"
-          gh release create "$VERSION" "$APK_PATH" \
-            --title "Release $VERSION" \
-            --generate-notes
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists. Uploading APK asset..."
+            gh release upload "$VERSION" "$APK_PATH" --clobber
+          else
+            echo "Creating new release $VERSION..."
+            gh release create "$VERSION" "$APK_PATH" \
+              --title "Release $VERSION" \
+              --generate-notes
+          fi
