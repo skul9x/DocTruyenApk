@@ -109,6 +109,7 @@ class VieNeuTTSManager(
             try {
                 DebugLogger.log(TAG, "🚀 Initializing VieNeuOnnxEngine...", LogType.INFO)
                 val loadedEngine = withContext(Dispatchers.IO) {
+                    SeaG2P.warmUp(ctx)
                     VieNeuOnnxEngine.create(ctx)
                 }
                 engine = loadedEngine
@@ -570,6 +571,7 @@ class VieNeuTTSManager(
         pipeline = null
         engine?.close()
         engine = null
+        System.gc()
 
         val ctx = appContext
         scope.launch {
@@ -578,7 +580,11 @@ class VieNeuTTSManager(
                     if (ctx != null) {
                         VieNeuOnnxEngine.create(ctx, precision = normPrecision)
                     } else {
-                        val baseAssetsDir = File("src/main/assets/vieneu")
+                        val baseAssetsDir = if (File("app/src/main/assets/vieneu").exists()) {
+                            File("app/src/main/assets/vieneu")
+                        } else {
+                            File("src/main/assets/vieneu")
+                        }
                         val backboneDir = OnnxSessionManager.getBackboneDir(baseAssetsDir, normPrecision)
                         val codecDir = File(baseAssetsDir, "codec")
                         val sessionManager = OnnxSessionManager.createFromFiles(
@@ -641,12 +647,15 @@ class VieNeuTTSManager(
     override fun shutdown() {
         cancelPrewarm()
         scope.cancel()
+        pipeline?.stop()
         pipeline?.release()
         pipeline = null
         engine?.close()
         engine = null
+        PrewarmedChunkCache.clear()
         fallbackManager?.shutdown()
         fallbackManager = null
+        System.gc()
         notifyStateChange(TTSState.IDLE)
     }
 

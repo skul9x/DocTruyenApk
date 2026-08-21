@@ -21,7 +21,8 @@ class OnnxSessionManager(
     val codecSession: OrtSession,
     val env: OrtEnvironment,
     val quantizationType: QuantizationType = QuantizationType.FP32,
-    val executionProvider: String = "XNNPACK"
+    val executionProvider: String = "XNNPACK",
+    val sessionOptions: OrtSession.SessionOptions? = null
 ) : AutoCloseable {
 
     enum class QuantizationType {
@@ -31,14 +32,28 @@ class OnnxSessionManager(
     }
 
     private var closed = false
+    val isClosed: Boolean
+        get() = closed
+
+    private var internalPrefillSession: OrtSession? = prefillSession
+    private var internalDecodeSession: OrtSession? = decodeSession
+    private var internalAcousticSession: OrtSession? = acousticSession
+    private var internalCodecSession: OrtSession? = codecSession
+    private var internalSessionOptions: OrtSession.SessionOptions? = sessionOptions
 
     override fun close() {
         if (closed) return
         closed = true
-        try { prefillSession.close() } catch (_: Exception) {}
-        try { decodeSession.close() } catch (_: Exception) {}
-        try { acousticSession.close() } catch (_: Exception) {}
-        try { codecSession.close() } catch (_: Exception) {}
+        try { internalPrefillSession?.close() } catch (_: Exception) {}
+        try { internalDecodeSession?.close() } catch (_: Exception) {}
+        try { internalAcousticSession?.close() } catch (_: Exception) {}
+        try { internalCodecSession?.close() } catch (_: Exception) {}
+        try { internalSessionOptions?.close() } catch (_: Exception) {}
+        internalPrefillSession = null
+        internalDecodeSession = null
+        internalAcousticSession = null
+        internalCodecSession = null
+        internalSessionOptions = null
     }
 
     companion object {
@@ -188,7 +203,8 @@ class OnnxSessionManager(
                 codecSession = codecSession,
                 env = env,
                 quantizationType = detectedQuant,
-                executionProvider = epUsed
+                executionProvider = epUsed,
+                sessionOptions = sessionOptions
             )
         }
 
@@ -240,7 +256,8 @@ class OnnxSessionManager(
                 codecSession = codecSession,
                 env = env,
                 quantizationType = detectedQuant,
-                executionProvider = epUsed
+                executionProvider = epUsed,
+                sessionOptions = sessionOptions
             )
         }
 

@@ -2,7 +2,7 @@
 
 **Dự án:** DocTruyen & VieNeu-TTS Offline Mobile App  
 **Repository:** `https://github.com/skul9x/DocTruyenApk.git` (Branch `main`)  
-**Thời gian cập nhật:** 20/08/2026 15:22 (GMT+7)
+**Thời gian cập nhật:** 21/08/2026 10:45 (GMT+7)
 
 ---
 

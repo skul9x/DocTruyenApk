@@ -599,6 +599,26 @@ class ReadingService : Service() {
             .build()
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DebugLogger.log("ReadingService", "⚠️ onTrimMemory received: level=$level", LogType.INFO)
+        when (level) {
+            TRIM_MEMORY_RUNNING_CRITICAL,
+            TRIM_MEMORY_RUNNING_LOW,
+            TRIM_MEMORY_UI_HIDDEN,
+            TRIM_MEMORY_COMPLETE,
+            TRIM_MEMORY_MODERATE -> {
+                // If not actively reading or preparing, prune caches
+                if (currentState != ITTSManager.TTSState.PLAYING && currentState != ITTSManager.TTSState.INITIALIZING) {
+                    DebugLogger.log("ReadingService", "🧹 Pruning idle prewarm caches and G2P cache on memory pressure", LogType.INFO)
+                    com.skul9x.doctruyen.tts.vieneu.PrewarmedChunkCache.clear()
+                    com.skul9x.doctruyen.tts.vieneu.SeaG2P.clearCache()
+                    System.gc()
+                }
+            }
+        }
+    }
+
     /**
      * Called when app is removed from Recent Apps (swipe to kill)
      * Stop TTS and clean up resources
@@ -606,21 +626,32 @@ class ReadingService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         releaseWakeLock()
+        cancelPrewarm()
+        com.skul9x.doctruyen.tts.vieneu.PrewarmedChunkCache.clear()
+        com.skul9x.doctruyen.tts.vieneu.SeaG2P.clearCache()
         ttsManager?.stop()
         ttsManager?.shutdown()
+        ttsManager = null
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null
         stopForeground(STOP_FOREGROUND_REMOVE)
+        System.gc()
         stopSelf()
     }
 
     override fun onDestroy() {
         releaseWakeLock()
+        cancelPrewarm()
+        com.skul9x.doctruyen.tts.vieneu.PrewarmedChunkCache.clear()
+        com.skul9x.doctruyen.tts.vieneu.SeaG2P.clearCache()
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null
+        ttsManager?.stop()
         ttsManager?.shutdown()
+        ttsManager = null
+        System.gc()
         super.onDestroy()
     }
 }

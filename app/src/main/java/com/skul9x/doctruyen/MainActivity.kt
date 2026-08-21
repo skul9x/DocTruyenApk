@@ -71,6 +71,11 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         
+        // Warm up G2P early in background to eliminate chunk 1 cold-start latency
+        lifecycleScope.launch(Dispatchers.IO) {
+            com.skul9x.doctruyen.tts.vieneu.SeaG2P.warmUp(applicationContext)
+        }
+        
         // Verify hosting first
         verifyHosting()
     }

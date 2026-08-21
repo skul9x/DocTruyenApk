@@ -40,6 +40,10 @@ class VieNeuOnnxEngine(
     private val lock = ReentrantLock()
     private val env: OrtEnvironment get() = sessionManager.env
 
+    private var closed = false
+    val isClosed: Boolean
+        get() = closed || sessionManager.isClosed
+
     // Pre-allocated buffers for topKSample to eliminate per-call allocations
     private var workingLogitsBuffer = FloatArray(1024)
     private var topKIndicesBuffer = IntArray(256)
@@ -151,6 +155,9 @@ class VieNeuOnnxEngine(
         maxNewFrames: Int = 600,
         repetitionPenalty: Float = 1.2f
     ): EngineInferenceResult = lock.withLock {
+        if (isClosed) {
+            throw IllegalStateException("VieNeuOnnxEngine is closed")
+        }
         val backboneStart = System.currentTimeMillis()
         val anchor = speakerAnchor(speakerEmb)
         val styleId = config.defaultStyleTokenId
@@ -408,6 +415,11 @@ class VieNeuOnnxEngine(
 
                 val kt = out.get(1) as OnnxTensor
                 val vt = out.get(2) as OnnxTensor
+                
+                // Recycle previous intermediate pk and pv before replacing
+                pk.recycle()
+                pv.recycle()
+
                 pk = CacheTensor.fromOnnxTensor(kt)
                 pv = CacheTensor.fromOnnxTensor(vt)
 
@@ -415,6 +427,10 @@ class VieNeuOnnxEngine(
                 hist?.get(ch)?.add(codes[ch])
             }
         }
+
+        // Recycle final pk and pv after completing all channels
+        pk.recycle()
+        pv.recycle()
 
         // Text logits for EOS check: slot0 @ text_emb.T
         // W1 optimization: compute dot product for EOS token (token 6) and verify if it dominates vs other candidate tokens
@@ -826,7 +842,16 @@ class VieNeuOnnxEngine(
 
     override fun close() {
         lock.withLock {
-            sessionManager.close()
+            if (closed) return
+            closed = true
+            try {
+                sessionManager.close()
+            } catch (_: Exception) {}
+            CacheTensor.Pool.clear()
+            workingLogitsBuffer = FloatArray(0)
+            topKIndicesBuffer = IntArray(0)
+            topKLogitsBuffer = FloatArray(0)
+            probsBuffer = DoubleArray(0)
         }
     }
 
