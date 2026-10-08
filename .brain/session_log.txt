@@ -8,3 +8,8 @@
 [2026-08-19 10:16] Rewrote detailed README.md with system architecture, benchmark results, and build guides.
 [2026-08-19 10:21] Configured GitHub Actions CI/CD (.github/workflows/android.yml) for auto versioning, keystore release signing & GitHub releases.
 [2026-08-19 10:22] Committed and pushed all source code and workflows to origin main without force push.
+[2026-08-21 15:13] Completed Release v1.9 runtime stability, instant cancellation and UI optimization.
+[2026-10-07 13:00] Completed Phase 01: 25 voice presets sync, alias mapping, and Thiền Tâm Đức cadence profile.
+[2026-10-07 13:50] Completed Phase 02: 64-frame sliding-window repetition penalty & QuickSelect Top-256 sampling.
+[2026-10-07 20:50] Completed Phase 03: Safe emotion tags extraction & novel footnote bracket separation.
+[2026-10-08 08:55] Completed Phase 04: BabbleGuard anti-hallucination engine, speech burst analysis & retry synthesis loop.

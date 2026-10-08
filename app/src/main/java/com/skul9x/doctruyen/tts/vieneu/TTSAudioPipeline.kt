@@ -27,13 +27,14 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 class TTSAudioPipeline(
     private val engine: VieNeuOnnxEngine,
-    var voiceName: String = "Trúc Ly",
+    var voiceName: String = "Hải Đăng",
     private val context: Context? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     var minPreBufferChunks: Int = 1,
     var minPreBufferDurationMs: Long = 7500L,
     var quantizationType: OnnxSessionManager.QuantizationType = engine.quantizationType,
-    var preBufferChunkCount: Int = 2
+    var preBufferChunkCount: Int = 2,
+    var temperature: Float = 0.45f
 ) {
     var targetPreBufferChunks: Int
         get() = preBufferChunkCount
@@ -340,7 +341,7 @@ class TTSAudioPipeline(
 
                     // 1. Probe phonemization latency
                     val g2pStart = System.currentTimeMillis()
-                    val phonemes = SeaG2P.phonemize(chunk.text)
+                    val phonemes = VieNeuTTSManager.phonemizeWithEmotionBypass(chunk.text)
                     val g2pDuration = System.currentTimeMillis() - g2pStart
                     val phonemeCount = phonemes.count { it == ' ' } + 1
                     if (!isActive) break
@@ -348,7 +349,8 @@ class TTSAudioPipeline(
                     // 2. Probe ONNX neural inference time (backbone + codec)
                     val inferStart = System.currentTimeMillis()
                     val inferResult = withContext(NonCancellable) {
-                        engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName)
+                        val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
+                        engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
                     }
                     val inferDuration = System.currentTimeMillis() - inferStart
                     val pcmFloat = inferResult.pcm

@@ -19,9 +19,54 @@ class VieNeuTokenizer(
     fun encode(text: String): IntArray {
         if (text.isEmpty()) return intArrayOf()
 
+        // 1. Parse recognized emotion cues ([cười], [thở dài], [hắng giọng]) and normalize punctuation attachment
+        val parsed = EmotionTagParser.parse(text)
+
+        // 2. If no special tokens present, encode directly
+        if (!parsed.contains("<|")) {
+            val tokenIds = ArrayList<Int>()
+            encodeChunk(parsed, tokenIds)
+            return tokenIds.toIntArray()
+        }
+
+        // 3. Find and isolate special tokens (e.g. <|emotion_1|>, <|emotion_2|>, <|emotion_3|>)
+        val tokenIds = ArrayList<Int>()
+        val matches = SPECIAL_TOKEN_REGEX.findAll(parsed).toList()
+        if (matches.isEmpty()) {
+            encodeChunk(parsed, tokenIds)
+            return tokenIds.toIntArray()
+        }
+
+        var lastEnd = 0
+        for (match in matches) {
+            val preChunk = parsed.substring(lastEnd, match.range.first)
+            if (preChunk.isNotEmpty()) {
+                encodeChunk(preChunk, tokenIds)
+            }
+
+            val specialToken = match.value
+            val specialId = vocab[specialToken]
+                ?: EmotionTagParser.getEmotionTokenId(specialToken)
+                ?: unkTokenId
+            tokenIds.add(specialId)
+
+            lastEnd = match.range.last + 1
+        }
+
+        if (lastEnd < parsed.length) {
+            val postChunk = parsed.substring(lastEnd)
+            if (postChunk.isNotEmpty()) {
+                encodeChunk(postChunk, tokenIds)
+            }
+        }
+
+        return tokenIds.toIntArray()
+    }
+
+    private fun encodeChunk(text: String, tokenIds: ArrayList<Int>) {
+        if (text.isEmpty()) return
         val normalized = Normalizer.normalize(text, Normalizer.Form.NFC)
         val matcher = PRE_TOKENIZER_PATTERN.matcher(normalized)
-        val tokenIds = ArrayList<Int>()
 
         while (matcher.find()) {
             val chunk = matcher.group()
@@ -40,8 +85,6 @@ class VieNeuTokenizer(
                 tokenIds.add(id)
             }
         }
-
-        return tokenIds.toIntArray()
     }
 
     private fun applyBpe(token: String): List<String> {
@@ -100,6 +143,9 @@ class VieNeuTokenizer(
     }
 
     companion object {
+        val EmotionTagParser = com.skul9x.doctruyen.tts.vieneu.EmotionTagParser
+        private val SPECIAL_TOKEN_REGEX = Regex("<\\|[^>\\|]+\\|>")
+
         private val PRE_TOKENIZER_PATTERN = Pattern.compile(
             """(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
         )

@@ -31,6 +31,200 @@ data class PauseConfig(
 }
 
 /**
+ * Emotion tag extractor and novel footnote bracket protector for VieNeu-TTS.
+ *
+ * Maps recognized emotion cues:
+ * - [cười], [cuoi], [chuckle] -> <|emotion_1|> (token ID 9)
+ * - [thở dài], [tho dai], [sigh] -> <|emotion_2|> (token ID 10)
+ * - [hắng giọng], [hang giong], [clear throat] -> <|emotion_3|> (token ID 11)
+ *
+ * Unrecognized brackets ([1], [CV: ...], [Chương 2]) pass through as regular text.
+ * Trailing punctuation is kept attached to avoid synthetic silence gaps.
+ */
+object EmotionTagParser {
+    val EMOTION_MAP: Map<String, String> = mapOf(
+        "cười" to "<|emotion_1|>",
+        "cuoi" to "<|emotion_1|>",
+        "chuckle" to "<|emotion_1|>",
+        "thở dài" to "<|emotion_2|>",
+        "tho dai" to "<|emotion_2|>",
+        "sigh" to "<|emotion_2|>",
+        "hắng giọng" to "<|emotion_3|>",
+        "hang giong" to "<|emotion_3|>",
+        "clear throat" to "<|emotion_3|>"
+    )
+
+    val EMOTION_TOKEN_IDS: Map<String, Int> = mapOf(
+        "<|emotion_1|>" to 9,
+        "<|emotion_2|>" to 10,
+        "<|emotion_3|>" to 11
+    )
+
+    val TAG_TO_TOKEN_ID: Map<String, Int> = mapOf(
+        "cười" to 9,
+        "cuoi" to 9,
+        "chuckle" to 9,
+        "thở dài" to 10,
+        "tho dai" to 10,
+        "sigh" to 10,
+        "hắng giọng" to 11,
+        "hang giong" to 11,
+        "clear throat" to 11
+    )
+
+    private val BRACKET_REGEX = Regex("\\[([^\\[\\]]+)\\]")
+    val EMOTION_TOKEN_REGEX = Regex("<\\|emotion_\\d+\\|>")
+    private val PUNCT_ATTACH_REGEX = Regex("(<\\|emotion_\\d+\\|>)\\s+([.,!?;:…\"'”’)\\]])")
+    val PUNCT_CHARS: Set<Char> = setOf('.', ',', '!', '?', ';', ':', '…', '"', '\'', '”', '’', ')', ']')
+
+    fun isEmotionTag(cue: String): Boolean {
+        val clean = cue.trim().removeSurrounding("[", "]").trim().lowercase()
+        return EMOTION_MAP.containsKey(clean)
+    }
+
+    fun getEmotionToken(cue: String): String? {
+        val clean = cue.trim().removeSurrounding("[", "]").trim().lowercase()
+        return EMOTION_MAP[clean]
+    }
+
+    fun getEmotionTokenId(tagOrToken: String): Int? {
+        val trimmed = tagOrToken.trim()
+        EMOTION_TOKEN_IDS[trimmed]?.let { return it }
+        val cue = trimmed.removeSurrounding("[", "]").trim().lowercase()
+        return TAG_TO_TOKEN_ID[cue]
+    }
+
+    /**
+     * Parses and replaces recognized emotion tags with special tokens.
+     * Preserves arbitrary novel brackets ([1], [CV: ...], [Chương 2]) as regular text.
+     * Keeps trailing punctuation attached without synthetic silence gaps.
+     */
+    fun parse(text: String): String {
+        if (text.isEmpty() || !text.contains('[')) {
+            return if (text.contains("<|emotion_")) normalizePunctuationAttachment(text) else text
+        }
+
+        val replaced = BRACKET_REGEX.replace(text) { matchResult ->
+            val inner = matchResult.groupValues[1].trim().lowercase()
+            val emotionToken = EMOTION_MAP[inner]
+            emotionToken ?: matchResult.value
+        }
+
+        return normalizePunctuationAttachment(replaced)
+    }
+
+    /**
+     * Normalizes punctuation attachment to emotion tokens.
+     */
+    fun normalizePunctuationAttachment(text: String): String {
+        if (!text.contains("<|emotion_")) return text
+        return PUNCT_ATTACH_REGEX.replace(text) { match ->
+            "${match.groupValues[1]}${match.groupValues[2]}"
+        }
+    }
+
+    /**
+     * Isolates emotion tokens prior to G2P normalization.
+     * Splits text around emotion tokens, phonemizes only the natural text segments,
+     * and re-splices emotion tokens intact.
+     */
+    fun phonemizeWithBypass(
+        text: String,
+        phonemizer: (String) -> String = { SeaG2P.phonemize(it) }
+    ): String {
+        val parsed = parse(text)
+        if (!parsed.contains("<|emotion_")) {
+            return phonemizer(parsed)
+        }
+
+        val matches = EMOTION_TOKEN_REGEX.findAll(parsed).toList()
+        if (matches.isEmpty()) {
+            return phonemizer(parsed)
+        }
+
+        val sb = StringBuilder()
+        var lastEnd = 0
+
+        for (match in matches) {
+            val preText = parsed.substring(lastEnd, match.range.first)
+            if (lastEnd > 0) {
+                // If previous token had trailing punctuation, attach it directly
+                var pIdx = 0
+                while (pIdx < preText.length && preText[pIdx] in PUNCT_CHARS) {
+                    pIdx++
+                }
+                if (pIdx > 0) {
+                    val punct = preText.substring(0, pIdx)
+                    sb.append(punct)
+                    val rest = preText.substring(pIdx).trim()
+                    if (rest.isNotEmpty()) {
+                        val ph = phonemizer(rest)
+                        if (ph.isNotEmpty()) {
+                            if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(" ")
+                            sb.append(ph)
+                        }
+                    }
+                } else {
+                    val trimmed = preText.trim()
+                    if (trimmed.isNotEmpty()) {
+                        val ph = phonemizer(trimmed)
+                        if (ph.isNotEmpty()) {
+                            if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(" ")
+                            sb.append(ph)
+                        }
+                    }
+                }
+            } else {
+                val trimmed = preText.trim()
+                if (trimmed.isNotEmpty()) {
+                    val ph = phonemizer(trimmed)
+                    if (ph.isNotEmpty()) {
+                        sb.append(ph)
+                    }
+                }
+            }
+
+            if (sb.isNotEmpty() && !sb.endsWith(" ")) {
+                sb.append(" ")
+            }
+            sb.append(match.value)
+            lastEnd = match.range.last + 1
+        }
+
+        if (lastEnd < parsed.length) {
+            val postText = parsed.substring(lastEnd)
+            var pIdx = 0
+            while (pIdx < postText.length && postText[pIdx] in PUNCT_CHARS) {
+                pIdx++
+            }
+            if (pIdx > 0) {
+                val punct = postText.substring(0, pIdx)
+                sb.append(punct)
+                val rest = postText.substring(pIdx).trim()
+                if (rest.isNotEmpty()) {
+                    val ph = phonemizer(rest)
+                    if (ph.isNotEmpty()) {
+                        if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(" ")
+                        sb.append(ph)
+                    }
+                }
+            } else {
+                val trimmed = postText.trim()
+                if (trimmed.isNotEmpty()) {
+                    val ph = phonemizer(trimmed)
+                    if (ph.isNotEmpty()) {
+                        if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(" ")
+                        sb.append(ph)
+                    }
+                }
+            }
+        }
+
+        return sb.toString()
+    }
+}
+
+/**
  * Structured text chunk with attached pause metadata for natural audio generation.
  */
 data class TextChunk(
@@ -51,6 +245,12 @@ data class TextChunk(
  * - Sub-clause splitting for lengthy lines (<= maxCharsPerChunk) without breaking mid-word.
  */
 object SmartTextSegmenter {
+
+    val EmotionTagParser = com.skul9x.doctruyen.tts.vieneu.EmotionTagParser
+
+    fun phonemizeWithEmotionBypass(text: String, phonemizer: (String) -> String = { SeaG2P.phonemize(it) }): String {
+        return EmotionTagParser.phonemizeWithBypass(text, phonemizer)
+    }
 
     const val DEFAULT_MAX_CHARS: Int = 75
 
@@ -86,8 +286,11 @@ object SmartTextSegmenter {
         val cleanText = htmlToStructuredText(text)
         if (cleanText.isBlank()) return emptyList()
 
-        // 2. Normalize line breaks
-        val normalized = cleanText.replace("\r\n", "\n").replace('\r', '\n')
+        // 2. Parse recognized emotion cues into special tokens
+        val parsedEmotion = EmotionTagParser.parse(cleanText)
+
+        // 3. Normalize line breaks
+        val normalized = parsedEmotion.replace("\r\n", "\n").replace('\r', '\n')
 
         // 3. Protect abbreviations and numbers with dots/colons from false sentence breaks
         val (protectedText, placeholders) = protectSpecialPatterns(normalized)
@@ -295,7 +498,7 @@ object SmartTextSegmenter {
         val words = trimmed.split(WHITESPACE_REGEX).filter { it.isNotEmpty() }
         val lastChar = trimmed.last()
 
-        return if (words.size < 5) {
+        val normalized = if (words.size < 5) {
             if (lastChar in SENT_END_CHARS || lastChar == ',') {
                 var i = trimmed.length - 1
                 while (i >= 0 && (trimmed[i] in SENT_END_CHARS || trimmed[i] == ',')) {
@@ -314,6 +517,7 @@ object SmartTextSegmenter {
                 trimmed + "."
             }
         }
+        return EmotionTagParser.normalizePunctuationAttachment(normalized)
     }
 
     private val BR_REGEX = Regex("(?i)<br\\s*/?>")

@@ -120,7 +120,15 @@ data class VoicePreset(
 
 object VoicePresets {
     private val presetsMap = ConcurrentHashMap<String, VoicePreset>()
-    var defaultVoiceName: String = "Trúc Ly"
+    private val aliasesMap = ConcurrentHashMap<String, String>()
+    var defaultVoiceName: String = "Hải Đăng"
+
+    val DEFAULT_ALIASES: Map<String, String> = mapOf(
+        "Minh Quân Pro" to "Hải Đăng",
+        "Minh Quân" to "Hải Đăng",
+        "Anh Khôi" to "Thiện Minh",
+        "Mạnh Dũng" to "Quốc Tuấn"
+    )
 
     val availableVoices: List<String>
         get() = presetsMap.keys.toList()
@@ -129,8 +137,20 @@ object VoicePresets {
         presetsMap[preset.name] = preset
     }
 
+    fun resolveVoiceName(name: String?): String {
+        if (name.isNullOrBlank()) return defaultVoiceName
+        val trimmed = name.trim()
+        val target = aliasesMap[trimmed] ?: DEFAULT_ALIASES[trimmed] ?: trimmed
+        return if (presetsMap.containsKey(target) || presetsMap.isEmpty()) {
+            target
+        } else {
+            defaultVoiceName
+        }
+    }
+
     fun getVoice(name: String): VoicePreset? {
-        return presetsMap[name] ?: presetsMap[defaultVoiceName]
+        val resolved = resolveVoiceName(name)
+        return presetsMap[resolved] ?: presetsMap[name] ?: presetsMap[defaultVoiceName]
     }
 
     fun getVoicePresets(): List<VoicePreset> {
@@ -143,6 +163,18 @@ object VoicePresets {
 
     fun getRefCodes(name: String): Array<IntArray>? {
         return getVoice(name)?.codes
+    }
+
+    fun getAliases(): Map<String, String> {
+        val combined = HashMap(DEFAULT_ALIASES)
+        combined.putAll(aliasesMap)
+        return combined
+    }
+
+    fun clear() {
+        presetsMap.clear()
+        aliasesMap.clear()
+        defaultVoiceName = "Hải Đăng"
     }
 
     fun loadFromContext(context: Context, assetPath: String = "vieneu/voices_v3_turbo.json"): Boolean {
@@ -186,6 +218,14 @@ object VoicePresets {
                         val frameArr = codesArr.getJSONArray(f)
                         IntArray(frameArr.length()) { c -> frameArr.getInt(c) }
                     }
+                }
+            }
+
+            if (vObj.has("aliases")) {
+                val aliasesArr = vObj.getJSONArray("aliases")
+                for (a in 0 until aliasesArr.length()) {
+                    val alias = aliasesArr.getString(a)
+                    aliasesMap[alias] = name
                 }
             }
 

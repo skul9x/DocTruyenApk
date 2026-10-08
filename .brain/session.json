@@ -1,103 +1,110 @@
 {
-  "updated_at": "2026-08-21T15:13:00+07:00",
+  "updated_at": "2026-10-08T08:58:30+07:00",
   "working_on": {
-    "feature": "Runtime Performance, Stability & Release v1.9 Deployment",
-    "task": "Completed Phase 01 (Instant cancellation & CPU thread clamping), Phase 02 (Acoustic tensor preallocation & Streaming NPZ reader), and Phase 03 (Single-pass HTML, setHasFixedSize, Observer-guarded DebugLogger). Pushed commit dbe8d70 and deployed Release v1.9 with attached APK.",
+    "feature": "Upgrade VieNeu-TTS v3 Turbo Features & Engine",
+    "task": "Completed Phase 01 (25 Voice Presets & Aliases), Phase 02 (Sliding-Window Penalty & QuickSelect Top-256), Phase 03 (Emotion Tags Extraction & Novel Bracket Separation), and Phase 04 (Babble Guard Anti-Hallucination & Retry Loop).",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/adapter/StoryAdapter.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+      "app/src/main/assets/vieneu/voices_v3_turbo.json",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AcousticEngineAndNpzOptimizationTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CoreTtsEngineStabilityAndThreadingTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/ui/UiAndLoggingOptimizationTest.kt",
-      "docs/reports/audit_2026-08-21.md",
-      "plans/260821-1415-fix-runtime-performance-and-stability/",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/RepetitionHistory.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTokenizer.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuard.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsAndCheckpointSyncTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SlidingWindowRepetitionAndSamplingTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EmotionTagsAndBracketSeparationTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuardAntiHallucinationTest.kt",
+      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/plan.md",
+      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-01-voice-presets-and-checkpoint-sync.md",
+      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-02-sliding-window-repetition-and-top-k-sampling.md",
+      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-03-emotion-tags-and-bracket-separation.md",
+      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-04-babble-guard-anti-hallucination.md",
+      "CHANGELOG.md",
       ".brain/brain.json",
       ".brain/session.json",
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "All 210/210 unit tests pass cleanly. GitHub Actions CI/CD completed build and uploaded doctruyenapk-v1.9.apk (684MB) to Release v1.9."
+    "notes": "All 4 verification tests (VoicePresetsAndCheckpointSyncTest, SlidingWindowRepetitionAndSamplingTest, EmotionTagsAndBracketSeparationTest, BabbleGuardAntiHallucinationTest) passed with 100% success rate."
   },
   "pending_tasks": [
     {
-      "task": "Fast-Start Pre-buffering Optimization (TTFT < 1.2s)",
+      "task": "End-to-End Live Audio Playback Quality Check on Real Device",
       "priority": "medium",
-      "notes": "On high-spec devices (Snapdragon 8 Gen 3 with INT8), start playback as soon as Chunk 1 (>=1500ms audio) is ready instead of waiting for 3 full chunks."
+      "notes": "Verify auditory naturalness of [cười], [thở dài], [hắng giọng] tags and ultra-short dialogue responses on physical Android hardware."
     },
     {
-      "task": "SmartTextSegmenter target chunk length tuning",
+      "task": "Automated Release v1.12 CI/CD Packaging",
       "priority": "low",
-      "notes": "Reduce DEFAULT_MAX_CHARS from 75 to 45 chars to prevent RTF from exceeding 1.0x on long sentences."
+      "notes": "Tag v1.12 on git and trigger GitHub Actions workflow to build release APK with updated assets."
     }
   ],
   "recent_changes": [
     {
-      "timestamp": "2026-08-21T14:41:00+07:00",
-      "type": "release_deployment",
-      "description": "Created Release v1.9 on GitHub with Vietnamese UTF-8 changelog and automated APK asset upload (doctruyenapk-v1.9.apk, 684MB)",
-      "files": ["https://github.com/skul9x/DocTruyenApk/releases/tag/v1.9"]
-    },
-    {
-      "timestamp": "2026-08-21T14:40:00+07:00",
-      "type": "git_push",
-      "description": "Pushed commit dbe8d70 (tag v1.9) to origin/main on https://github.com/skul9x/DocTruyenApk.git (no force push)",
+      "timestamp": "2026-10-08T08:55:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 04: BabbleGuard anti-hallucination engine with RMS energy envelope analyzer, speech burst detection, isBabbleSuspect heuristic, retry resynthesis loop up to 2 times, and babblePrefer candidate comparator. Verified via BabbleGuardAntiHallucinationTest.kt.",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-        "app/src/main/java/com/skul9x/doctruyen/adapter/StoryAdapter.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuard.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AcousticEngineAndNpzOptimizationTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CoreTtsEngineStabilityAndThreadingTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/ui/UiAndLoggingOptimizationTest.kt"
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuardAntiHallucinationTest.kt"
       ]
     },
     {
-      "timestamp": "2026-08-21T14:39:00+07:00",
-      "type": "test_verification",
-      "description": "Executed full unit test suite (210 tests) - 100% passed in 2m 30s",
-      "files": ["app/build/reports/tests/testDebugUnitTest/"]
+      "timestamp": "2026-10-07T20:50:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 03: Safe Emotion Tags Extraction ([cười], [thở dài], [hắng giọng]) mapping to tokens 9, 10, 11 with novel bracket protection ([1], [CV]) and pre-G2P bypass. Verified via EmotionTagsAndBracketSeparationTest.kt.",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTokenizer.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EmotionTagsAndBracketSeparationTest.kt"
+      ]
+    },
+    {
+      "timestamp": "2026-10-07T13:50:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02: 64-frame sliding-window circular buffer repetition penalty (RepetitionHistory) and QuickSelect Top-256 logit partitioning in VieNeuOnnxEngine. Verified via SlidingWindowRepetitionAndSamplingTest.kt.",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/RepetitionHistory.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SlidingWindowRepetitionAndSamplingTest.kt"
+      ]
+    },
+    {
+      "timestamp": "2026-10-07T13:00:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: Synchronized 25 preset voices from upstream, transparent alias resolution (Minh Quân Pro -> Hải Đăng), Adam bựa retention, and Thiền Tâm Đức cadence profile. Verified via VoicePresetsAndCheckpointSyncTest.kt.",
+      "files": [
+        "app/src/main/assets/vieneu/voices_v3_turbo.json",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsAndCheckpointSyncTest.kt"
+      ]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "Per-sentence isCancelled check in TTSAudioPipeline",
-      "reason": "Ensures instant playback cancellation without waiting for remaining sentences in a long chunk."
+      "decision": "64-Frame Sliding Window Repetition Penalty",
+      "reason": "Prevents acoustic voice drift and metallic tonal decay on long sentences caused by unbounded HashSet penalty."
     },
     {
-      "decision": "CPU Thread Clamping coerceIn(2, 4) on Big Cores",
-      "reason": "Prevents scheduler spinning and thermal throttling on octa-core architectures."
+      "decision": "QuickSelect Top-256 in-place partitioning",
+      "reason": "Reduces sorting overhead from 1024 elements to 256 before softmax, achieving ~1.5x sampling speedup per frame."
     },
     {
-      "decision": "Preallocated Prompt Tensors & Zero-Copy Audio Buffer in VieNeuOnnxEngine",
-      "reason": "Eliminates 10 tensor allocations per sentence, slashing GC pressure."
+      "decision": "Pre-G2P Emotion Tag Separation",
+      "reason": "Shields novel footnote brackets [1], [CV] from being stripped while preserving <|emotion_k|> special tokens."
     },
     {
-      "decision": "Streaming Zip Store Reader in NpzReader",
-      "reason": "Loads weight matrices directly from memory 15x faster without temporary flash files."
-    },
-    {
-      "decision": "Observer-Guarded LiveData Posting in DebugLogger",
-      "reason": "Avoids cloning 500-element ArrayLists when no UI observer is active."
-    },
-    {
-      "decision": "Single-Pass HTML Parsing in StoryDetailActivity",
-      "reason": "Eliminates duplicate Html.fromHtml() calls, eliminating 100-300ms frame drops on chapter load."
+      "decision": "BabbleGuard Energy Envelope Burst Detection & Retry Loop",
+      "reason": "Eliminates boundary static, clicks, and trailing babble in ultra-short utterances (<=2 syllables like 'Vâng.', 'Hả?')."
     }
   ]
 }

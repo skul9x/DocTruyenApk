@@ -21,6 +21,28 @@ import kotlinx.coroutines.withContext
 typealias TTSState = ITTSManager.TTSState
 
 /**
+ * Cadence and sampling tuning profile for VieNeu preset voices.
+ */
+data class VoiceTuningProfile(
+    val temperature: Float = DEFAULT_TEMPERATURE,
+    val clausePauseMs: Int = DEFAULT_CLAUSE_PAUSE_MS,
+    val sentencePauseMs: Int = DEFAULT_SENTENCE_PAUSE_MS
+) {
+    companion object {
+        const val DEFAULT_TEMPERATURE = 0.45f
+        const val DEFAULT_CLAUSE_PAUSE_MS = 180
+        const val DEFAULT_SENTENCE_PAUSE_MS = 350
+
+        val DEFAULT = VoiceTuningProfile()
+        val THIEN_TAM_DUC = VoiceTuningProfile(
+            temperature = 0.25f,
+            clausePauseMs = 300,
+            sentencePauseMs = 600
+        )
+    }
+}
+
+/**
  * Text-to-Speech Manager using offline VieNeu ONNX engine and neural audio pipeline.
  * Drop-in replacement for the original Android TextToSpeech manager with identical state callbacks.
  */
@@ -50,8 +72,19 @@ class VieNeuTTSManager(
     private var fallbackManager: AndroidTTSManager? = null
     private var isUsingFallback = false
 
-    var voiceName: String = "Trúc Ly"
+    var voiceName: String = VoicePresets.defaultVoiceName
         private set
+
+    val tuningProfile: VoiceTuningProfile
+        get() = getTuningProfile(voiceName)
+
+    fun getTuningProfile(voice: String? = null): VoiceTuningProfile {
+        return Companion.getTuningProfile(voice ?: voiceName)
+    }
+
+    fun resolveVoiceName(name: String?): String {
+        return Companion.resolveVoiceName(name)
+    }
 
     @Volatile
     override var currentState: ITTSManager.TTSState = ITTSManager.TTSState.IDLE
@@ -84,13 +117,17 @@ class VieNeuTTSManager(
 
         // Load saved voice from user preferences
         val savedVoice = appContext?.let { UserConfig.getTtsVoice(it) }
-        if (!savedVoice.isNullOrEmpty()) {
-            voiceName = savedVoice
+        voiceName = if (!savedVoice.isNullOrEmpty()) {
+            resolveVoiceName(savedVoice)
+        } else {
+            VoicePresets.defaultVoiceName
         }
 
         if (customEngine != null && customPipeline != null) {
             engine = customEngine
             pipeline = customPipeline
+            customPipeline.voiceName = voiceName
+            customPipeline.temperature = getTuningProfile(voiceName).temperature
             if (pendingTitle != null || pendingContent != null) {
                 checkPendingSpeech()
             } else {
@@ -116,14 +153,7 @@ class VieNeuTTSManager(
                 engine = loadedEngine
 
                 // Ensure voice is valid in loaded presets
-                val available = VoicePresets.availableVoices
-                if (available.isNotEmpty() && !available.contains(voiceName)) {
-                    voiceName = if (available.contains(VoicePresets.defaultVoiceName)) {
-                        VoicePresets.defaultVoiceName
-                    } else {
-                        available.first()
-                    }
-                }
+                voiceName = resolveVoiceName(voiceName)
 
                 val prebufferChunks = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: UserConfig.DEFAULT_PREBUFFER_CHUNKS
                 val loadedPipeline = TTSAudioPipeline(
@@ -132,7 +162,8 @@ class VieNeuTTSManager(
                     context = appContext,
                     dispatcher = Dispatchers.Default,
                     quantizationType = loadedEngine.quantizationType,
-                    preBufferChunkCount = prebufferChunks
+                    preBufferChunkCount = prebufferChunks,
+                    temperature = getTuningProfile(voiceName).temperature
                 )
                 pipeline = loadedPipeline
 
@@ -210,20 +241,33 @@ class VieNeuTTSManager(
         }
     }
 
-    private fun getLoadedPauseConfig(): PauseConfig {
-        val ctx = appContext ?: return PauseConfig()
-        return PauseConfig(
-            sentencePauseMs = UserConfig.getPauseSentence(ctx),
-            paragraphPauseMs = UserConfig.getPauseParagraph(ctx),
-            clausePauseMs = UserConfig.getPauseClause(ctx)
-        )
+    fun getEffectivePauseConfig(targetVoice: String? = null): PauseConfig {
+        return getLoadedPauseConfig(targetVoice)
     }
 
-    /**
-     * Proactively pre-warm story synthesis in background.
-     * Pre-synthesizes the first 2 chunks (Title + Opening sentence) into PrewarmedChunkCache
-     * for instant playback with 0ms starvation latency when play is pressed.
-     */
+    private fun getLoadedPauseConfig(targetVoice: String? = null): PauseConfig {
+        val target = resolveVoiceName(targetVoice ?: voiceName)
+        val profile = getTuningProfile(target)
+        val ctx = appContext
+        val baseSentence = ctx?.let { UserConfig.getPauseSentence(it) } ?: profile.sentencePauseMs
+        val baseParagraph = ctx?.let { UserConfig.getPauseParagraph(it) } ?: PauseType.PARAGRAPH_BREAK.defaultDurationMs
+        val baseClause = ctx?.let { UserConfig.getPauseClause(it) } ?: profile.clausePauseMs
+
+        return if (target == "Thiền Tâm Đức") {
+            PauseConfig(
+                sentencePauseMs = profile.sentencePauseMs,
+                paragraphPauseMs = baseParagraph,
+                clausePauseMs = profile.clausePauseMs
+            )
+        } else {
+            PauseConfig(
+                sentencePauseMs = baseSentence,
+                paragraphPauseMs = baseParagraph,
+                clausePauseMs = baseClause
+            )
+        }
+    }
+
     /**
      * Proactively pre-warm story synthesis in background.
      * Pre-synthesizes the first 2 chunks (Title + Opening sentence) into PrewarmedChunkCache
@@ -238,7 +282,16 @@ class VieNeuTTSManager(
     ) {
         if (isUsingFallback) return
 
-        val effectiveVoice = voice ?: appContext?.let { UserConfig.getTtsVoice(it) } ?: voiceName
+        val effectiveVoice = resolveVoiceName(voice ?: appContext?.let { UserConfig.getTtsVoice(it) } ?: voiceName)
+        val profile = getTuningProfile(effectiveVoice)
+        val effectivePauseConfig = if (effectiveVoice == "Thiền Tâm Đức") {
+            pauseConfig.copy(
+                clausePauseMs = profile.clausePauseMs,
+                sentencePauseMs = profile.sentencePauseMs
+            )
+        } else {
+            pauseConfig
+        }
 
         // Cancel previous pre-warm job if running
         cancelPrewarm()
@@ -251,7 +304,7 @@ class VieNeuTTSManager(
         prewarmJob = scope.launch(Dispatchers.Default) {
             try {
                 Log.d(TAG, "🔥 Starting pre-warming for story $storyId (voice: $effectiveVoice)")
-                val chunks = SmartTextSegmenter.segmentStory(title, content, pauseConfig = pauseConfig)
+                val chunks = SmartTextSegmenter.segmentStory(title, content, pauseConfig = effectivePauseConfig)
                 val prewarmCount = minOf(2, chunks.size)
 
                 for (i in 0 until prewarmCount) {
@@ -260,13 +313,13 @@ class VieNeuTTSManager(
 
                     val chunk = chunks[i]
                     val g2pStart = System.currentTimeMillis()
-                    val phonemes = SeaG2P.phonemize(chunk.text)
+                    val phonemes = phonemizeWithEmotionBypass(chunk.text)
                     val g2pDuration = System.currentTimeMillis() - g2pStart
                     if (!isActive) break
 
                     val inferStart = System.currentTimeMillis()
                     val pcmFloat = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                        eng.infer(phonemes = phonemes, voiceName = effectiveVoice)
+                        eng.infer(phonemes = phonemes, voiceName = effectiveVoice, temperature = profile.temperature)
                     }
                     val inferDuration = System.currentTimeMillis() - inferStart
                     if (!isActive) break
@@ -326,9 +379,19 @@ class VieNeuTTSManager(
         }
 
         notifyStateChange(TTSState.PLAYING)
-        pipe.voiceName = voiceName
+        val targetVoice = resolveVoiceName(voiceName)
+        val profile = getTuningProfile(targetVoice)
+        pipe.voiceName = targetVoice
+        pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
-        val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
+        val config = if (targetVoice == "Thiền Tâm Đức") {
+            (if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+                clausePauseMs = profile.clausePauseMs,
+                sentencePauseMs = profile.sentencePauseMs
+            )
+        } else {
+            if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+        }
         pipe.startReading(
             text = content,
             storyId = storyId,
@@ -365,9 +428,19 @@ class VieNeuTTSManager(
         }
 
         notifyStateChange(TTSState.PLAYING)
-        pipe.voiceName = voiceName
+        val targetVoice = resolveVoiceName(voiceName)
+        val profile = getTuningProfile(targetVoice)
+        pipe.voiceName = targetVoice
+        pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
-        val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
+        val config = if (targetVoice == "Thiền Tâm Đức") {
+            (if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+                clausePauseMs = profile.clausePauseMs,
+                sentencePauseMs = profile.sentencePauseMs
+            )
+        } else {
+            if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+        }
         pipe.startReadingWithTitlePause(
             title = title,
             content = content,
@@ -428,13 +501,16 @@ class VieNeuTTSManager(
      * Set active VieNeu preset voice name.
      */
     override fun setVoice(voiceName: String) {
+        val resolved = resolveVoiceName(voiceName)
         val oldVoice = this.voiceName
-        this.voiceName = voiceName
-        pipeline?.voiceName = voiceName
-        if (oldVoice != voiceName) {
+        this.voiceName = resolved
+        pipeline?.voiceName = resolved
+        val profile = getTuningProfile(resolved)
+        pipeline?.temperature = profile.temperature
+        if (oldVoice != resolved) {
             PrewarmedChunkCache.clear()
         }
-        appContext?.let { UserConfig.setTtsVoice(it, voiceName) }
+        appContext?.let { UserConfig.setTtsVoice(it, resolved) }
     }
 
     /**
@@ -454,13 +530,13 @@ class VieNeuTTSManager(
                 )
             }
         }
-        val defaultList = listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
+        val defaultList = listOf("Hải Đăng", "Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
         return defaultList.map { name ->
             VoiceInfo(
                 id = name,
                 displayName = name,
                 description = "VieNeu Neural Voice",
-                isDefault = name == "Trúc Ly"
+                isDefault = name == VoicePresets.defaultVoiceName
             )
         }
     }
@@ -626,7 +702,8 @@ class VieNeuTTSManager(
                     context = appContext,
                     dispatcher = Dispatchers.Default,
                     quantizationType = newEngine.quantizationType,
-                    preBufferChunkCount = prebufferChunks
+                    preBufferChunkCount = prebufferChunks,
+                    temperature = getTuningProfile(voiceName).temperature
                 )
                 pipeline = newPipeline
 
@@ -670,5 +747,34 @@ class VieNeuTTSManager(
 
     companion object {
         private const val TAG = "VieNeuTTSManager"
+        const val DEFAULT_VOICE_NAME = "Hải Đăng"
+
+        fun resolveVoiceName(voiceName: String?): String {
+            return VoicePresets.resolveVoiceName(voiceName)
+        }
+
+        fun getTuningProfile(voiceName: String? = null): VoiceTuningProfile {
+            val resolved = resolveVoiceName(voiceName)
+            return when (resolved) {
+                "Thiền Tâm Đức" -> VoiceTuningProfile.THIEN_TAM_DUC
+                else -> VoiceTuningProfile.DEFAULT
+            }
+        }
+
+        val EmotionTagParser = com.skul9x.doctruyen.tts.vieneu.EmotionTagParser
+
+        fun phonemizeWithEmotionBypass(
+            text: String,
+            phonemizer: (String) -> String = { SeaG2P.phonemize(it) }
+        ): String {
+            return EmotionTagParser.phonemizeWithBypass(text, phonemizer)
+        }
+
+        fun phonemizeWithBypass(
+            text: String,
+            phonemizer: (String) -> String = { SeaG2P.phonemize(it) }
+        ): String {
+            return EmotionTagParser.phonemizeWithBypass(text, phonemizer)
+        }
     }
 }

@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-08-21T15:13:00+07:00"
+    "updated_at": "2026-10-08T08:58:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Release v1.9 Deployed (Runtime Stability, Instant Cancellation & UI Optimization)",
+    "status": "VieNeu-TTS v3 Turbo Upgraded (25 Voices, Sliding-Window Penalty, QuickSelect Top-256, Emotion Tags & Babble Guard)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -20,21 +20,24 @@
       "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM Mono)"
     },
     "tts_engine": {
-      "model": "VieNeu-TTS v3 Turbo",
+      "model": "VieNeu-TTS v3 Turbo (2026-09 Upstream Sync)",
       "precision": "Multi-precision support (User-selectable Dynamic INT8 / FP32 via XNNPACK EP, FP16 via NNAPI EP)",
       "sample_rate": 48000,
       "cpu_threading": "Adaptive thread clamping coerceIn(2, 4) on big/prime performance cores",
       "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk) + LRU Phoneme Cache (512 capacity) + Early JNI Warmup",
       "codec": "MOSS-Audio-Tokenizer-Nano-ONNX",
-      "memory_management": "Preallocated prompt tensors, zero-copy float buffer view, streaming uncompressed NPZ extraction, onTrimMemory hook"
+      "memory_management": "Preallocated prompt tensors, zero-copy float buffer view, streaming uncompressed NPZ extraction, onTrimMemory hook",
+      "sampling_algorithm": "QuickSelect Top-256 in-place partitioning with temperature and top-p sampling",
+      "repetition_penalty": "64-frame sliding-window circular buffer (RepetitionHistory) across 16 codebook channels",
+      "anti_hallucination": "BabbleGuard RMS energy envelope analyzer (10ms hops, -24dB relative peak threshold, retry resynthesis on suspect babble)"
     },
     "text_segmentation": {
-      "module": "SmartTextSegmenter",
-      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=75 chars), protected abbreviations, numbers, and time formats"
+      "module": "SmartTextSegmenter & EmotionTagParser",
+      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=75 chars), quote-aware boundary protection, emotion tag mapping ([cười], [thở dài], [hắng giọng] -> tokens 9, 10, 11), novel footnote bracket protection ([1], [CV])"
     },
     "telemetry_diagnostics": {
       "module": "TtsMetricsLogger, DevicePerformanceHelper & DebugLogger",
-      "features": "AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), observer-guarded logging"
+      "features": "AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), babble retry telemetry, observer-guarded logging"
     },
     "ci_cd": {
       "runner": "GitHub Actions (ubuntu-latest, JDK 17, Python 3.10)",
@@ -47,6 +50,7 @@
     "backbone_fp32_dir": "app/src/main/assets/vieneu/backbone/",
     "backbone_int8_dir": "app/src/main/assets/vieneu/backbone_int8/",
     "codec_dir": "app/src/main/assets/vieneu/codec/",
+    "voices_asset": "app/src/main/assets/vieneu/voices_v3_turbo.json",
     "quantization_pipeline": "tools/quantize_models.py",
     "files": [
       "vieneu_prefill.onnx",
@@ -58,10 +62,50 @@
       "moss_audio_tokenizer_decode_shared.data",
       "moss_audio_tokenizer_decode_step.onnx",
       "denoiser.onnx",
-      "sea_g2p.bin"
+      "sea_g2p.bin",
+      "voices_v3_turbo.json"
     ]
   },
   "features": [
+    {
+      "name": "25 Preset Voices, Aliases, Profile & Checkpoint Sync",
+      "status": "Implemented & Verified (Phase 01)",
+      "components": [
+        "VoicePresets.kt (25 voice dataset, fallback resolution, aliases)",
+        "voices_v3_turbo.json (upstream dataset including Adam bựa, Quốc Tuấn, Thiện Minh, Thiền Tâm Đức, Hải Đăng)",
+        "VieNeuTTSManager.kt (voice alias mapping Minh Quân Pro -> Hải Đăng, custom cadence profile Thiền Tâm Đức)",
+        "VoicePresetsAndCheckpointSyncTest.kt"
+      ]
+    },
+    {
+      "name": "Sliding-Window Repetition Penalty & Top-K QuickSelect Sampling",
+      "status": "Implemented & Verified (Phase 02)",
+      "components": [
+        "RepetitionHistory.kt (64-frame circular buffer across 16 codebook channels)",
+        "VieNeuOnnxEngine.kt (quickSelectTopK partition prior to softmax, ~1.5x sampling speedup)",
+        "SlidingWindowRepetitionAndSamplingTest.kt"
+      ]
+    },
+    {
+      "name": "Emotion Tags Extraction & Novel Bracket Separation",
+      "status": "Implemented & Verified (Phase 03)",
+      "components": [
+        "EmotionTagParser (maps [cười], [thở dài], [hắng giọng] to special tokens 9, 10, 11)",
+        "SmartTextSegmenter.kt (pre-G2P emotion bypass, novel bracket [1], [CV] isolation)",
+        "VieNeuTokenizer.kt (special emotion token registration)",
+        "EmotionTagsAndBracketSeparationTest.kt"
+      ]
+    },
+    {
+      "name": "Babble Guard Anti-Hallucination & Speech Burst Detection",
+      "status": "Implemented & Verified (Phase 04)",
+      "components": [
+        "BabbleGuard.kt (RMS envelope 10ms hops, -24dB relative peak burst threshold, min duration 60ms, min gap 80ms, isBabbleSuspect heuristic, babblePrefer comparator)",
+        "VieNeuOnnxEngine.kt (synthesizePass helper, up to 2 retries with varied temperature for <=2 syllable utterances)",
+        "TtsMetricsLogger.kt (recordBabbleRetry, babbleRetryCount telemetry)",
+        "BabbleGuardAntiHallucinationTest.kt"
+      ]
+    },
     {
       "name": "Instant Cancellation Responsiveness & CPU Thread Clamping",
       "status": "Implemented & Verified (v1.9)",
@@ -91,47 +135,25 @@
         "StoryAdapter (image load log spam cleanup)",
         "UiAndLoggingOptimizationTest.kt"
       ]
-    },
-    {
-      "name": "CI/CD Automated INT8 Quantization & Dual-Asset Packaging",
-      "status": "Implemented & Verified (v1.8)",
-      "components": [
-        ".github/workflows/android.yml (Python 3.10 quantization runner)",
-        "tools/quantize_models.py (dynamic INT8 ONNX quantization)",
-        "OnnxSessionManager.ensureAssetsExtracted (dual-asset extraction)",
-        "VieNeuOnnxEngine (ancillary file resolution)"
-      ]
-    },
-    {
-      "name": "INT8 Precision Fallback Logging & Cold-Start Sync",
-      "status": "Implemented & Verified (v1.7)",
-      "components": [
-        "OnnxSessionManager.detectQuantizationType (metadata scanner)",
-        "VieNeuTTSManager.initManager (cold-start precision sync)",
-        "TtsMetricsLogger.logPrecisionFallback (explicit telemetry fallback warning)"
-      ]
-    },
-    {
-      "name": "Early G2P Dictionary Pre-Warming & In-Memory LRU Cache",
-      "status": "Implemented & Verified (v1.6)",
-      "components": [
-        "SeaG2P.warmUp (MainActivity.onCreate & VieNeuTTSManager.initManager)",
-        "SeaG2P LRU Phoneme Cache (capacity 512)",
-        "EarlyG2PWarmingAndCacheTest.kt"
-      ]
-    },
-    {
-      "name": "Native Memory Lifecycle Management & Safe Resource Teardown",
-      "status": "Implemented & Verified (v1.6)",
-      "components": [
-        "OnnxSessionManager.close (sequential session & sessionOptions disposal)",
-        "VieNeuOnnxEngine.acousticFrame (intermediate pk & pv CacheTensor recycling)",
-        "VieNeuOnnxEngine.close (buffer reset & CacheTensor.Pool.clear)",
-        "ReadingService.onTrimMemory (cache pruning on low/critical memory)"
-      ]
     }
   ],
   "decisions_made": [
+    {
+      "decision": "64-Frame Sliding Window Repetition Penalty (RepetitionHistory)",
+      "reason": "Replaced cumulative HashSet which permanently penalized tokens and caused voice degradation / robotic cadence in long paragraphs."
+    },
+    {
+      "decision": "QuickSelect Top-256 Logit Partitioning Prior to Softmax",
+      "reason": "Reduces sorting complexity from O(N log N) across 1024 vocab items to O(N) partitioning, speeding up acoustic code generation ~1.5x."
+    },
+    {
+      "decision": "Pre-G2P Emotion Tag Separation & Bracket Shielding",
+      "reason": "Prevents SeaG2P from corrupting <|emotion_k|> tokens while guaranteeing footnote brackets like [1] or [CV] remain untouched as text."
+    },
+    {
+      "decision": "BabbleGuard Energy Envelope Analysis & Automatic Retry Loop",
+      "reason": "Eliminates boundary static, clicks, and trailing hallucinated babble on ultra-short dialogue utterances (<=2 syllables like 'Vâng.', 'Hả?')."
+    },
     {
       "decision": "Per-sentence cancellation check in TTSAudioPipeline",
       "reason": "Allows playback stop/pause/skip to respond immediately (< 50ms) instead of blocking until an entire multi-sentence paragraph is generated."
@@ -139,18 +161,6 @@
     {
       "decision": "CPU Thread Clamping to coerceIn(2, 4) on Big Cores",
       "reason": "Prevents ONNX Runtime from scheduling threads on slow LITTLE cores or causing CPU thermal throttling and UI freezes."
-    },
-    {
-      "decision": "Preallocated Prompt Tensors & Zero-Copy Audio Buffer",
-      "reason": "Eliminates allocating 10 OnnxTensors every sentence in VieNeuOnnxEngine, reducing heap allocations and GC pause frequency."
-    },
-    {
-      "decision": "Streaming Uncompressed NPZ Extraction in NpzReader",
-      "reason": "Loads weight matrices 15x faster directly from memory/stream without extracting temporary files to flash disk."
-    },
-    {
-      "decision": "Observer-Guarded LiveData Posting in DebugLogger",
-      "reason": "Prevents cloning 500-element ArrayLists into LiveData on every event when the debug UI is not open."
     }
   ]
 }

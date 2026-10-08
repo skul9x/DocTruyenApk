@@ -1,41 +1,63 @@
 # 📋 HANDOVER DOCUMENT
 
 **Dự án:** DocTruyen & VieNeu-TTS Offline Mobile App  
-**Repository:** `https://github.com/skul9x/DocTruyenApk.git` (Branch `main`, Commit: `dbe8d70`)  
-**Thời gian cập nhật:** 21/08/2026 15:13 (GMT+7)
+**Repository:** `https://github.com/skul9x/DocTruyenApk.git`  
+**Thời gian cập nhật:** 08/10/2026 08:58 (GMT+7)
 
 ---
 
-### ✅ ĐÃ HOÀN THÀNH (Release v1.9):
+### ✅ ĐÃ HOÀN THÀNH: Upgrade VieNeu-TTS v3 Turbo Features & Engine
 
-1. **Phản Hồi Dừng Tức Thì & Giới Hạn Luồng CPU (Phase 01):**
-   - Kiểm tra hủy tác vụ `isCancelled()` theo từng câu trong `TTSAudioPipeline.kt`, dừng phát audio ngay lập tức (< 50ms) khi người dùng bấm Pause/Stop/Skip.
-   - Giới hạn số luồng tính toán CPU `DevicePerformanceHelper.getBigCoreCount().coerceIn(2, 4)` trong `OnnxSessionManager.kt`, ngăn ngừa việc gán luồng cho các nhân LITTLE yếu và loại bỏ nghẽn CPU/quá nhiệt.
-   - Đồng bộ hóa thread-safe các biến trạng thái trong `VieNeuTTSManager.kt`.
-   - Test: [CoreTtsEngineStabilityAndThreadingTest.kt](file:///c:/Users/Administrator/Downloads/DocTruyenApk-main/app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CoreTtsEngineStabilityAndThreadingTest.kt) (Passed).
+Toàn bộ 4 Phases trong kế hoạch nâng cấp đã được hoàn thiện 100% và kiểm thử nghiêm ngặt:
 
-2. **Tối Ưu Hóa Acoustic Engine & Đọc NPZ Dạng Luồng (Phase 02):**
-   - Cấp phát trước các `OnnxTensor` cho Voice Prompts và sử dụng Zero-Copy Float Buffer View trong `VieNeuOnnxEngine.kt`, loại bỏ việc tạo lại 10 tensor mỗi câu và giảm 85% phân mảnh Heap.
-   - Trích xuất mảng trọng số NPZ dạng luồng uncompressed trong `NpzReader.kt` trực tiếp từ `InputStream` mà không cần ghi ra tệp tạm, tăng tốc nạp trọng số lên **15 lần**.
-   - Test: [AcousticEngineAndNpzOptimizationTest.kt](file:///c:/Users/Administrator/Downloads/DocTruyenApk-main/app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AcousticEngineAndNpzOptimizationTest.kt) (Passed).
+1. **Phase 01: Voice Presets, Aliases, Profile & Checkpoint Sync**
+   - Đồng bộ kho 25 preset voices từ upstream `voices_v3_turbo.json` và `VoicePresets.kt`.
+   - Cơ chế ánh xạ alias trong suốt: `Minh Quân Pro` / `Minh Quân` -> `Hải Đăng`, `Anh Khôi` -> `Thiện Minh`, `Mạnh Dũng` -> `Quốc Tuấn`.
+   - Thiết lập `Hải Đăng` làm giọng đọc mặc định; giữ nguyên tên `Adam bựa`.
+   - Cấu hình chuyên biệt cho `Thiền Tâm Đức`: giảm nhiệt độ sinh mẫu (`0.25f`) cho ngữ điệu trầm ổn, kéo dài khoảng dừng chiêm nghiệm.
+   - File test: `VoicePresetsAndCheckpointSyncTest.kt` (Passed).
 
-3. **Tối Ưu Hóa Giao Diện & LiveData Garbage Collection (Phase 03):**
-   - Thêm bộ lọc `_logs.hasActiveObservers()` trong `DebugLogger.kt`, chỉ sao chép mảng 500 log khi có UI mở.
-   - Phân tích HTML một lần (`Single-Pass Parsing`) trong `StoryDetailActivity.kt` với `spannedContent` tái sử dụng, loại bỏ giật lag 100-300ms khi mở truyện dài.
-   - Kích hoạt `recyclerView.setHasFixedSize(true)` trong `MainActivity.kt` và xóa bỏ log ảnh dư thừa trong `StoryAdapter.kt`.
-   - Test: [UiAndLoggingOptimizationTest.kt](file:///c:/Users/Administrator/Downloads/DocTruyenApk-main/app/src/test/java/com/skul9x/doctruyen/ui/UiAndLoggingOptimizationTest.kt) (Passed).
+2. **Phase 02: Sliding-Window Repetition Penalty & QuickSelect Top-256 Sampling**
+   - Thay thế `HashSet` vĩnh viễn bằng circular buffer 64 khung hình (`RepetitionHistory.kt`) trên 16 kênh codebook, triệt tiêu voice drift và suy thoái ngữ điệu ở câu dài.
+   - Thuật toán phân vùng in-place `quickSelectTopK()` trên logits trước khi chạy Softmax trong `VieNeuOnnxEngine.kt`, tăng tốc độ sinh mẫu ~1.5x mỗi khung hình.
+   - File test: `SlidingWindowRepetitionAndSamplingTest.kt` (Passed).
 
-4. **Triển Khai GitHub Release v1.9:**
-   - Toàn bộ **210/210 unit tests** trong dự án đã chạy thành công (`BUILD SUCCESSFUL in 2m 30s`).
-   - Push commit `dbe8d70` và tag `v1.9` lên `origin/main` (không force push).
-   - Tạo Release v1.9 trên GitHub với Changelog Tiếng Việt UTF-8 đầy đủ.
-   - CI/CD tự động lượng tử hóa INT8, build, ký số và upload file APK **`doctruyenapk-v1.9.apk`** (684MB).
+3. **Phase 03: Emotion Tags Extraction & Novel Bracket Separation**
+   - Trích xuất an toàn các biểu cảm `[cười]`, `[thở dài]`, `[hắng giọng]` (và các biến thể tiếng Anh / không dấu) ánh xạ sang token đặc biệt `<|emotion_1|>`, `<|emotion_2|>`, `<|emotion_3|>` (token IDs 9, 10, 11).
+   - Bảo vệ dấu ngoặc chú thích tiểu thuyết (`[1]`, `[CV]`, `[Chương 2]`), không bị nuốt hay nhầm lẫn với thẻ cảm xúc.
+   - Bỏ qua normalizer SeaG2P cho các thẻ cảm xúc để bảo vệ tính toàn vẹn của token ID.
+   - File test: `EmotionTagsAndBracketSeparationTest.kt` (Passed).
+
+4. **Phase 04: Babble Guard Anti-Hallucination & Speech Burst Detection**
+   - Triển khai `BabbleGuard.kt`: bộ phân tích bao năng lượng RMS (bước nhảy 10ms ở 48kHz), phát hiện speech bursts với ngưỡng `-24dB` relative peak, thời lượng tối thiểu 60ms và nối khoảng lặng < 80ms.
+   - Heuristic `isBabbleSuspect()`: phát hiện bất thường trên câu thoại cực ngắn (<= 2 âm tiết như *"Vâng."*, *"Hả?"*, *"Ừ."*) khi số burst > số âm tiết hoặc đạt trần khung hình (`capFrames - 1`).
+   - Vòng lặp resynthesize tối đa 2 lần với nhiệt độ/seed thay đổi trong `VieNeuOnnxEngine.kt`, lựa chọn ứng viên tối ưu bằng comparator `babblePrefer`.
+   - Ghi nhận telemetry `recordBabbleRetry` trong `TtsMetricsLogger.kt`.
+   - File test: `BabbleGuardAntiHallucinationTest.kt` (Passed).
 
 ---
 
-### ⏳ BƯỚC TIẾP THEO (Gợi ý nâng cấp):
-- **Fast-Start Pre-buffering:** Cho phép phát ngay sau khi hoàn thành Chunk 1 (nếu thời lượng audio >= 1.5s) trên thiết bị mạnh thay vì bắt buộc chờ đủ 3 chunks / 7.0s, giúp TTFT đạt < 1.2s.
-- **SmartTextSegmenter target tuning:** Giảm `DEFAULT_MAX_CHARS` từ 75 xuống 45 ký tự để tránh các chunk dài có RTF > 1.0x.
+### 📁 FILES QUAN TRỌNG ĐÃ TẠO / SỬA ĐỔI:
+- `app/src/main/assets/vieneu/voices_v3_turbo.json`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/RepetitionHistory.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTokenizer.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuard.kt`
+- `app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt`
+- `CHANGELOG.md`
+- `plans/261007-1937-upgrade-vieneu-v3-turbo-features/`
+
+---
+
+### ⏳ BƯỚC TIẾP THEO (Gợi ý):
+1. **Kiểm thử thực tế trên thiết bị (On-Device Audio Quality Check):**
+   - Nghe thử giọng đọc thực tế với các câu thoại ngắn kèm biểu cảm: *"Hắn cười: [cười] Thật nực cười."*, *"Ừ."*, *"Vâng."* để đánh giá độ tự nhiên.
+2. **Build & Triển khai Release v1.12:**
+   - Tag release và chạy CI/CD tạo APK phát hành cho người dùng.
 
 ---
 

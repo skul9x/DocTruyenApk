@@ -1,5 +1,27 @@
 # Changelog - DocTruyen Android App
 
+## [v1.12] - [2026-10-08] Nâng Cấp VieNeu-TTS v3 Turbo: 25 Giọng Đọc, Sliding Window Penalty, QuickSelect Top-256, Emotion Tags & Babble Guard
+### Added & Improved
+- **Đồng Bộ 25 Preset Voices & Checkpoint Hugging Face (`voices_v3_turbo.json`, `VoicePresets.kt`, `VieNeuTTSManager.kt`)**:
+  - Mở rộng kho giọng lên 25 voices từ upstream (bao gồm `Adam bựa`, `Quốc Tuấn`, `Thiện Minh`, `Thiền Tâm Đức`, v.v.).
+  - Giọng mặc định: `Hải Đăng`. Hỗ trợ ánh xạ alias trong suốt: `Minh Quân Pro` / `Minh Quân` -> `Hải Đăng`, `Anh Khôi` -> `Thiện Minh`, `Mạnh Dũng` -> `Quốc Tuấn`.
+  - Cấu hình chuyên biệt cho `Thiền Tâm Đức`: giảm nhiệt độ sinh mẫu (0.25f) và kéo dài khoảng dừng chiêm nghiệm.
+- **Sliding-Window Repetition Penalty 64 Khung Hình (`RepetitionHistory.kt`, `VieNeuOnnxEngine.kt`)**:
+  - Thay thế `HashSet` cộng dồn vĩnh viễn bằng circular buffer 64 khung hình (~2.5s) trên 16 kênh codebook, triệt tiêu hoàn toàn hiện tượng méo tiếng và suy thoái ngữ điệu ở câu văn dài.
+- **Tối Ưu Phân Vùng QuickSelect Top-256 (`VieNeuOnnxEngine.kt`)**:
+  - Triển khai thuật toán phân vùng một phần in-place `quickSelectTopK()` trên logits trước khi chạy Softmax, tăng tốc độ sinh mẫu ~1.5x mỗi khung hình.
+- **Xử Lý Thẻ Cảm Xúc & Bảo Vệ Chú Thích Truyện (`EmotionTagParser`, `SmartTextSegmenter.kt`, `VieNeuTokenizer.kt`)**:
+  - Tách và ánh xạ các biểu cảm `[cười]`, `[thở dài]`, `[hắng giọng]` (và các biến thể tiếng Anh / không dấu) sang token đặc biệt `<|emotion_1|>`, `<|emotion_2|>`, `<|emotion_3|>` (IDs 9, 10, 11).
+  - Bảo vệ nguyên vẹn các dấu ngoặc chú thích tiểu thuyết (`[1]`, `[CV]`, `[Chương 2]`), cho phép đi qua pipeline văn bản thông thường.
+  - Tách thẻ cảm xúc trước G2P để tránh SeaG2P nuốt hoặc làm méo thẻ đặc biệt.
+- **BabbleGuard Chống Ảo Giác Câu Thoại Ngắn (`BabbleGuard.kt`, `VieNeuOnnxEngine.kt`, `TtsMetricsLogger.kt`)**:
+  - Phân tích bao năng lượng RMS với bước nhảy 10ms ở 48kHz, phát hiện speech bursts với ngưỡng -24dB relative peak, thời lượng tối thiểu 60ms và nối khoảng lặng < 80ms.
+  - Heuristic `isBabbleSuspect()`: kích hoạt với phát ngôn siêu ngắn (<= 2 âm tiết như "Vâng.", "Hả?", "Ừ.") khi số bursts > số âm tiết hoặc đạt trần khung hình (`capFrames - 1`).
+  - Vòng lặp tự động retry tối đa 2 lần với nhiệt độ/seed thay đổi, so sánh và chọn ứng viên tối ưu bằng comparator `babblePrefer`.
+  - Ghi nhận telemetry `recordBabbleRetry` vào `TtsMetricsLogger`.
+- **Bộ Kiểm Thử Đơn File Cho Từng Phase**:
+  - `VoicePresetsAndCheckpointSyncTest.kt`, `SlidingWindowRepetitionAndSamplingTest.kt`, `EmotionTagsAndBracketSeparationTest.kt`, `BabbleGuardAntiHallucinationTest.kt` (100% passed).
+
 ## [v1.11] - [2026-08-21] Đồng Bộ VieNeu-TTS v3 Turbo Upstream: Voice Presets, Adaptive Frame Capping, Quote-Aware Segmentation & Punc Normalization
 ### Added & Improved
 - **Đồng Bộ Hóa 10 Giọng Đọc Chuẩn Upstream (`VoicePresets.kt`, `voices_v3_turbo.json`)**:

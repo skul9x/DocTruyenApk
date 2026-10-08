@@ -69,7 +69,8 @@ data class TtsSessionMetrics(
     val endMemory: MemorySnapshot? = null,
     val startThermal: ThermalSnapshot? = null,
     val endThermal: ThermalSnapshot? = null,
-    val totalChars: Int = 0
+    val totalChars: Int = 0,
+    val babbleRetryCount: Int = 0
 )
 
 /**
@@ -91,6 +92,7 @@ object TtsMetricsLogger {
     private val chunkTimings = CopyOnWriteArrayList<TtsChunkTiming>()
     private val chunkQueueTimeMap = ConcurrentHashMap<Int, Long>()
     private var underrunCount: Int = 0
+    private var babbleRetryCount: Int = 0
 
     private var initialStoryChars: Int = 0
 
@@ -108,6 +110,7 @@ object TtsMetricsLogger {
         preBufferDurationMs = 0L
         firstAudioOutputTimeMs = 0L
         underrunCount = 0
+        babbleRetryCount = 0
         this.initialStoryChars = initialStoryChars
         chunkTimings.clear()
         chunkQueueTimeMap.clear()
@@ -171,6 +174,22 @@ object TtsMetricsLogger {
         val msg = "📦 [Pre-buffering Ready] chunks=$bufferedChunks, duration=${bufferedDurationMs}ms, waitTime=${preBufferDurationMs}ms"
         DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
     }
+
+    @Synchronized
+    fun recordBabbleRetry(
+        phonemes: String = "",
+        retryAttempt: Int = 1,
+        burstCount: Int = 0,
+        syllableCount: Int = 0,
+        reason: String = "excess_bursts"
+    ) {
+        babbleRetryCount++
+        updateSessionSnapshot()
+        val msg = "⚠️ [Babble Guard] Retry #$retryAttempt triggered (syllables=$syllableCount, bursts=$burstCount, reason=$reason) for '$phonemes'"
+        DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
+    }
+
+    fun getBabbleRetryCount(): Int = babbleRetryCount
 
     fun recordChunkSynthesis(
         chunkIndex: Int,
@@ -651,7 +670,8 @@ object TtsMetricsLogger {
             totalSynthesisDurationMs = totalInfer,
             totalChars = effectiveTotalChars,
             underrunCount = underrunCount,
-            chunks = ArrayList(chunkTimings)
+            chunks = ArrayList(chunkTimings),
+            babbleRetryCount = babbleRetryCount
         )
         currentSession = snapshot
         return snapshot

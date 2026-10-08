@@ -48,6 +48,7 @@ class VieNeuOnnxEngine(
 
     // Pre-allocated buffers for topKSample to eliminate per-call allocations
     private var workingLogitsBuffer = FloatArray(1024)
+    private var allIndicesBuffer = IntArray(1024) { it }
     private var topKIndicesBuffer = IntArray(256)
     private var topKLogitsBuffer = FloatArray(256)
     private var probsBuffer = DoubleArray(256)
@@ -179,20 +180,26 @@ class VieNeuOnnxEngine(
             repetitionPenalty = repetitionPenalty
         )
     }
+    private data class SynthesisPassResult(
+        val pcm: FloatArray,
+        val frames: List<IntArray>,
+        val backboneDurationMs: Long,
+        val codecDurationMs: Long
+    ) {
+        val timing: InferenceTiming
+            get() = InferenceTiming(backboneDurationMs, codecDurationMs)
+    }
 
-    fun inferWithTiming(
+    private fun synthesizePass(
         phonemes: String,
         speakerEmb: FloatArray?,
         refCodes: Array<IntArray>?,
-        temperature: Float = 0.8f,
-        topK: Int = 25,
-        topP: Float = 0.95f,
-        maxNewFrames: Int = 600,
-        repetitionPenalty: Float = 1.2f
-    ): EngineInferenceResult = lock.withLock {
-        if (isClosed) {
-            throw IllegalStateException("VieNeuOnnxEngine is closed")
-        }
+        temperature: Float,
+        topK: Int,
+        topP: Float,
+        maxNewFrames: Int,
+        repetitionPenalty: Float
+    ): SynthesisPassResult {
         val backboneStart = System.currentTimeMillis()
         val anchor = speakerAnchor(speakerEmb)
         val styleId = config.defaultStyleTokenId
@@ -243,7 +250,7 @@ class VieNeuOnnxEngine(
         val effectiveMaxFrames = min(maxNewFrames, maxExpectedFrames(phonemes))
         val frames = ArrayList<IntArray>()
         val hist = if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f) {
-            Array(config.nVq) { HashSet<Int>() }
+            RepetitionHistory(nChannels = config.nVq, window = 64, vocabSize = audioEmbeddings[0].size)
         } else {
             null
         }
@@ -337,12 +344,11 @@ class VieNeuOnnxEngine(
         val backboneDuration = System.currentTimeMillis() - backboneStart
 
         if (frames.isEmpty()) {
-            return EngineInferenceResult(
+            return SynthesisPassResult(
                 pcm = FloatArray(0),
-                timing = InferenceTiming(
-                    backboneDurationMs = backboneDuration,
-                    codecDurationMs = 0L
-                )
+                frames = frames,
+                backboneDurationMs = backboneDuration,
+                codecDurationMs = 0L
             )
         }
 
@@ -351,12 +357,123 @@ class VieNeuOnnxEngine(
         val pcm = decodeCodes(frames)
         val codecDuration = System.currentTimeMillis() - codecStart
 
-        return EngineInferenceResult(
+        return SynthesisPassResult(
             pcm = pcm,
-            timing = InferenceTiming(
-                backboneDurationMs = backboneDuration,
-                codecDurationMs = codecDuration
+            frames = frames,
+            backboneDurationMs = backboneDuration,
+            codecDurationMs = codecDuration
+        )
+    }
+
+    fun inferWithTiming(
+        phonemes: String,
+        speakerEmb: FloatArray?,
+        refCodes: Array<IntArray>?,
+        temperature: Float = 0.8f,
+        topK: Int = 25,
+        topP: Float = 0.95f,
+        maxNewFrames: Int = 600,
+        repetitionPenalty: Float = 1.2f
+    ): EngineInferenceResult = lock.withLock {
+        if (isClosed) {
+            throw IllegalStateException("VieNeuOnnxEngine is closed")
+        }
+
+        val syllableCount = BabbleGuard.countSyllables(phonemes)
+        val capFrames = min(maxNewFrames, maxExpectedFrames(phonemes))
+
+        // Initial synthesis pass
+        val pass0 = synthesizePass(
+            phonemes = phonemes,
+            speakerEmb = speakerEmb,
+            refCodes = refCodes,
+            temperature = temperature,
+            topK = topK,
+            topP = topP,
+            maxNewFrames = maxNewFrames,
+            repetitionPenalty = repetitionPenalty
+        )
+
+        // Guard activation scope: Long chunks (> 2 syllables) bypass energy envelope checks to maintain zero overhead
+        if (syllableCount > BabbleGuard.MAX_SHORT_UTTERANCE_SYLLABLES) {
+            return EngineInferenceResult(pass0.pcm, pass0.timing)
+        }
+
+        var bestCandidate = BabbleGuard.SynthesisCandidate(
+            pcm = pass0.pcm,
+            frameCount = pass0.frames.size,
+            syllableCount = syllableCount,
+            timing = pass0.timing
+        )
+
+        val isSuspect = BabbleGuard.isBabbleSuspect(
+            burstCount = bestCandidate.burstCount,
+            syllableCount = syllableCount,
+            generatedFrames = pass0.frames.size,
+            capFrames = capFrames
+        )
+
+        if (!isSuspect) {
+            return EngineInferenceResult(bestCandidate.pcm, pass0.timing)
+        }
+
+        // Suspect babble detected! Retry loop: up to MAX_RETRIES (2) with varied temperature
+        var totalBackboneMs = pass0.backboneDurationMs
+        var totalCodecMs = pass0.codecDurationMs
+
+        for (retry in 1..BabbleGuard.MAX_RETRIES) {
+            TtsMetricsLogger.recordBabbleRetry(
+                phonemes = phonemes,
+                retryAttempt = retry,
+                burstCount = bestCandidate.burstCount,
+                syllableCount = syllableCount,
+                reason = if (pass0.frames.size >= capFrames - 1) "frame_cap_ceiling" else "excess_bursts"
             )
+
+            val retryTemp = when (retry) {
+                1 -> (temperature * 0.85f).coerceAtLeast(0.5f)
+                else -> (temperature * 0.70f).coerceAtLeast(0.4f)
+            }
+
+            val retryPass = synthesizePass(
+                phonemes = phonemes,
+                speakerEmb = speakerEmb,
+                refCodes = refCodes,
+                temperature = retryTemp,
+                topK = topK,
+                topP = topP,
+                maxNewFrames = maxNewFrames,
+                repetitionPenalty = repetitionPenalty
+            )
+
+            totalBackboneMs += retryPass.backboneDurationMs
+            totalCodecMs += retryPass.codecDurationMs
+
+            val retryCandidate = BabbleGuard.SynthesisCandidate(
+                pcm = retryPass.pcm,
+                frameCount = retryPass.frames.size,
+                syllableCount = syllableCount,
+                timing = retryPass.timing
+            )
+
+            bestCandidate = BabbleGuard.babblePrefer(bestCandidate, retryCandidate)
+
+            val retrySuspect = BabbleGuard.isBabbleSuspect(
+                burstCount = retryCandidate.burstCount,
+                syllableCount = syllableCount,
+                generatedFrames = retryPass.frames.size,
+                capFrames = capFrames
+            )
+
+            if (!retrySuspect) {
+                bestCandidate = retryCandidate
+                break
+            }
+        }
+
+        return EngineInferenceResult(
+            pcm = bestCandidate.pcm,
+            timing = InferenceTiming(totalBackboneMs, totalCodecMs)
         )
     }
 
@@ -366,7 +483,7 @@ class VieNeuOnnxEngine(
         topK: Int,
         topP: Float,
         repetitionPenalty: Float,
-        hist: Array<HashSet<Int>>?
+        hist: RepetitionHistory?
     ): Pair<IntArray, Boolean> {
         val H = config.hiddenSize
         val nHLoc = config.localNumAttentionHeads // 8
@@ -416,8 +533,8 @@ class VieNeuOnnxEngine(
             pv = CacheTensor.fromOnnxTensor(vt)
 
             // Sample code for channel 0
-            codes[0] = sampleCode(0, vec0, temperature, topK, topP, repetitionPenalty, hist?.get(0))
-            hist?.get(0)?.add(codes[0])
+            codes[0] = sampleCode(0, vec0, temperature, topK, topP, repetitionPenalty, hist)
+            hist?.add(0, codes[0])
         }
 
         // Subsequent channels 1..15
@@ -457,8 +574,8 @@ class VieNeuOnnxEngine(
                 pk = CacheTensor.fromOnnxTensor(kt)
                 pv = CacheTensor.fromOnnxTensor(vt)
 
-                codes[ch] = sampleCode(ch, vec, temperature, topK, topP, repetitionPenalty, hist?.get(ch))
-                hist?.get(ch)?.add(codes[ch])
+                codes[ch] = sampleCode(ch, vec, temperature, topK, topP, repetitionPenalty, hist)
+                hist?.add(ch, codes[ch])
             }
         }
 
@@ -495,14 +612,14 @@ class VieNeuOnnxEngine(
         return Pair(codes, eos)
     }
 
-    private fun sampleCode(
+    fun sampleCode(
         ch: Int,
         vec: FloatArray,
-        temperature: Float,
-        topK: Int,
-        topP: Float,
-        repetitionPenalty: Float,
-        prev: Set<Int>?
+        temperature: Float = 0.8f,
+        topK: Int = 25,
+        topP: Float = 0.95f,
+        repetitionPenalty: Float = 1.2f,
+        hist: RepetitionHistory? = null
     ): Int {
         val audioVocabSize = audioEmbeddings[ch].size // 1024
         val logits = channelLogitsBuffer[ch]
@@ -525,8 +642,65 @@ class VieNeuOnnxEngine(
             temperature = temperature,
             topP = topP,
             repetitionPenalty = repetitionPenalty,
+            repetitionHistory = hist,
+            channel = ch
+        )
+    }
+
+    // Overload for backward compatibility with Set<Int>
+    fun sampleCode(
+        ch: Int,
+        vec: FloatArray,
+        temperature: Float,
+        topK: Int,
+        topP: Float,
+        repetitionPenalty: Float,
+        prev: Set<Int>?
+    ): Int {
+        val audioVocabSize = audioEmbeddings[ch].size
+        val logits = channelLogitsBuffer[ch]
+        val H = config.hiddenSize
+        val flatEmb = flatAudioEmbeddings[ch]
+
+        for (v in 0 until audioVocabSize) {
+            val offset = v * H
+            var dot = 0f
+            for (h in 0 until H) {
+                dot += vec[h] * flatEmb[offset + h]
+            }
+            logits[v] = dot
+        }
+
+        return topKSample(
+            logits = logits,
+            k = topK,
+            temperature = temperature,
+            topP = topP,
+            repetitionPenalty = repetitionPenalty,
             prevTokens = prev
         )
+    }
+
+    fun partitionTopK(
+        indices: IntArray,
+        logits: FloatArray,
+        k: Int,
+        start: Int = 0,
+        end: Int = indices.size - 1
+    ) {
+        Companion.partitionTopK(indices, logits, k, start, end)
+    }
+
+    fun partitionTopK(logits: FloatArray, k: Int = 256): IntArray {
+        return Companion.partitionTopK(logits, k)
+    }
+
+    fun quickSelectTopK(indices: IntArray, logits: FloatArray, k: Int = 256) {
+        Companion.quickSelectTopK(indices, logits, k)
+    }
+
+    fun quickSelectTopK(logits: FloatArray, k: Int = 256): IntArray {
+        return Companion.quickSelectTopK(logits, k)
     }
 
     fun topKSample(
@@ -535,20 +709,37 @@ class VieNeuOnnxEngine(
         temperature: Float = 0.8f,
         topP: Float = 0.95f,
         repetitionPenalty: Float = 1.2f,
-        prevTokens: Set<Int>? = null
+        prevTokens: Set<Int>? = null,
+        repetitionHistory: RepetitionHistory? = null,
+        channel: Int = 0
     ): Int {
         val V = logits.size
         if (workingLogitsBuffer.size < V) {
             workingLogitsBuffer = FloatArray(V)
         }
+        if (allIndicesBuffer.size < V) {
+            allIndicesBuffer = IntArray(V)
+        }
         val workingLogits = workingLogitsBuffer
+        val allIndices = allIndicesBuffer
         System.arraycopy(logits, 0, workingLogits, 0, V)
+        for (i in 0 until V) {
+            allIndices[i] = i
+        }
 
-        if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f && prevTokens != null && prevTokens.isNotEmpty()) {
-            for (idx in prevTokens) {
-                if (idx in 0 until V) {
-                    val sel = workingLogits[idx]
-                    workingLogits[idx] = if (sel < 0) sel * repetitionPenalty else sel / repetitionPenalty
+        if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f) {
+            if (repetitionHistory != null) {
+                repetitionHistory.applyPenalty(channel, workingLogits, repetitionPenalty)
+            } else if (prevTokens != null && prevTokens.isNotEmpty()) {
+                if (prevTokens is RepetitionHistory.Channel) {
+                    prevTokens.applyPenalty(workingLogits, repetitionPenalty)
+                } else {
+                    for (idx in prevTokens) {
+                        if (idx in 0 until V) {
+                            val sel = workingLogits[idx]
+                            workingLogits[idx] = if (sel < 0f) sel * repetitionPenalty else sel / repetitionPenalty
+                        }
+                    }
                 }
             }
         }
@@ -570,7 +761,11 @@ class VieNeuOnnxEngine(
             workingLogits[i] *= invTemp
         }
 
-        val effK = if (k in 1 until V) k else V
+        // QuickSelect top candidate partition (up to 256)
+        val numCandidates = min(256, V)
+        quickSelectTopK(allIndices, workingLogits, numCandidates)
+
+        val effK = if (k in 1 until numCandidates) k else numCandidates
         if (topKIndicesBuffer.size < effK) {
             topKIndicesBuffer = IntArray(effK)
             topKLogitsBuffer = FloatArray(effK)
@@ -580,89 +775,13 @@ class VieNeuOnnxEngine(
         val topLogits = topKLogitsBuffer
         val probs = probsBuffer
 
-        // Partial selection: min-heap of size effK using primitive parallel arrays
-        // Heap tracks indices 0 until effK in topIndices, compared by workingLogits[idx]
-        var heapSize = 0
-        for (i in 0 until V) {
-            val logit = workingLogits[i]
-            if (heapSize < effK) {
-                // Insert into min-heap
-                var child = heapSize
-                topIndices[child] = i
-                heapSize++
-                while (child > 0) {
-                    val parent = (child - 1) shr 1
-                    if (workingLogits[topIndices[child]] < workingLogits[topIndices[parent]]) {
-                        val temp = topIndices[child]
-                        topIndices[child] = topIndices[parent]
-                        topIndices[parent] = temp
-                        child = parent
-                    } else {
-                        break
-                    }
-                }
-            } else if (logit > workingLogits[topIndices[0]]) {
-                // Replace root and sift down
-                topIndices[0] = i
-                var root = 0
-                while (true) {
-                    var smallest = root
-                    val left = (root shl 1) + 1
-                    val right = left + 1
-                    if (left < effK && workingLogits[topIndices[left]] < workingLogits[topIndices[smallest]]) {
-                        smallest = left
-                    }
-                    if (right < effK && workingLogits[topIndices[right]] < workingLogits[topIndices[smallest]]) {
-                        smallest = right
-                    }
-                    if (smallest != root) {
-                        val temp = topIndices[root]
-                        topIndices[root] = topIndices[smallest]
-                        topIndices[smallest] = temp
-                        root = smallest
-                    } else {
-                        break
-                    }
-                }
-            }
+        for (i in 0 until effK) {
+            val idx = allIndices[i]
+            topIndices[i] = idx
+            topLogits[i] = workingLogits[idx]
         }
 
-        // Extract elements in descending order
-        // Sift down helper over heap of size `size`
-        var curSize = effK
-        for (pos in (effK - 1) downTo 0) {
-            val rootIdx = topIndices[0]
-            topLogits[pos] = workingLogits[rootIdx]
-            
-            // Move last element to root and sift down
-            curSize--
-            if (curSize > 0) {
-                topIndices[0] = topIndices[curSize]
-                var root = 0
-                while (true) {
-                    var smallest = root
-                    val left = (root shl 1) + 1
-                    val right = left + 1
-                    if (left < curSize && workingLogits[topIndices[left]] < workingLogits[topIndices[smallest]]) {
-                        smallest = left
-                    }
-                    if (right < curSize && workingLogits[topIndices[right]] < workingLogits[topIndices[smallest]]) {
-                        smallest = right
-                    }
-                    if (smallest != root) {
-                        val temp = topIndices[root]
-                        topIndices[root] = topIndices[smallest]
-                        topIndices[smallest] = temp
-                        root = smallest
-                    } else {
-                        break
-                    }
-                }
-            }
-            topIndices[pos] = rootIdx
-        }
-
-        // Softmax over top-k
+        // Softmax over top-K candidates
         val maxLogit = topLogits[0]
         var sumExp = 0.0
         for (i in 0 until effK) {
@@ -891,6 +1010,7 @@ class VieNeuOnnxEngine(
             } catch (_: Exception) {}
             CacheTensor.Pool.clear()
             workingLogitsBuffer = FloatArray(0)
+            allIndicesBuffer = IntArray(0)
             topKIndicesBuffer = IntArray(0)
             topKLogitsBuffer = FloatArray(0)
             probsBuffer = DoubleArray(0)
@@ -1056,6 +1176,122 @@ class VieNeuOnnxEngine(
                 xvecLnB = xvecLnB,
                 xvecLnEps = xvecLnEps
             )
+        }
+
+        fun partitionTopK(
+            indices: IntArray,
+            logits: FloatArray,
+            k: Int,
+            start: Int = 0,
+            end: Int = indices.size - 1
+        ) {
+            if (k <= 0 || start >= end) return
+            val targetIndex = min(start + k - 1, end)
+            var left = start
+            var right = end
+
+            while (left < right) {
+                val mid = (left + right) ushr 1
+                val pivotIdx = indices[mid]
+                val pivotVal = logits[pivotIdx]
+
+                var i = left
+                var j = right
+                while (i <= j) {
+                    while (logits[indices[i]] > pivotVal || (logits[indices[i]] == pivotVal && indices[i] < pivotIdx)) i++
+                    while (logits[indices[j]] < pivotVal || (logits[indices[j]] == pivotVal && indices[j] > pivotIdx)) j--
+                    if (i <= j) {
+                        val tmp = indices[i]
+                        indices[i] = indices[j]
+                        indices[j] = tmp
+                        i++
+                        j--
+                    }
+                }
+
+                if (targetIndex <= j) {
+                    right = j
+                } else if (targetIndex >= i) {
+                    left = i
+                } else {
+                    break
+                }
+            }
+        }
+
+        fun sortDescending(
+            indices: IntArray,
+            logits: FloatArray,
+            start: Int,
+            end: Int
+        ) {
+            var left = start
+            var right = end
+            while (left < right) {
+                if (right - left < 16) {
+                    for (i in left + 1..right) {
+                        val key = indices[i]
+                        val keyVal = logits[key]
+                        var j = i - 1
+                        while (j >= left) {
+                            val jVal = logits[indices[j]]
+                            if (jVal < keyVal || (jVal == keyVal && indices[j] > key)) {
+                                indices[j + 1] = indices[j]
+                                j--
+                            } else {
+                                break
+                            }
+                        }
+                        indices[j + 1] = key
+                    }
+                    return
+                }
+
+                val mid = (left + right) ushr 1
+                val pivotIdx = indices[mid]
+                val pivotVal = logits[pivotIdx]
+                var i = left
+                var j = right
+                while (i <= j) {
+                    while (logits[indices[i]] > pivotVal || (logits[indices[i]] == pivotVal && indices[i] < pivotIdx)) i++
+                    while (logits[indices[j]] < pivotVal || (logits[indices[j]] == pivotVal && indices[j] > pivotIdx)) j--
+                    if (i <= j) {
+                        val tmp = indices[i]
+                        indices[i] = indices[j]
+                        indices[j] = tmp
+                        i++
+                        j--
+                    }
+                }
+
+                if (j - left < right - i) {
+                    if (left < j) sortDescending(indices, logits, left, j)
+                    left = i
+                } else {
+                    if (i < right) sortDescending(indices, logits, i, right)
+                    right = j
+                }
+            }
+        }
+
+        fun quickSelectTopK(indices: IntArray, logits: FloatArray, k: Int = 256) {
+            val effK = min(k, indices.size)
+            if (effK <= 0) return
+            partitionTopK(indices, logits, effK)
+            sortDescending(indices, logits, 0, effK - 1)
+        }
+
+        fun quickSelectTopK(logits: FloatArray, k: Int = 256): IntArray {
+            val V = logits.size
+            val effK = min(k, V)
+            if (effK <= 0) return IntArray(0)
+            val indices = IntArray(V) { it }
+            quickSelectTopK(indices, logits, effK)
+            return indices.copyOf(effK)
+        }
+
+        fun partitionTopK(logits: FloatArray, k: Int = 256): IntArray {
+            return quickSelectTopK(logits, k)
         }
     }
 }
