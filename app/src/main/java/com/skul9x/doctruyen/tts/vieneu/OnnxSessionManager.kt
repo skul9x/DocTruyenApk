@@ -269,11 +269,35 @@ class OnnxSessionManager(
             )
         }
 
+        const val PREFS_NAME = "vieneu_assets_prefs"
+        const val KEY_LAST_EXTRACTED_VERSION = "last_extracted_version_code"
+        const val ASSET_STREAM_BUFFER_SIZE = 64 * 1024
+
         @androidx.annotation.VisibleForTesting
         var assetListProvider: ((Context, String) -> Array<String>?)? = null
 
         @androidx.annotation.VisibleForTesting
         var assetOpenProvider: ((Context, String) -> InputStream)? = null
+
+        @androidx.annotation.VisibleForTesting
+        var currentVersionCodeProvider: ((Context) -> Long)? = null
+
+        @androidx.annotation.VisibleForTesting
+        var sharedPreferencesProvider: ((Context) -> android.content.SharedPreferences?)? = null
+
+        fun getAppVersionCode(context: Context): Long {
+            return currentVersionCodeProvider?.invoke(context) ?: try {
+                val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    pInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    pInfo.versionCode.toLong()
+                }
+            } catch (_: Throwable) {
+                1L
+            }
+        }
 
         private fun listAssets(context: Context, path: String): Array<String>? {
             return assetListProvider?.invoke(context, path) ?: try {
@@ -287,8 +311,22 @@ class OnnxSessionManager(
             return assetOpenProvider?.invoke(context, path) ?: context.assets.open(path)
         }
 
-        fun ensureAssetsExtracted(context: Context, precision: String = "INT8"): File {
+        fun ensureAssetsExtracted(
+            context: Context,
+            precision: String = "INT8",
+            forceReExtraction: Boolean? = null
+        ): File {
             val targetBase = File(context.filesDir, "vieneu")
+            val prefs = sharedPreferencesProvider?.invoke(context) ?: try {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            } catch (_: Throwable) {
+                null
+            }
+
+            val currentVersion = getAppVersionCode(context)
+            val lastExtracted = prefs?.getLong(KEY_LAST_EXTRACTED_VERSION, -1L) ?: -1L
+            val forceOverwrite = forceReExtraction ?: (lastExtracted < 0L || currentVersion > lastExtracted)
+
             val normPrecision = when (precision.trim().uppercase()) {
                 "INT8" -> "INT8"
                 "FP32" -> "FP32"
@@ -310,7 +348,7 @@ class OnnxSessionManager(
             val targetSubdir = if (assetFolder.endsWith("backbone_int8")) "backbone_int8" else "backbone"
 
             // Extract selected backbone folder
-            copyAssetFolder(context, assetFolder, File(targetBase, targetSubdir))
+            copyAssetFolder(context, assetFolder, File(targetBase, targetSubdir), forceOverwrite)
 
             // Ensure other common folders and root files are extracted
             val children = listAssets(context, "vieneu") ?: emptyArray()
@@ -320,22 +358,34 @@ class OnnxSessionManager(
                     val subTarget = File(targetBase, child)
                     val subChildren = listAssets(context, childPath)
                     if (subChildren != null && subChildren.isNotEmpty()) {
-                        copyAssetFolder(context, childPath, subTarget)
+                        copyAssetFolder(context, childPath, subTarget, forceOverwrite)
                     } else {
-                        copyAssetFile(context, childPath, subTarget)
+                        copyAssetFile(context, childPath, subTarget, forceOverwrite)
                     }
                 }
+            }
+
+            try {
+                prefs?.edit()?.putLong(KEY_LAST_EXTRACTED_VERSION, currentVersion)?.apply()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to save last extracted version code: ${e.message}")
             }
 
             return targetBase
         }
 
-        private fun copyAssetFolder(context: Context, assetPath: String, targetDir: File) {
+        @androidx.annotation.VisibleForTesting
+        fun copyAssetFolder(
+            context: Context,
+            assetPath: String,
+            targetDir: File,
+            force: Boolean = false
+        ) {
             val children = listAssets(context, assetPath) ?: return
 
             if (children.isEmpty()) {
                 // It's a file
-                copyAssetFile(context, assetPath, targetDir)
+                copyAssetFile(context, assetPath, targetDir, force)
             } else {
                 // It's a directory
                 if (!targetDir.exists()) {
@@ -346,23 +396,34 @@ class OnnxSessionManager(
                     val subTarget = File(targetDir, child)
                     val subChildren = listAssets(context, subAssetPath)
                     if (subChildren != null && subChildren.isNotEmpty()) {
-                        copyAssetFolder(context, subAssetPath, subTarget)
+                        copyAssetFolder(context, subAssetPath, subTarget, force)
                     } else {
-                        copyAssetFile(context, subAssetPath, subTarget)
+                        copyAssetFile(context, subAssetPath, subTarget, force)
                     }
                 }
             }
         }
 
-        private fun copyAssetFile(context: Context, assetPath: String, targetFile: File) {
-            if (targetFile.exists() && targetFile.length() > 0) {
+        @androidx.annotation.VisibleForTesting
+        fun copyAssetFile(
+            context: Context,
+            assetPath: String,
+            targetFile: File,
+            force: Boolean = false,
+            bufferSize: Int = ASSET_STREAM_BUFFER_SIZE
+        ) {
+            if (!force && targetFile.exists() && targetFile.length() > 0) {
                 // Already extracted
                 return
             }
             targetFile.parentFile?.mkdirs()
+            val buffer = ByteArray(bufferSize)
             openAssetStream(context, assetPath).use { input ->
                 FileOutputStream(targetFile).use { output ->
-                    input.copyTo(output)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                    }
                 }
             }
         }

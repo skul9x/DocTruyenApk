@@ -59,26 +59,27 @@ object BabbleGuard {
     }
 
     /**
-     * Count distinct active speech bursts.
+     * Find active speech bursts and return their hop frame boundaries (startHop, endHop).
      * Bursts shorter than minDurationMs (60ms) are discarded.
      * Silent gaps shorter than minGapMs (80ms) are bridged.
      */
-    fun countSpeechBursts(
+    fun findSpeechBursts(
         pcm: FloatArray,
         sampleRate: Int = DEFAULT_SAMPLE_RATE,
         threshDb: Float = BURST_THRESH_DB,
         minDurationMs: Int = MIN_BURST_DURATION_MS,
-        minGapMs: Int = MIN_INTER_BURST_GAP_MS
-    ): Int {
-        if (pcm.isEmpty()) return 0
-        val envelope = computeRmsEnvelope(pcm, sampleRate, HOP_MS)
-        if (envelope.isEmpty()) return 0
+        minGapMs: Int = MIN_INTER_BURST_GAP_MS,
+        hopMs: Int = HOP_MS
+    ): List<Pair<Int, Int>> {
+        if (pcm.isEmpty() || sampleRate <= 0 || hopMs <= 0) return emptyList()
+        val envelope = computeRmsEnvelope(pcm, sampleRate, hopMs)
+        if (envelope.isEmpty()) return emptyList()
 
         var peakRms = 0f
         for (v in envelope) {
             if (v > peakRms) peakRms = v
         }
-        if (peakRms <= 1e-6f) return 0
+        if (peakRms <= 1e-6f) return emptyList()
 
         val linearThreshold = peakRms * (10.0.pow(threshDb.toDouble() / 20.0)).toFloat()
 
@@ -101,10 +102,10 @@ object BabbleGuard {
             rawBursts.add(Pair(burstStart, envelope.size))
         }
 
-        if (rawBursts.isEmpty()) return 0
+        if (rawBursts.isEmpty()) return emptyList()
 
         // 2. Bridge gaps shorter than minGapMs (80ms)
-        val minGapFrames = (minGapMs + HOP_MS - 1) / HOP_MS
+        val minGapFrames = (minGapMs + hopMs - 1) / hopMs
         val merged = mutableListOf<Pair<Int, Int>>()
         var current = rawBursts[0]
 
@@ -121,16 +122,51 @@ object BabbleGuard {
         merged.add(current)
 
         // 3. Filter bursts by minDurationMs (60ms)
-        val minDurationFrames = (minDurationMs + HOP_MS - 1) / HOP_MS
-        var validBursts = 0
+        val minDurationFrames = (minDurationMs + hopMs - 1) / hopMs
+        val validBursts = mutableListOf<Pair<Int, Int>>()
         for (b in merged) {
             val durationFrames = b.second - b.first
             if (durationFrames >= minDurationFrames) {
-                validBursts++
+                validBursts.add(b)
             }
         }
 
         return validBursts
+    }
+
+    /**
+     * Alias for findSpeechBursts with standard defaults.
+     */
+    fun findActiveBursts(
+        pcm: FloatArray,
+        sampleRate: Int = DEFAULT_SAMPLE_RATE,
+        hopMs: Int = HOP_MS
+    ): List<Pair<Int, Int>> = findSpeechBursts(
+        pcm = pcm,
+        sampleRate = sampleRate,
+        hopMs = hopMs
+    )
+
+    /**
+     * Count distinct active speech bursts.
+     * Bursts shorter than minDurationMs (60ms) are discarded.
+     * Silent gaps shorter than minGapMs (80ms) are bridged.
+     */
+    fun countSpeechBursts(
+        pcm: FloatArray,
+        sampleRate: Int = DEFAULT_SAMPLE_RATE,
+        threshDb: Float = BURST_THRESH_DB,
+        minDurationMs: Int = MIN_BURST_DURATION_MS,
+        minGapMs: Int = MIN_INTER_BURST_GAP_MS
+    ): Int {
+        return findSpeechBursts(
+            pcm = pcm,
+            sampleRate = sampleRate,
+            threshDb = threshDb,
+            minDurationMs = minDurationMs,
+            minGapMs = minGapMs,
+            hopMs = HOP_MS
+        ).size
     }
 
     /**
@@ -143,6 +179,48 @@ object BabbleGuard {
         minDurationMs: Int = MIN_BURST_DURATION_MS,
         minGapMs: Int = MIN_INTER_BURST_GAP_MS
     ): Int = countSpeechBursts(pcm, sampleRate, threshDb, minDurationMs, minGapMs)
+
+    /**
+     * Trims trailing hallucination/babble bursts directly in the PCM acoustic domain.
+     *
+     * If the detected speech bursts exceed targetSyllables:
+     * - Discards bursts after the targetSyllables-th burst.
+     * - Preserves a natural decay tail (~80ms).
+     * - Applies a 5ms micro-fade down to 0 at the cut point to eliminate clicks/pops.
+     *
+     * Returns the trimmed FloatArray if excess bursts were successfully trimmed, or null if no trimming needed.
+     */
+    fun trimBabbleTail(
+        pcm: FloatArray,
+        targetSyllables: Int,
+        sampleRate: Int = DEFAULT_SAMPLE_RATE,
+        hopMs: Int = HOP_MS
+    ): FloatArray? {
+        if (pcm.isEmpty() || targetSyllables <= 0) return null
+        val bursts = findActiveBursts(pcm, sampleRate, hopMs)
+        if (bursts.size <= targetSyllables) return null // No excess bursts
+
+        val targetBurst = bursts[targetSyllables - 1]
+        val nextBurst = bursts[targetSyllables]
+        val hopSize = (sampleRate * hopMs) / 1000
+        val decaySamples = (sampleRate * 80) / 1000
+
+        val maxCut = nextBurst.first * hopSize
+        val targetCut = (targetBurst.second * hopSize) + decaySamples
+        val cutSample = min(pcm.size, min(maxCut, targetCut))
+
+        if (cutSample <= 0) return null
+        val trimmed = pcm.copyOf(cutSample)
+
+        // Apply 5ms micro-fade down to zero at the cut point
+        val fadeSamples = (sampleRate * 5) / 1000
+        val fadeStart = max(0, trimmed.size - fadeSamples)
+        for (i in fadeStart until trimmed.size) {
+            val factor = 1.0f - (i - fadeStart).toFloat() / fadeSamples
+            trimmed[i] *= factor
+        }
+        return trimmed
+    }
 
     /**
      * Count syllables in Vietnamese text or phonemes.

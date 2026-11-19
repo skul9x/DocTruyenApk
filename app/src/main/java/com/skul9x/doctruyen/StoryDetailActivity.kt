@@ -314,21 +314,20 @@ class StoryDetailActivity : AppCompatActivity() {
                 }
 
                 if (response.status == "success") {
-                    var rawContent = response.data.contentText ?: response.data.content ?: ""
+                    val rawResponseContent = response.data.contentText ?: response.data.content ?: ""
 
-                    // Fix: Handle literal "\\n" strings if they exist, and format line breaks
-                    rawContent = rawContent.replace("\\\\n", "\n")
-
-                    // Check if it looks like HTML already
-                    if (!rawContent.contains("<br") && !rawContent.contains("<p")) {
-                         rawContent = rawContent.replace("\n", "<br>")
+                    // PERF-010: Offload string formatting, HTML sanitization, and Spannable parsing to background thread
+                    val (spannedContent, plainString) = withContext(Dispatchers.Default) {
+                        var raw = rawResponseContent.replace("\\\\n", "\n")
+                        if (!raw.contains("<br") && !raw.contains("<p")) {
+                            raw = raw.replace("\n", "<br>")
+                        }
+                        val sanitized = sanitizeHtml(raw)
+                        val spanned = android.text.Html.fromHtml(sanitized, android.text.Html.FROM_HTML_MODE_LEGACY)
+                        Pair(spanned, spanned.toString())
                     }
 
-                    // SECURITY: Sanitize HTML to prevent XSS
-                    val sanitizedContent = sanitizeHtml(rawContent)
-
-                    val spannedContent = android.text.Html.fromHtml(sanitizedContent, android.text.Html.FROM_HTML_MODE_LEGACY)
-                    storyContent = spannedContent.toString()
+                    storyContent = plainString
                     loadedStoryId = storyId
 
                     val preview = storyContent.take(50) + if (storyContent.length > 50) "..." else ""
@@ -373,23 +372,6 @@ class StoryDetailActivity : AppCompatActivity() {
             isPrewarmTriggered = true
             service.prepareStory(storyId, title, storyContent, voice = voice)
         }
-    }
-    
-    /**
-     * Sanitize HTML content to prevent XSS attacks
-     * Only allows safe tags: br, p, b, i, u, strong, em
-     */
-    private fun sanitizeHtml(html: String): String {
-        // Remove script tags and their content
-        var sanitized = html.replace(Regex("<script[^>]*>.*?</script>", RegexOption.IGNORE_CASE), "")
-        // Remove event handlers (onclick, onerror, etc.)
-        sanitized = sanitized.replace(Regex("\\s*on\\w+\\s*=\\s*[\"'][^\"']*[\"']", RegexOption.IGNORE_CASE), "")
-        // Remove javascript: links
-        sanitized = sanitized.replace(Regex("javascript:", RegexOption.IGNORE_CASE), "")
-        // Remove iframe, object, embed tags
-        sanitized = sanitized.replace(Regex("<(iframe|object|embed|form|input)[^>]*>.*?</(iframe|object|embed|form|input)>", RegexOption.IGNORE_CASE), "")
-        sanitized = sanitized.replace(Regex("<(iframe|object|embed|form|input)[^>]*/>", RegexOption.IGNORE_CASE), "")
-        return sanitized
     }
     
     private fun showLoadingState() {
@@ -548,6 +530,29 @@ class StoryDetailActivity : AppCompatActivity() {
             }
             finish()
             ActivityTransitionHelper.applyCloseTransition(this@StoryDetailActivity)
+        }
+    }
+
+    companion object {
+        val SCRIPT_REGEX = Regex("<script[^>]*>.*?</script>", RegexOption.IGNORE_CASE)
+        val EVENT_HANDLER_REGEX = Regex("\\s*on\\w+\\s*=\\s*[\"'][^\"']*[\"']", RegexOption.IGNORE_CASE)
+        val JAVASCRIPT_URI_REGEX = Regex("javascript:", RegexOption.IGNORE_CASE)
+        val TAG_PAIR_REGEX = Regex("<(iframe|object|embed|form|input)[^>]*>.*?</(iframe|object|embed|form|input)>", RegexOption.IGNORE_CASE)
+        val SELF_CLOSING_TAG_REGEX = Regex("<(iframe|object|embed|form|input)[^>]*/>", RegexOption.IGNORE_CASE)
+        val DISALLOWED_PAIRED_TAGS_REGEX = TAG_PAIR_REGEX
+        val DISALLOWED_SELF_CLOSING_TAGS_REGEX = SELF_CLOSING_TAG_REGEX
+
+        /**
+         * Sanitize HTML content to prevent XSS attacks using precompiled static regexes.
+         * Only allows safe tags: br, p, b, i, u, strong, em
+         */
+        fun sanitizeHtml(html: String): String {
+            var sanitized = html.replace(SCRIPT_REGEX, "")
+            sanitized = sanitized.replace(EVENT_HANDLER_REGEX, "")
+            sanitized = sanitized.replace(JAVASCRIPT_URI_REGEX, "")
+            sanitized = sanitized.replace(TAG_PAIR_REGEX, "")
+            sanitized = sanitized.replace(SELF_CLOSING_TAG_REGEX, "")
+            return sanitized
         }
     }
 }

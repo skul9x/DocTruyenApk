@@ -684,7 +684,7 @@ class VieNeuTTSManager(
                             config = config,
                             tokenizer = tokenizer,
                             textEmbeddings = headsReader.get2D("text_emb")!!,
-                            audioEmbeddings = headsReader.get3D("audio_emb")!!,
+                            audioEmbeddings = headsReader.getChannelArrays("audio_emb")!!,
                             xvecW = headsReader.get2D("xvec_w"),
                             xvecB = headsReader.getFloatArray("xvec_b"),
                             xvecLnW = headsReader.getFloatArray("xvec_ln_w"),

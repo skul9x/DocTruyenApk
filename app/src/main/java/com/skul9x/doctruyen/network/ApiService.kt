@@ -86,13 +86,19 @@ object RetrofitClient {
     
     // We need context to get the URL, so we can't be a pure singleton with init
     private var retrofit: Retrofit? = null
+    private var cachedApiService: ApiService? = null
+    private var cachedUrl: String? = null
     private val gson = GsonBuilder().setLenient().create()
     
     var BASE_URL = "https://skul9x.free.nf/truyen/" // Fallback/Cache
+
+    internal fun getLoggingLevel(isDebug: Boolean = BuildConfig.DEBUG): HttpLoggingInterceptor.Level {
+        return if (isDebug) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+    }
     
     private fun createClient(): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.HEADERS
+            level = getLoggingLevel(BuildConfig.DEBUG)
         }
         
         return OkHttpClient.Builder()
@@ -161,20 +167,34 @@ object RetrofitClient {
     // Get ApiService with specific URL (from settings)
     fun getApiService(context: android.content.Context): ApiService {
         val url = com.skul9x.doctruyen.utils.UserConfig.getBaseUrl(context)
-        return getClient(url).create(ApiService::class.java)
+        return getApiServiceForUrl(url)
+    }
+
+    fun getApiServiceForUrl(url: String): ApiService {
+        if (cachedApiService == null || cachedUrl != url) {
+            cachedUrl = url
+            cachedApiService = getClient(url).create(ApiService::class.java)
+        }
+        return cachedApiService!!
     }
 
     // Overload for places where we might rely on cached BASE_URL or existing instance
     // But ideally should always pass context
     fun getApiService(): ApiService {
+        if (cachedApiService != null) {
+            return cachedApiService!!
+        }
         if (retrofit == null) {
              throw IllegalStateException("Retrofit not initialized. Call getApiService(context) first.")
         }
-        return retrofit!!.create(ApiService::class.java)
+        cachedApiService = retrofit!!.create(ApiService::class.java)
+        return cachedApiService!!
     }
     
     // Reset client (useful when cookie changes)
     fun resetClient() {
         retrofit = null
+        cachedApiService = null
+        cachedUrl = null
     }
 }

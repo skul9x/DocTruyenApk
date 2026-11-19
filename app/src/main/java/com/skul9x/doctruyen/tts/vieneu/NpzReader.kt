@@ -30,6 +30,8 @@ class NpzReader private constructor(
 
     fun getFloatArray(key: String): FloatArray? = arrays[key]?.data
 
+    fun getFlat(key: String): FloatArray? = arrays[key]?.data
+
     fun getShape(key: String): IntArray? = arrays[key]?.shape
 
     fun getScalarFloat(key: String): Float? {
@@ -52,6 +54,26 @@ class NpzReader private constructor(
         return result
     }
 
+    fun getChannelArrays(key: String): Array<FloatArray>? {
+        val arr = arrays[key] ?: return null
+        val shape = arr.shape
+        if (shape.size != 3) return null
+        val d0 = shape[0]
+        val d1 = shape[1]
+        val d2 = shape[2]
+        val stride = d1 * d2
+        if (arr.data.size < d0 * stride) return null
+        val result = Array(d0) { FloatArray(stride) }
+        for (ch in 0 until d0) {
+            System.arraycopy(arr.data, ch * stride, result[ch], 0, stride)
+        }
+        return result
+    }
+
+    @Deprecated(
+        message = "Use getChannelArrays or getFlat to avoid allocating 16,384 separate objects",
+        replaceWith = ReplaceWith("getChannelArrays(key)")
+    )
     fun get3D(key: String): Array<Array<FloatArray>>? {
         val arr = arrays[key] ?: return null
         val shape = arr.shape

@@ -3,7 +3,6 @@ package com.skul9x.doctruyen.adapter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.AnimationUtils
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -35,21 +34,25 @@ class StoryAdapter(
         val story = getItem(position)
         holder.bind(story)
         
-        // Apply animation only for new items
+        // Cancel lingering animations and reset alpha for recycled views
+        holder.itemView.animate().cancel()
+        holder.itemView.alpha = 1f
+
+        // Apply hardware-accelerated fade-in animation only for new items
         if (position > lastAnimatedPosition) {
-            val animation = AnimationUtils.loadAnimation(
-                holder.itemView.context,
-                android.R.anim.fade_in
-            )
-            animation.duration = 300
-            animation.startOffset = (position % 4) * 50L
-            holder.itemView.startAnimation(animation)
+            holder.itemView.alpha = 0f
+            holder.itemView.animate()
+                .alpha(1f)
+                .setDuration(300)
+                .setStartDelay((position % 4) * 50L)
+                .start()
             lastAnimatedPosition = position
         }
     }
 
     override fun onViewDetachedFromWindow(holder: StoryViewHolder) {
         super.onViewDetachedFromWindow(holder)
+        holder.itemView.animate().cancel()
         holder.itemView.clearAnimation()
     }
 

@@ -14,14 +14,12 @@ class NetworkLoggingTest {
         val expectedLevel = if (BuildConfig.DEBUG) {
             HttpLoggingInterceptor.Level.BODY
         } else {
-            HttpLoggingInterceptor.Level.HEADERS
+            HttpLoggingInterceptor.Level.NONE
         }
         
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.HEADERS
-        }
-
-        assertEquals("Logging level should match build config expectation", expectedLevel, loggingInterceptor.level)
+        assertEquals("Logging level should match build config expectation", expectedLevel, RetrofitClient.getLoggingLevel(BuildConfig.DEBUG))
+        assertEquals(HttpLoggingInterceptor.Level.NONE, RetrofitClient.getLoggingLevel(isDebug = false))
+        assertEquals(HttpLoggingInterceptor.Level.BODY, RetrofitClient.getLoggingLevel(isDebug = true))
     }
 
     @Test

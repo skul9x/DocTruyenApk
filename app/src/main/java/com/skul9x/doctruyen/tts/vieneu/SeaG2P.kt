@@ -87,7 +87,7 @@ object SeaG2P {
                     targetDir.mkdirs()
                     context.assets.open("vieneu/sea_g2p.bin").use { input ->
                         FileOutputStream(dictFile).use { output ->
-                            input.copyTo(output)
+                            input.copyTo(output, bufferSize = 64 * 1024)
                         }
                     }
                 }

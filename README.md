@@ -119,19 +119,104 @@ flowchart TD
 
 ---
 
-## 🛠 Tech Stack & Thư Viện Sử Dụng
+## 🛠 Tech Stack & Kiến Trúc Công Nghệ Chuyên Sâu
 
-* **Ngôn ngữ:** [Kotlin 2.x](https://kotlinlang.org/)
-* **AI & Inference:**
-  * [Microsoft ONNX Runtime Android (v1.20.0)](https://onnxruntime.ai/)
-  * `sea-g2p` (Vietnamese Phonemizer biên dịch từ Rust qua Cargo-NDK)
-  * Mô hình `VieNeu-TTS v3 Turbo` (int8 quantized) + `MOSS Codec Nano`
-* **Xử lý bất đồng bộ:** Kotlin Coroutines, Channels, StateFlow
-* **Phát âm thanh:** `android.media.AudioTrack` (48,000 Hz, 16-bit PCM, Mono)
-* **Networking & UI:**
-  * [Retrofit 2](https://square.github.io/retrofit/) & [OkHttp 3](https://square.github.io/okhttp/)
-  * [Glide 4.x](https://github.com/bumptech/glide)
-  * AndroidX Media, Material Design 3
+DocTruyen được xây dựng với kiến trúc hybrid kết hợp giữa **Modern Android Development (MAD)** nguyên bản và **Hệ thống suy luận AI Neural On-Device (C++/Rust NDK + ONNX Runtime)** hiệu năng cao, tối ưu hóa triệt để cho môi trường di động giới hạn tài nguyên.
+
+---
+
+### 1. Nền Tảng Di Động & Hệ Thống Build (Android Core & Build System)
+* **Ngôn ngữ phát triển:** [Kotlin 2.0.21](https://kotlinlang.org/) — Tận dụng Kotlin K2 Compiler mới nhất cho tốc độ biên dịch nhanh, tối ưu inline functions và lambda allocations.
+* **Môi trường runtime & SDK:**
+  * `compileSdk = 35` / `targetSdk = 35` (Android 15)
+  * `minSdk = 24` (Android 7.0 Nougat trở lên, hỗ trợ tương thích ngược >95% thiết bị Android đang hoạt động)
+  * `Java / JVM Target`: Java 11
+* **Build System:** Gradle 8.9.0 với Android Gradle Plugin (AGP) 8.9.0 & Kotlin DSL (`build.gradle.kts`), quản lý thư viện tập trung qua Gradle Version Catalogs (`libs.versions.toml`).
+* **Packaging & Asset Optimization:**
+  * Khai báo `androidResources.noCompress += listOf("onnx", "data", "npz", "json")` nhằm nạp trực tiếp mô hình ONNX và weights vào bộ nhớ thông qua Memory Mapping (`mmap`), loại bỏ hoàn toàn độ trễ giải nén và tiết kiệm RAM lúc khởi động app.
+
+---
+
+### 2. Mô Hình AI & Hệ Thống Suy Luận Cốt Lõi (On-Device Neural TTS Engine)
+Toàn bộ chu trình sinh âm thanh (Text -> Phonemes -> Acoustic Transformer -> Neural Audio Codec -> 48kHz PCM) chạy **100% Offline trên CPU điện thoại**:
+
+* **Suy Luận Đa Luồng Nền Tảng (Inference Engine):**
+  * **[Microsoft ONNX Runtime Android v1.20.0](https://onnxruntime.ai/):** Chạy trên Execution Provider đa luồng (CPU / XNNPACK) có hỗ trợ tăng tốc phần cứng NNAPI (`NNAPIFlags`).
+  * **Hỗ trợ Đa Lượng Hóa (Quantization Aware):** Tự động nhận diện và xử lý linh hoạt các mô hình `INT8`, `FP16`, `FP32`.
+* **Acoustic & Backbone Transformer:**
+  * **VieNeu-TTS v3 Turbo:** Kiến trúc Autoregressive Transformer với KV-Caching:
+    * `vieneu_prefill.onnx`: Khởi tạo KV-cache từ chuỗi token ngữ âm và prompt giọng đọc.
+    * `vieneu_decode_step.onnx`: Sinh bước giải mã kế tiếp qua autoregressive loop với KV-cache tái sử dụng.
+    * `vieneu_acoustic_cached.onnx`: Dự đoán đặc trưng âm học codebook.
+    * `vieneu_v3_heads.npz`: Trích xuất và nạp nhanh các ma trận trọng số text/audio embeddings và projection heads qua trình đọc nhị phân tự xây dựng `NpzReader.kt`.
+* **Neural Audio Codec (Neural Vocoder):**
+  * **MOSS Audio Tokenizer Nano:**
+    * `moss_audio_tokenizer_decode_full.onnx` & `moss_audio_tokenizer_decode_step.onnx` cùng file trọng số liên kết ngoài `moss_audio_tokenizer_decode_shared.data`.
+    * Giải mã 16 kênh codebook lượng hóa véc-tơ (RVQ) thành chuỗi tín hiệu xung mã **48,000 Hz, 16-bit Mono PCM**.
+* **Xử Lý Ngữ Âm Tiếng Việt (Phonemizer & Rust Native NDK):**
+  * **`sea-g2p` (Southeast Asian Grapheme-to-Phoneme):** Nhân lõi chuyển đổi từ chữ viết tiếng Việt sang ký tự ngữ âm quốc tế (IPA).
+  * Biên dịch từ **Rust** sang thư viện C-shared library (`libsea_g2p_android.so`) qua `cargo-ndk`, hỗ trợ 3 kiến trúc phần cứng chính:
+    * `arm64-v8a` (Các dòng chip 64-bit hiện đại)
+    * `armeabi-v7a` (Các dòng chip 32-bit cũ)
+    * `x86_64` (Trình giả lập Android Emulator & Chromebooks)
+  * Bộ nhớ đệm âm vị hai tầng: Tích hợp Thread-Safe Bounded LRU Cache 512 phần tử (`LinkedHashMap`) tại tầng Kotlin giúp triệt tiêu thời gian gọi JNI lặp lại trên các từ vựng phổ biến.
+
+---
+
+### 3. Thuật Toán Xử Lý Tín Hiệu Số & Chống Suy Thoái (DSP & Algorithmic Optimizations)
+* **Trượt Cửa Sổ Phạt Lặp (Sliding-Window Repetition Penalty - `RepetitionHistory.kt`):**
+  * Cơ chế Circular FIFO Buffer 64 khung hình (~2.5 giây âm thanh) trên toàn bộ 16 kênh codebook.
+  * Bộ theo dõi tần suất $O(1)$ không cấp phát động (`zero-allocation`), giới hạn phạm vi phạt lặp trong cửa sổ trượt, triệt tiêu hoàn toàn hiện tượng lệch giọng (voice drift), biến âm hoặc giọng thì thầm trên các đoạn văn dài.
+* **Phân Vùng Lấy Mẫu Siêu Tốc (QuickSelect Top-256 Sampling):**
+  * Triển khai thuật toán Hoare QuickSelect in-place trên mảng 1024 logits, lọc top 256 ứng viên trước khi tính hàm Softmax, tăng tốc độ tính xác suất sinh mẫu ~1.5x mỗi bước decode.
+* **Bộ Lọc Ảo Giác Câu Ngắn (BabbleGuard Anti-Hallucination - `BabbleGuard.kt`):**
+  * Phân tích bao năng lượng RMS (Hop size 10ms ở 48kHz, ngưỡng `-24dB relative peak`).
+  * Heuristic `isBabbleSuspect`: Nhận diện tiếng lầm bầm vô nghĩa, tạp âm dải biên hoặc lỗi sinh thừa trên câu thoại siêu ngắn (1–2 âm tiết như *"Ừ."*, *"Vâng."*).
+  * Vòng lặp resynthesis tự động tối đa 2 lần với cơ chế đổi seed/nhiệt độ và bộ so khớp ứng viên tối ưu (`babblePrefer`).
+* **Trích Xuất Thẻ Cảm Xúc & Phân Tách Chú Thích (`EmotionTagParser`):**
+  * Ánh xạ chính xác các thẻ biểu cảm `[cười]`, `[thở dài]`, `[hắng giọng]` (và các biến thể tiếng Anh / không dấu) sang token đặc biệt `<|emotion_1|>`, `<|emotion_2|>`, `<|emotion_3|>` (token IDs 9, 10, 11).
+  * Bộ phân tách RegEx bảo vệ dấu ngoặc vuông chú thích truyện (`[1]`, `[CV]`, `[Chương 2]`), bỏ qua Normalizer để không làm hỏng token ID.
+* **Xử Lý PCM & Ghép Khoảng Lặng Nguyên Tử (`PcmUtils.kt`):**
+  * **Atomic Chunk Silence:** Ghép nối buffer âm thanh đã sinh và khoảng lặng nhân tạo thành một mảng PCM duy nhất trước khi đẩy vào hàng đợi AudioQueue, loại trừ lỗi chập chờn khựng tiếng (false-alarm underruns).
+  * **Micro-Fade (5ms):** Thuật toán làm mịn cạnh biên dốc tuyến tính (Linear Cosine/Ramp Fade) ở cả hai đầu mảng sóng âm nhằm khử hoàn toàn tiếng nổ lách tách (click/pop noise).
+
+---
+
+### 4. Kiến Trúc Phát Âm Thanh & Đa Nhiệm (Audio Streaming & Concurrency)
+* **Xử Lý Bất Đồng Bộ Hiện Đại:**
+  * **Kotlin Coroutines (`1.7.3`):** Quản lý luồng tính toán AI trên `Dispatchers.Default` và truyền phát âm thanh trên Worker Thread riêng biệt qua `SupervisorJob`.
+  * **StateFlow, Channels & ConcurrentLinkedQueue:** Truyền nhận dữ liệu dạng stream liên tục giữa tầng sinh mẫu và tầng phát loa không gây khóa luồng giao diện (Lock-free UI).
+* **Truyền Phát Âm Thanh Tần Số Cao:**
+  * `android.media.AudioTrack` cấu hình ở chế độ `MODE_STREAM`, `AudioFormat.ENCODING_PCM_16BIT`, `AudioFormat.CHANNEL_OUT_MONO`, tần số mẫu `48,000 Hz`.
+  * Bộ đệm tương thích `minPreBufferChunks = 2` kết hợp cơ chế đọc trước động (Lookahead Pre-buffering).
+* **Quản Lý Phiên Âm Thanh & Chạy Nền Bền Bỉ:**
+  * **Foreground Service (`ReadingService`):** Đảm bảo tiến trình đọc không bị hệ điều hành tiêu diệt khi chạy ngầm hoặc khóa màn hình.
+  * **WakeLock Management:** Tự động giữ CPU hoạt động với cơ chế quản lý an toàn tránh rò rỉ pin (`IWakeLock` wrapper).
+  * **MediaSessionCompat & NotificationCompat (AndroidX Media 1.7.0):** Tích hợp trình điều khiển đa phương tiện toàn hệ thống, hỗ trợ thanh điều khiển trên màn hình khóa, Notification Android 13+ và phản hồi sự kiện tai nghe Bluetooth (Audio Focus change, Noisy intent).
+
+---
+
+### 5. Giao Diện Người Dùng & Thư Viện Mở Rộng (UI/UX & Networking)
+* **Giao Diện (UI Layer):**
+  * **Google Material Design 3 (`1.12.0`) & AppCompat (`1.7.0`):** Hệ thống giao diện hiện đại, bo góc mềm mại, hỗ trợ Dark Mode hoàn chỉnh.
+  * **ConstraintLayout (`2.1.4`), RecyclerView (`1.3.2`) & SwipeRefreshLayout (`1.1.0`):** Danh sách truyện mượt mà, tải dữ liệu kéo-để-làm-mới.
+  * **AndroidX Activity KTX (`1.9.3`) & Lifecycle Runtime/ViewModel (`2.7.0`):** Kiến trúc phân tách rõ ràng vòng đời Activity và Service.
+* **Tải Ảnh & Quản Trị Mạng (Networking & Media Loading):**
+  * **[Retrofit 2 (`2.9.0`)](https://square.github.io/retrofit/) + [OkHttp 3 (`4.12.0`)](https://square.github.io/okhttp/):** RESTful API Client, xử lý JSON thông qua `converter-gson`.
+  * **OkHttp Logging Interceptor:** Hỗ trợ kiểm tra và ghi vết request/response khi debug.
+  * **[Bumptech Glide (`4.16.0`)](https://github.com/bumptech/glide):** Tải ảnh bìa truyện bất đồng bộ, bộ nhớ đệm cache 2 lớp (Disk + Memory), tự động resize kích thước tối ưu bộ nhớ.
+
+---
+
+### 6. Giám Sát, Chẩn Đoán & Kiểm Thử (Telemetry, Diagnostics & Testing)
+* **Engine Đo Đạc Thời Gian Thực (`TtsMetricsLogger.kt`):**
+  * Theo dõi chi tiết từng mẩu câu (chunk): thời gian chuyển đổi ngữ âm (G2P), thời gian chạy ONNX Backbone, thời gian chạy Codec, Real-Time Factor (RTF), Time-To-First-Track (TTFT), số lần Starvation/Underrun.
+  * Công cụ chẩn đoán AI cục bộ (`AiDiagnosticFlag`): Tự động phát hiện bất thường về tốc độ giải mã hoặc nghẽn hàng đợi âm thanh.
+* **Màn Hình Chẩn Đoán Chuyên Dụng (`DebugLogActivity.kt`):**
+  * Dashboard hiển thị biểu đồ và chỉ số hiệu năng theo thời gian thực trực tiếp trên màn hình điện thoại.
+* **Kiểm Thử Đa Tầng (Unit & Instrumented Testing):**
+  * **JUnit 4 (`4.13.2`) + ONNX Runtime Desktop (`1.20.0`):** Kiểm thử logic phân đoạn câu, vòng lặp chống lặp, tách biểu cảm và mô phỏng suy luận ngay trên máy tính mà không cần kết nối điện thoại (`testImplementation`).
+  * **AndroidX Test Runner & Espresso Core (`3.6.1`):** Kiểm thử luồng tích hợp trên phần cứng thiết bị thật (`connectedAndroidTest`).
 
 ---
 

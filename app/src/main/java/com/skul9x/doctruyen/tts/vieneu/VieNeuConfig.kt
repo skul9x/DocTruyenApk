@@ -33,7 +33,6 @@ data class VieNeuConfig(
         const val ASSET_DIR = "vieneu"
         const val BACKBONE_DIR = "$ASSET_DIR/backbone"
         const val CODEC_DIR = "$ASSET_DIR/codec"
-        const val DENOISER_DIR = "$ASSET_DIR/denoiser"
         const val SAMPLE_RATE = 48000
 
         fun fromJson(jsonStr: String): VieNeuConfig {

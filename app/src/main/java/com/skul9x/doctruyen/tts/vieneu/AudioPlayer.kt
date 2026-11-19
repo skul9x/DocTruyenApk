@@ -9,7 +9,7 @@ import android.util.Log
  * Low-latency audio player using Android's AudioTrack API in streaming mode.
  * Supports 48 kHz mono 16-bit PCM playback.
  */
-class AudioPlayer(
+open class AudioPlayer(
     val sampleRate: Int = 48000,
     val channelConfig: Int = AudioFormat.CHANNEL_OUT_MONO,
     val encoding: Int = AudioFormat.ENCODING_PCM_16BIT
@@ -41,7 +41,7 @@ class AudioPlayer(
     /**
      * Initializes the underlying AudioTrack with a buffer size >= 2 * minBufferSize.
      */
-    fun init() {
+    open fun init() {
         synchronized(lock) {
             if (audioTrack != null && !needsReinit) {
                 return
@@ -87,7 +87,7 @@ class AudioPlayer(
     /**
      * Resets the AudioPlayer by releasing the existing AudioTrack and creating a fresh one.
      */
-    fun reset() {
+    open fun reset() {
         synchronized(lock) {
             release()
             init()
@@ -98,7 +98,7 @@ class AudioPlayer(
      * Writes 16-bit PCM audio samples to the AudioTrack.
      * Blocks if the buffer is full until all samples are written or track is stopped.
      */
-    fun write(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int {
+    open fun write(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int {
         val track: AudioTrack?
         synchronized(lock) {
             track = audioTrack
@@ -114,6 +114,11 @@ class AudioPlayer(
 
             var totalWritten = 0
             while (totalWritten < size) {
+                synchronized(lock) {
+                    if (needsReinit || audioTrack?.playState == AudioTrack.PLAYSTATE_STOPPED) {
+                        return totalWritten
+                    }
+                }
                 val count = track.write(
                     pcm16,
                     offset + totalWritten,
@@ -136,7 +141,7 @@ class AudioPlayer(
     /**
      * Starts audio playback.
      */
-    fun play() {
+    open fun play() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -153,7 +158,7 @@ class AudioPlayer(
     /**
      * Pauses audio playback without dropping queued audio.
      */
-    fun pause() {
+    open fun pause() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -170,7 +175,7 @@ class AudioPlayer(
     /**
      * Stops audio playback, flushes buffered audio, and marks player for re-initialization.
      */
-    fun stop() {
+    open fun stop() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -190,7 +195,7 @@ class AudioPlayer(
     /**
      * Flushes currently buffered audio.
      */
-    fun flush() {
+    open fun flush() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -205,7 +210,7 @@ class AudioPlayer(
     /**
      * Adjusts the volume / gain of the player (0.0f = silent, 1.0f = full volume).
      */
-    fun setVolume(volume: Float) {
+    open fun setVolume(volume: Float) {
         synchronized(lock) {
             val clamped = volume.coerceIn(0f, 1f)
             try {
@@ -219,7 +224,7 @@ class AudioPlayer(
     /**
      * Releases the AudioTrack and native resources.
      */
-    fun release() {
+    open fun release() {
         synchronized(lock) {
             try {
                 audioTrack?.let {

@@ -13,12 +13,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
 
 /**
  * Orchestrates text-to-speech synthesis and streaming audio playback.
@@ -26,15 +28,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * chunks through AudioPlayer for low-latency, gapless story narration.
  */
 class TTSAudioPipeline(
-    private val engine: VieNeuOnnxEngine,
+    private val engine: VieNeuOnnxEngine? = null,
     var voiceName: String = "Hải Đăng",
     private val context: Context? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     var minPreBufferChunks: Int = 1,
     var minPreBufferDurationMs: Long = 7500L,
-    var quantizationType: OnnxSessionManager.QuantizationType = engine.quantizationType,
+    var quantizationType: OnnxSessionManager.QuantizationType = engine?.quantizationType ?: OnnxSessionManager.QuantizationType.INT8,
     var preBufferChunkCount: Int = 2,
-    var temperature: Float = 0.45f
+    var temperature: Float = 0.45f,
+    internal var audioPlayer: AudioPlayer = AudioPlayer()
 ) {
     var targetPreBufferChunks: Int
         get() = preBufferChunkCount
@@ -51,8 +54,20 @@ class TTSAudioPipeline(
         data class Error(val message: String) : PipelineState()
     }
 
-    private val audioPlayer = AudioPlayer()
-    private val chunkQueue = ConcurrentLinkedQueue<Pair<Int, ShortArray>>()
+    private val audioExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            try {
+                // Boost Linux thread priority to urgent audio (-19) to prevent CPU starvation and glitches
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+            } catch (e: Throwable) {
+                // Ignore in JVM unit tests or environments where android.os.Process is a stub
+            }
+            runnable.run()
+        }, "AudioTrackWorkerThread")
+    }
+    internal val audioDispatcher = audioExecutor.asCoroutineDispatcher()
+
+    internal var chunkChannel: Channel<Pair<Int, ShortArray>> = Channel(capacity = 4)
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
 
     private var synthesisJob: Job? = null
@@ -127,12 +142,13 @@ class TTSAudioPipeline(
 
         requestAudioFocus()
         val engineThreads = DevicePerformanceHelper.getBigCoreCount().coerceIn(2, 4)
+        val ep = engine?.executionProvider ?: "CPU"
         val quant = when (quantizationType) {
             OnnxSessionManager.QuantizationType.INT8 -> "INT8"
-            OnnxSessionManager.QuantizationType.FP16 -> if (engine.executionProvider.contains("NNAPI")) "FP16+NNAPI" else "FP16"
+            OnnxSessionManager.QuantizationType.FP16 -> if (ep.contains("NNAPI")) "FP16+NNAPI" else "FP16"
             OnnxSessionManager.QuantizationType.FP32 -> "FP32"
         }
-        Log.i(TAG, "Starting TTS session: storyId='$storyId', quantization='$quant', EP='${engine.executionProvider}'")
+        Log.i(TAG, "Starting TTS session: storyId='$storyId', quantization='$quant', EP='$ep'")
         TtsMetricsLogger.startSession(
             storyId = if (storyId != 0) storyId.toString() else "",
             storyTitle = chunks.firstOrNull()?.text?.take(30) ?: "",
@@ -218,6 +234,10 @@ class TTSAudioPipeline(
     fun pause() {
         synthesisJob?.cancel()
         playbackJob?.cancel()
+        try {
+            chunkChannel.cancel()
+        } catch (e: Throwable) {}
+        chunkChannel = Channel(capacity = 4)
         audioPlayer.pause()
         setState(PipelineState.Paused)
     }
@@ -288,6 +308,11 @@ class TTSAudioPipeline(
         abandonAudioFocus()
         audioPlayer.release()
         scope.cancel()
+        try {
+            chunkChannel.cancel()
+        } catch (e: Throwable) {}
+        audioDispatcher.close()
+        audioExecutor.shutdown()
     }
 
     private fun stopInternal(resetIndex: Boolean) {
@@ -295,7 +320,10 @@ class TTSAudioPipeline(
         playbackJob?.cancel()
         synthesisJob = null
         playbackJob = null
-        chunkQueue.clear()
+        try {
+            chunkChannel.cancel()
+        } catch (e: Throwable) {}
+        chunkChannel = Channel(capacity = 4)
         audioPlayer.flush()
         audioPlayer.stop()
         if (resetIndex) {
@@ -306,28 +334,32 @@ class TTSAudioPipeline(
     }
 
     private fun startPipeline(startIndex: Int, storyId: Int = 0) {
-        chunkQueue.clear()
+        try {
+            chunkChannel.cancel()
+        } catch (e: Throwable) {}
+        chunkChannel = Channel(capacity = 4)
         audioPlayer.init()
         audioPlayer.play()
         setState(PipelineState.Synthesizing)
         TtsMetricsLogger.recordPreBufferingStart()
 
-        // Ingest any pre-warmed chunks into the queue
         val cachedIndices = mutableSetOf<Int>()
-        if (startIndex == 0 && storyId != 0) {
-            val prewarmed = PrewarmedChunkCache.getChunksForStory(storyId, voiceName)
-            // Sort by chunk index to enqueue in proper playback order
-            prewarmed.toSortedMap().forEach { (chunkIdx, pcm) ->
-                if (chunkIdx in 0 until chunks.size) {
-                    chunkQueue.add(Pair(chunkIdx, pcm))
-                    cachedIndices.add(chunkIdx)
-                    Log.d(TAG, "⚡ Ingested pre-warmed chunk $chunkIdx into chunkQueue from cache")
-                }
-            }
-        }
 
-        synthesisJob = scope.launch {
+        synthesisJob = scope.launch(dispatcher) {
             try {
+                // Ingest any pre-warmed chunks into the channel
+                if (startIndex == 0 && storyId != 0) {
+                    val prewarmed = PrewarmedChunkCache.getChunksForStory(storyId, voiceName)
+                    // Sort by chunk index to enqueue in proper playback order
+                    prewarmed.toSortedMap().forEach { (chunkIdx, pcm) ->
+                        if (chunkIdx in 0 until chunks.size) {
+                            chunkChannel.send(Pair(chunkIdx, pcm))
+                            cachedIndices.add(chunkIdx)
+                            Log.d(TAG, "⚡ Ingested pre-warmed chunk $chunkIdx into chunkChannel from cache")
+                        }
+                    }
+                }
+
                 for (i in startIndex until chunks.size) {
                     if (!isActive) break
 
@@ -348,14 +380,24 @@ class TTSAudioPipeline(
 
                     // 2. Probe ONNX neural inference time (backbone + codec)
                     val inferStart = System.currentTimeMillis()
-                    val inferResult = withContext(NonCancellable) {
-                        val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
-                        engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
+                    val pcmFloat: FloatArray
+                    val backboneDuration: Long
+                    val codecDuration: Long
+
+                    if (engine != null) {
+                        val inferResult = withContext(NonCancellable) {
+                            val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
+                            engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
+                        }
+                        pcmFloat = inferResult.pcm
+                        backboneDuration = inferResult.timing.backboneDurationMs
+                        codecDuration = inferResult.timing.codecDurationMs
+                    } else {
+                        pcmFloat = FloatArray(VieNeuConfig.SAMPLE_RATE)
+                        backboneDuration = 0L
+                        codecDuration = 0L
                     }
                     val inferDuration = System.currentTimeMillis() - inferStart
-                    val pcmFloat = inferResult.pcm
-                    val backboneDuration = inferResult.timing.backboneDurationMs
-                    val codecDuration = inferResult.timing.codecDurationMs
                     if (!isActive) break
 
                     // 3. Audio/PCM post-processing (floatToShort conversion, applyMicroFade, and generateSilence concatenation)
@@ -396,22 +438,25 @@ class TTSAudioPipeline(
                         audioProcessDurationMs = audioProcessDuration
                     )
 
-                    // Enqueue unified chunk buffer
-                    chunkQueue.add(Pair(i, combinedPcm))
+                    // Enqueue chunk buffer - suspends naturally if channel (capacity 4) is full (backpressure)
+                    chunkChannel.send(Pair(i, combinedPcm))
                 }
+
+                // Close channel to signal all chunks have been synthesized
+                chunkChannel.close()
             } catch (e: CancellationException) {
                 // Expected when paused or stopped
             } catch (e: Throwable) {
                 Log.e(TAG, "Synthesis failed", e)
+                chunkChannel.close(e)
                 setState(PipelineState.Error(e.message ?: "Synthesis failed"))
             }
         }
 
-        playbackJob = scope.launch {
+        playbackJob = scope.launch(audioDispatcher) {
             try {
                 var playIndex = startIndex
                 var starvationStartTime = 0L
-                var isPreBuffering = true
 
                 // Adaptive duration-based pre-buffering thresholds
                 val remainingChunks = totalChunks - startIndex
@@ -424,83 +469,88 @@ class TTSAudioPipeline(
                     targetPreBufferChunks = preBufferChunkCount
                 )
 
-                while (isActive && (playIndex < totalChunks || !chunkQueue.isEmpty())) {
-                    // Anti-starvation adaptive pre-buffering check
-                    if (isPreBuffering) {
-                        val currentQueueSize = chunkQueue.size
-                        val totalBufferedSamples = chunkQueue.sumOf { it.second.size.toLong() }
-                        val bufferedDurationMs = (totalBufferedSamples * 1000L) / VieNeuConfig.SAMPLE_RATE
-                        val isSynthDone = synthesisJob?.isActive != true
-                        val allChunksBuffered = currentQueueSize >= remainingChunks
+                val targetChunks = minOf(preBufferChunkCount, remainingChunks).coerceAtLeast(1)
+                val prebufferList = mutableListOf<Pair<Int, ShortArray>>()
+                var prebufferDurationMs = 0L
 
-                        val minDurationMs = when (preBufferChunkCount) {
-                            1 -> 1500L
-                            3 -> 7000L
-                            else -> 3500L // 2 chunks
-                        }
+                // Pre-buffering phase: Suspend until target duration or chunk count is reached without delay() loops
+                setState(PipelineState.Buffering(bufferedChunks = 0, targetChunks = targetChunks))
 
-                        val isFastMode = (quantizationType == OnnxSessionManager.QuantizationType.INT8 && cpuCores >= 4) ||
-                                (cpuCores >= 6 && quantizationType != OnnxSessionManager.QuantizationType.FP32)
-                        val hasQualifiedChunks = currentQueueSize >= preBufferChunkCount && (bufferedDurationMs >= minDurationMs || (preBufferChunkCount == 1 && isFastMode && bufferedDurationMs >= 1500L))
-                        val hasEnoughDuration = bufferedDurationMs >= targetDurationMs || hasQualifiedChunks
-                        val canStartPlayback = isSynthDone || allChunksBuffered || hasEnoughDuration
-
-                        if (canStartPlayback && currentQueueSize > 0) {
-                            isPreBuffering = false
-                            TtsMetricsLogger.recordPreBufferingComplete(currentQueueSize, bufferedDurationMs)
-                        } else if (isSynthDone && currentQueueSize == 0) {
-                            break
-                        } else {
-                            setState(PipelineState.Buffering(bufferedChunks = currentQueueSize, targetChunks = minOf(preBufferChunkCount, remainingChunks)))
-                            delay(20)
-                            continue
-                        }
+                while (isActive && prebufferList.size < targetChunks && prebufferDurationMs < targetDurationMs) {
+                    val chunk = try {
+                        chunkChannel.receive()
+                    } catch (e: ClosedReceiveChannelException) {
+                        break
                     }
+                    prebufferList.add(chunk)
+                    val chunkDuration = (chunk.second.size * 1000L) / VieNeuConfig.SAMPLE_RATE
+                    prebufferDurationMs += chunkDuration
+                    setState(PipelineState.Buffering(bufferedChunks = prebufferList.size, targetChunks = targetChunks))
+                    if (prebufferList.size >= remainingChunks) {
+                        break
+                    }
+                }
 
-                    val nextChunk = chunkQueue.poll()
-                    if (nextChunk != null) {
-                        val starvationDelay = if (starvationStartTime > 0L) {
-                            val elapsed = System.currentTimeMillis() - starvationStartTime
-                            if (elapsed > 150L) elapsed else 0L
-                        } else {
-                            0L
-                        }
-                        starvationStartTime = 0L
+                if (prebufferList.isNotEmpty()) {
+                    TtsMetricsLogger.recordPreBufferingComplete(prebufferList.size, prebufferDurationMs)
+                }
 
-                        currentChunkIndex = nextChunk.first
-                        setState(PipelineState.Playing)
-                        if (totalChunks > 0) {
-                            val pct = ((nextChunk.first.toFloat() / totalChunks) * 100).toInt().coerceIn(0, 100)
-                            notifyProgress(pct)
-                        }
-
-                        TtsMetricsLogger.recordPlaybackStart(nextChunk.first, starvationDelay)
-
-                        val playStart = System.currentTimeMillis()
-                        audioPlayer.write(nextChunk.second)
-                        val playDuration = System.currentTimeMillis() - playStart
-                        TtsMetricsLogger.recordPlaybackComplete(nextChunk.first, playDuration)
-
-                        currentChunkIndex = nextChunk.first + 1
-                        playIndex = currentChunkIndex
-
-                        if (totalChunks > 0) {
-                            val pct = ((currentChunkIndex.toFloat() / totalChunks) * 100).toInt().coerceIn(0, 100)
-                            notifyProgress(pct)
-                        }
+                fun playChunk(nextChunk: Pair<Int, ShortArray>) {
+                    val starvationDelay = if (starvationStartTime > 0L) {
+                        val elapsed = System.currentTimeMillis() - starvationStartTime
+                        if (elapsed > 150L) elapsed else 0L
                     } else {
-                        // Buffer is empty - track starvation if synthesis is still in progress
-                        if (starvationStartTime == 0L && playIndex < totalChunks) {
-                            starvationStartTime = System.currentTimeMillis()
-                        }
-
-                        // Check if synthesis has finished or failed
-                        val isSynthDone = synthesisJob?.isActive != true
-                        if (isSynthDone && chunkQueue.isEmpty()) {
-                            break
-                        }
-                        delay(20)
+                        0L
                     }
+                    starvationStartTime = 0L
+
+                    currentChunkIndex = nextChunk.first
+                    setState(PipelineState.Playing)
+                    if (totalChunks > 0) {
+                        val pct = ((nextChunk.first.toFloat() / totalChunks) * 100).toInt().coerceIn(0, 100)
+                        notifyProgress(pct)
+                    }
+
+                    TtsMetricsLogger.recordPlaybackStart(nextChunk.first, starvationDelay)
+
+                    val playStart = System.currentTimeMillis()
+                    audioPlayer.write(nextChunk.second)
+                    val playDuration = System.currentTimeMillis() - playStart
+                    TtsMetricsLogger.recordPlaybackComplete(nextChunk.first, playDuration)
+
+                    currentChunkIndex = nextChunk.first + 1
+                    playIndex = currentChunkIndex
+
+                    if (totalChunks > 0) {
+                        val pct = ((currentChunkIndex.toFloat() / totalChunks) * 100).toInt().coerceIn(0, 100)
+                        notifyProgress(pct)
+                    }
+                }
+
+                // 1. Play all chunks that were collected during prebuffering
+                for (chunk in prebufferList) {
+                    if (!isActive) break
+                    playChunk(chunk)
+                }
+
+                // 2. Stream and play remaining chunks directly from chunkChannel
+                while (isActive) {
+                    val nextChunk = try {
+                        val tryResult = chunkChannel.tryReceive()
+                        if (tryResult.isSuccess) {
+                            tryResult.getOrThrow()
+                        } else if (tryResult.isClosed) {
+                            break
+                        } else {
+                            starvationStartTime = System.currentTimeMillis()
+                            chunkChannel.receive()
+                        }
+                    } catch (e: ClosedReceiveChannelException) {
+                        break
+                    }
+
+                    if (!isActive) break
+                    playChunk(nextChunk)
                 }
 
                 if (isActive && playIndex >= totalChunks) {
@@ -515,6 +565,10 @@ class TTSAudioPipeline(
             } catch (e: Throwable) {
                 Log.e(TAG, "Playback failed", e)
                 setState(PipelineState.Error(e.message ?: "Playback failed"))
+            } finally {
+                if (currentState !is PipelineState.Paused) {
+                    audioPlayer.stop()
+                }
             }
         }
     }
