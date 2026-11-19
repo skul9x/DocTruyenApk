@@ -1,17 +1,85 @@
 {
-  "updated_at": "2026-11-19T23:12:00+07:00",
+  "updated_at": "2026-11-20T00:58:00+07:00",
   "working_on": {
-    "feature": "Fix GitHub Actions CI/CD Build Failure",
-    "task": "Fixed compilation error and verified GitHub Actions CI/CD Release v1.14 build SUCCESS",
+    "feature": "Voice Categorization, Audio Preview & Zero-Gap Pacing",
+    "task": "Phase 04: Traditional Dialog Voice Selector UI",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt"
+      "app/src/main/res/layout/dialog_voice_selector.xml",
+      "app/src/main/res/layout/dialog_item_voice.xml",
+      "app/src/main/res/drawable/ic_preview_play.xml",
+      "app/src/main/res/drawable/ic_preview_stop.xml",
+      "app/src/main/res/values/strings.xml",
+      "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorItem.kt",
+      "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorAdapter.kt",
+      "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorController.kt",
+      "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+      "app/src/test/java/com/skul9x/doctruyen/ui/VoiceSelectorDialogLogicTest.kt",
+      "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/phase-04-traditional-dialog-voice-selector-ui.md",
+      "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/plan.md"
     ],
     "blockers": [],
-    "notes": "CI/CD Run #20 (44562704296) completed with SUCCESS. Release v1.14 generated with doctruyenapk-v1.14.apk attached."
+    "notes": "Verified 100% with single comprehensive unit test VoiceSelectorDialogLogicTest (14/14 passed)"
   },
   "pending_tasks": [],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-20T00:58:00+07:00",
+      "type": "feature",
+      "description": "Completed Phase 04: Traditional Dialog Voice Selector UI. Built traditional pop-up MaterialAlertDialog with 3-tier horizontal ChipGroup filters (Gender, Region, Style); embedded RecyclerView with ConstraintLayout layout_constrainedHeight capped at 360dp without nested ScrollViews; created custom voice item with RadioButton, displayName, category badges ([Nam], [Miền Nam], [Kể chuyện]), description, and inline audio preview play/stop toggle button with mini progress spinner; implemented empty state view with reset filters action; built VoiceSelectorAdapter using ListAdapter and VoiceSelectorDiffCallback with granular change payloads (SELECTION, PREVIEW_STATE, FULL) to eliminate view flickering; implemented VoiceSelectorController with reactive filtering, single-active preview binding, and lifecycle dismissal stop and onDestroy release; integrated smoothly in SettingsActivity for both VieNeu neural voices and Google TTS voices; fully verified with single comprehensive unit test suite VoiceSelectorDialogLogicTest (14/14 tests passed 100%).",
+      "files": [
+        "app/src/main/res/layout/dialog_voice_selector.xml",
+        "app/src/main/res/layout/dialog_item_voice.xml",
+        "app/src/main/res/drawable/ic_preview_play.xml",
+        "app/src/main/res/drawable/ic_preview_stop.xml",
+        "app/src/main/res/values/strings.xml",
+        "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorItem.kt",
+        "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorAdapter.kt",
+        "app/src/main/java/com/skul9x/doctruyen/ui/VoiceSelectorController.kt",
+        "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+        "app/src/test/java/com/skul9x/doctruyen/ui/VoiceSelectorDialogLogicTest.kt",
+        "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/phase-04-traditional-dialog-voice-selector-ui.md",
+        "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/plan.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T00:38:00+07:00",
+      "type": "feature",
+      "description": "Completed Phase 03: Audio Preview Engine and Cache. Built dedicated lifecycle-safe AudioPreviewEngine with observable state callbacks (Idle, Loading, Playing, Stopped, Error); implemented strictly bounded in-memory AudioPreviewCache with LRU eviction and memory bounds (max 32 entries, max 3 MB resident RAM) yielding 0 ms latency on repeated audition; created IAudioPreviewPlayer and AndroidAudioPreviewPlayer with static-mode AudioTrack playback and finally-block resource cleanup; enforced single-active playback semantics where triggering audition for voice B immediately halts voice A; implemented sample greeting generation ('Xin chào, tôi là [Tên giọng], rất vui được đọc truyện cùng bạn.'); added Google TTS preview integration with UtteranceProgressListener; integrated AudioFocusRequestCompat with AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK to avoid interrupting ReadingService; fully verified with single comprehensive unit test suite AudioPreviewEngineTest (13/13 tests passed 100%).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/AudioPreviewEngine.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/AudioPreviewEngineTest.kt",
+        "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/phase-03-audio-preview-engine-and-cache.md",
+        "plans/261119-2345-voice-categorization-preview-and-zero-gap-pacing/plan.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T00:16:00+07:00",
+      "type": "feature",
+      "description": "Completed Phase 02: Voice Metadata Categorization. Formalized canonical categories (VoiceGender: MALE, FEMALE, ALL; VoiceRegion: NORTH, CENTRAL, SOUTH, ALL; VoiceStyle: STORYTELLING, NATURAL, NEWS, ALL); implemented removeVietnameseDiacritics() string extension; categorized all 25 VieNeu presets (14 Male, 11 Female; 15 North, 2 Central, 8 South; 11 Natural, 10 Storytelling, 4 News); implemented VoiceFilterCriteria and VoiceFilterEngine with allocation-efficient sub-millisecond filtering; added formatted metadata badges ([Nam], [Miền Nam], [Kể chuyện]); added diacritics-resilient search query filter; integrated Google TTS VoiceInfo categorization; fully verified with single comprehensive unit test suite VoiceCategorizationFilterTest (11/11 tests passed 100%).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/VoiceCategorization.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/ITTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/VoiceCategorizationFilterTest.kt"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T00:03:00+07:00",
+      "type": "feature",
+      "description": "Completed Phase 01: Zero-Gap Pacing and Cadence. Extended UserConfig pause bounds down to 0 ms (MIN_PAUSE_SENTENCE = 0, MIN_PAUSE_PARAGRAPH = 0, MIN_PAUSE_CLAUSE = 0); added SEAMLESS and ZERO_GAP presets in UserConfig.applyPausePreset; updated SettingsActivity and activity_settings.xml sliders with valueFrom=0 and adaptive label formatting ('0 ms (Liền mạch / Zero Gap)'); introduced btnPresetSeamless in 2x2 grid layout; updated VieNeuTTSManager and GoogleTTSManager condition checking (sentencePauseMs >= 0) to honor 0 ms zero-gap pause; fully verified with single comprehensive test suite ZeroGapPauseCadenceTest (7/7 tests passed 100%).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/utils/UserConfig.kt",
+        "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+        "app/src/main/res/layout/activity_settings.xml",
+        "app/src/main/res/values/strings.xml",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/GoogleTTSManager.kt",
+        "app/src/test/java/com/skul9x/doctruyen/utils/ZeroGapPauseCadenceTest.kt"
+      ]
+    },
     {
       "timestamp": "2026-11-19T23:08:00+07:00",
       "type": "bug_fix",
@@ -112,6 +180,10 @@
   ],
   "errors_encountered": [],
   "decisions_made": [
+    {
+      "decision": "Canonical Enum Categorization & Vietnamese Diacritics Normalization (NFD + regex + đ/Đ handling)",
+      "reason": "Standardizes voice metadata into canonical facets (Gender, Region, Style) while providing sub-millisecond, allocation-efficient, thread-safe, and diacritics-resilient search query filtering across VieNeu presets and Google TTS voices."
+    },
     {
       "decision": "64KB streaming buffer (ASSET_STREAM_BUFFER_SIZE) for model extraction",
       "reason": "Reduces read/write syscall context switches by 8x compared to default 8KB buffer, slashing first-run cold extraction time on flash storage from ~15s to <5s."

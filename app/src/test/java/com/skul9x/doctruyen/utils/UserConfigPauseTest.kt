@@ -136,9 +136,9 @@ class UserConfigPauseTest {
 
     @Test
     fun testCustomPauseValuesClamped() {
-        // Sentence pause clamping: min 150, max 1000
-        UserConfig.setPauseSentence(dummyContext, 50)
-        assertEquals(150, UserConfig.getPauseSentence(dummyContext))
+        // Sentence pause clamping: min 0, max 1000
+        UserConfig.setPauseSentence(dummyContext, -50)
+        assertEquals(0, UserConfig.getPauseSentence(dummyContext))
 
         UserConfig.setPauseSentence(dummyContext, 1500)
         assertEquals(1000, UserConfig.getPauseSentence(dummyContext))
@@ -146,9 +146,9 @@ class UserConfigPauseTest {
         UserConfig.setPauseSentence(dummyContext, 500)
         assertEquals(500, UserConfig.getPauseSentence(dummyContext))
 
-        // Paragraph pause clamping: min 300, max 1500
-        UserConfig.setPauseParagraph(dummyContext, 100)
-        assertEquals(300, UserConfig.getPauseParagraph(dummyContext))
+        // Paragraph pause clamping: min 0, max 1500
+        UserConfig.setPauseParagraph(dummyContext, -100)
+        assertEquals(0, UserConfig.getPauseParagraph(dummyContext))
 
         UserConfig.setPauseParagraph(dummyContext, 3000)
         assertEquals(1500, UserConfig.getPauseParagraph(dummyContext))
@@ -156,9 +156,9 @@ class UserConfigPauseTest {
         UserConfig.setPauseParagraph(dummyContext, 800)
         assertEquals(800, UserConfig.getPauseParagraph(dummyContext))
 
-        // Clause pause clamping: min 50, max 500
-        UserConfig.setPauseClause(dummyContext, 10)
-        assertEquals(50, UserConfig.getPauseClause(dummyContext))
+        // Clause pause clamping: min 0, max 500
+        UserConfig.setPauseClause(dummyContext, -10)
+        assertEquals(0, UserConfig.getPauseClause(dummyContext))
 
         UserConfig.setPauseClause(dummyContext, 900)
         assertEquals(500, UserConfig.getPauseClause(dummyContext))

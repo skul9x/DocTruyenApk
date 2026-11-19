@@ -1,6 +1,7 @@
 # Built-in Android & Gradle
 *.iml
 .gradle/
+.android-sdk/
 /local.properties
 local.properties
 .idea/

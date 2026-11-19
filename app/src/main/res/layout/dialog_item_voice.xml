@@ -1,19 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/layoutVoiceItem"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="6dp"
-    android:layout_marginEnd="6dp"
-    android:layout_marginTop="3dp"
-    android:layout_marginBottom="3dp"
+    android:layout_marginStart="4dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginBottom="2dp"
     android:background="@drawable/bg_voice_item_selector"
+    android:clickable="true"
+    android:focusable="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="12dp"
-    android:paddingTop="10dp"
-    android:paddingEnd="12dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="10dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="10dp"
+    android:paddingBottom="8dp">
 
     <RadioButton
         android:id="@+id/rbVoiceSelected"
@@ -22,7 +25,7 @@
         android:clickable="false"
         android:focusable="false"
         android:buttonTint="@color/primary"
-        android:layout_marginEnd="10dp" />
+        android:layout_marginEnd="8dp" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -30,13 +33,32 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvVoiceItemTitle"
+        <!-- Voice Title + Category Badges -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvVoiceItemTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                tools:text="Hải Đăng" />
+
+            <TextView
+                android:id="@+id/tvVoiceBadges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textColor="@color/primary"
+                android:textSize="11.5sp"
+                android:textStyle="normal"
+                tools:text="[Nam] [Miền Nam] [Kể chuyện]" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvVoiceItemSubtitle"
@@ -44,6 +66,33 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:textColor="@color/text_secondary"
-            android:textSize="12.5sp" />
+            android:textSize="12sp"
+            tools:text="Giọng trầm ấm, truyền cảm, phù hợp đọc tiểu thuyết kiếm hiệp" />
     </LinearLayout>
+
+    <!-- Preview Play/Stop/Loading Container -->
+    <FrameLayout
+        android:id="@+id/layoutVoicePreviewContainer"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="6dp">
+
+        <ImageButton
+            android:id="@+id/btnVoicePreview"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/voice_preview_play"
+            android:src="@drawable/ic_preview_play" />
+
+        <ProgressBar
+            android:id="@+id/pbVoicePreviewLoading"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

@@ -557,13 +557,32 @@
                             app:cornerRadius="14dp"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp">
+
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnPresetEmotional"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:layout_marginStart="6dp"
                             android:text="@string/preset_emotional"
+                            android:textSize="11sp"
+                            android:paddingHorizontal="4dp"
+                            app:cornerRadius="14dp"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPresetSeamless"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:text="@string/preset_seamless"
                             android:textSize="11sp"
                             android:paddingHorizontal="4dp"
                             app:cornerRadius="14dp"
@@ -600,7 +619,7 @@
                         android:id="@+id/sliderPauseSentence"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:valueFrom="150"
+                        android:valueFrom="0"
                         android:valueTo="1000"
                         android:value="400"
                         android:stepSize="50" />
@@ -634,7 +653,7 @@
                         android:id="@+id/sliderPauseParagraph"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:valueFrom="300"
+                        android:valueFrom="0"
                         android:valueTo="1500"
                         android:value="650"
                         android:stepSize="50" />
@@ -668,7 +687,7 @@
                         android:id="@+id/sliderPauseClause"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:valueFrom="50"
+                        android:valueFrom="0"
                         android:valueTo="500"
                         android:value="180"
                         android:stepSize="10" />

@@ -92,7 +92,9 @@ class GoogleTTSManager(
     override val engineType: ITTSManager.EngineType
         get() = ITTSManager.EngineType.GOOGLE_TTS
 
-    private var engineWrapper: ITtsEngineWrapper? = customEngineWrapper
+    internal var engineWrapper: ITtsEngineWrapper? = customEngineWrapper
+    val engineWrapperInstance: ITtsEngineWrapper?
+        get() = engineWrapper
 
     @Volatile
     override var currentState: ITTSManager.TTSState = ITTSManager.TTSState.IDLE
@@ -376,7 +378,7 @@ class GoogleTTSManager(
         fullStoryContent = content
         isPausedByUser = false
 
-        val config = if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig()
+        val config = if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig()
         segments = SmartTextSegmenter.segmentStory(title, content, pauseConfig = config)
         currentSegmentIndex = 0
 
@@ -541,7 +543,8 @@ class GoogleTTSManager(
                     description = "Giọng đọc hệ thống Tiếng Việt",
                     gender = "Tiêu chuẩn",
                     region = "Việt Nam",
-                    isDefault = true
+                    isDefault = true,
+                    style = "Tự nhiên"
                 )
             )
         }
@@ -560,7 +563,8 @@ class GoogleTTSManager(
                     description = "Giọng đọc hệ thống Tiếng Việt",
                     gender = "Tiêu chuẩn",
                     region = "Việt Nam",
-                    isDefault = true
+                    isDefault = true,
+                    style = "Tự nhiên"
                 )
             )
         }
@@ -582,7 +586,13 @@ class GoogleTTSManager(
                     id.contains("vi-vn-x-vic-local", ignoreCase = true) ||
                     id.contains("vi-vn", ignoreCase = true)
 
+            val features = try { voice.features } catch (e: Throwable) { null }
+            val hasFemaleFeature = features?.any { it.contains("female", ignoreCase = true) || it.contains("gender:female", ignoreCase = true) } == true
+            val hasMaleFeature = features?.any { it.contains("male", ignoreCase = true) || it.contains("gender:male", ignoreCase = true) } == true
+
             val gender = when {
+                hasFemaleFeature -> "Nữ"
+                hasMaleFeature -> "Nam"
                 id.contains("-vic-", ignoreCase = true) -> "Nữ"
                 id.contains("-vif-", ignoreCase = true) -> "Nam"
                 id.contains("-vib-", ignoreCase = true) -> "Nữ"
@@ -607,7 +617,8 @@ class GoogleTTSManager(
                 description = "Google TTS · $gender · $quality",
                 gender = gender,
                 region = "Việt Nam",
-                isDefault = isDef
+                isDefault = isDef,
+                style = "Tự nhiên"
             )
         }
     }

@@ -1,6 +1,13 @@
 package com.skul9x.doctruyen.tts.vieneu
 
 import android.content.Context
+import com.skul9x.doctruyen.tts.VoiceFilterCriteria
+import com.skul9x.doctruyen.tts.VoiceFilterEngine
+import com.skul9x.doctruyen.tts.VoiceGender
+import com.skul9x.doctruyen.tts.VoiceInfo
+import com.skul9x.doctruyen.tts.VoiceRegion
+import com.skul9x.doctruyen.tts.VoiceStyle
+import com.skul9x.doctruyen.tts.removeVietnameseDiacritics
 import org.json.JSONObject
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -102,6 +109,80 @@ data class VoicePreset(
         }
     }
 
+    val canonicalGender: VoiceGender
+        get() {
+            val g = VoiceGender.from(gender)
+            if (g != VoiceGender.ALL) return g
+            val gd = VoiceGender.from(genderDisplay)
+            if (gd != VoiceGender.ALL) return gd
+            return VoiceGender.from(description)
+        }
+
+    val canonicalRegion: VoiceRegion
+        get() {
+            val r = VoiceRegion.from(region)
+            if (r != VoiceRegion.ALL) return r
+            val rd = VoiceRegion.from(regionDisplay)
+            if (rd != VoiceRegion.ALL) return rd
+            return VoiceRegion.from(description)
+        }
+
+    val canonicalStyle: VoiceStyle
+        get() {
+            val s = VoiceStyle.from(style)
+            if (s != VoiceStyle.ALL) return s
+            val sd = VoiceStyle.from(styleDisplay)
+            if (sd != VoiceStyle.ALL) return sd
+            return VoiceStyle.from(description)
+        }
+
+    fun getBadges(bracketed: Boolean = true): List<String> {
+        val list = mutableListOf<String>()
+        if (canonicalGender != VoiceGender.ALL) {
+            list.add(if (bracketed) "[${canonicalGender.displayName}]" else canonicalGender.displayName)
+        }
+        if (canonicalRegion != VoiceRegion.ALL) {
+            list.add(if (bracketed) "[${canonicalRegion.displayName}]" else canonicalRegion.displayName)
+        }
+        if (canonicalStyle != VoiceStyle.ALL) {
+            list.add(if (bracketed) "[${canonicalStyle.displayName}]" else canonicalStyle.displayName)
+        }
+        return list
+    }
+
+    fun getFormattedBadges(bracketed: Boolean = true): String =
+        getBadges(bracketed).joinToString(" ")
+
+    fun matches(criteria: VoiceFilterCriteria): Boolean {
+        if (criteria.gender != VoiceGender.ALL && canonicalGender != criteria.gender) return false
+        if (criteria.region != VoiceRegion.ALL && canonicalRegion != criteria.region) return false
+        if (criteria.style != VoiceStyle.ALL && canonicalStyle != criteria.style) return false
+        if (criteria.searchQuery.isNotBlank()) {
+            val q = criteria.searchQuery.trim().lowercase().removeVietnameseDiacritics()
+            val nameNorm = name.lowercase().removeVietnameseDiacritics()
+            val descNorm = description.lowercase().removeVietnameseDiacritics()
+            val gNorm = canonicalGender.displayName.lowercase().removeVietnameseDiacritics()
+            val rNorm = canonicalRegion.displayName.lowercase().removeVietnameseDiacritics()
+            val sNorm = canonicalStyle.displayName.lowercase().removeVietnameseDiacritics()
+            val matchesQuery = nameNorm.contains(q) || descNorm.contains(q) ||
+                    gNorm.contains(q) || rNorm.contains(q) || sNorm.contains(q)
+            if (!matchesQuery) return false
+        }
+        return true
+    }
+
+    fun toVoiceInfo(isDefault: Boolean = false): VoiceInfo {
+        return VoiceInfo(
+            id = name,
+            displayName = getFormattedDisplayName(),
+            description = getFormattedDescription(),
+            gender = genderDisplay,
+            region = regionDisplay,
+            isDefault = isDefault,
+            style = styleDisplay
+        )
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -155,6 +236,34 @@ object VoicePresets {
 
     fun getVoicePresets(): List<VoicePreset> {
         return presetsMap.values.toList()
+    }
+
+    fun filterVoices(criteria: VoiceFilterCriteria): List<VoicePreset> {
+        return VoiceFilterEngine.filterPresets(getVoicePresets(), criteria)
+    }
+
+    fun filterVoices(
+        gender: VoiceGender = VoiceGender.ALL,
+        region: VoiceRegion = VoiceRegion.ALL,
+        style: VoiceStyle = VoiceStyle.ALL,
+        searchQuery: String = ""
+    ): List<VoicePreset> {
+        return filterVoices(VoiceFilterCriteria(gender, region, style, searchQuery))
+    }
+
+    fun getFilteredVoiceInfos(criteria: VoiceFilterCriteria): List<VoiceInfo> {
+        return filterVoices(criteria).map {
+            it.toVoiceInfo(isDefault = it.name == defaultVoiceName)
+        }
+    }
+
+    fun getFilteredVoiceInfos(
+        gender: VoiceGender = VoiceGender.ALL,
+        region: VoiceRegion = VoiceRegion.ALL,
+        style: VoiceStyle = VoiceStyle.ALL,
+        searchQuery: String = ""
+    ): List<VoiceInfo> {
+        return getFilteredVoiceInfos(VoiceFilterCriteria(gender, region, style, searchQuery))
     }
 
     fun getVoiceEmbedding(name: String): FloatArray? {

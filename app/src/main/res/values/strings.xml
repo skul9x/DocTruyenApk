@@ -84,6 +84,8 @@
     <string name="preset_standard">Chuẩn / Tự nhiên</string>
     <string name="preset_fast">Đọc nhanh / Ngắt ngắn</string>
     <string name="preset_emotional">Truyện cảm xúc / Ngắt dài</string>
+    <string name="preset_seamless">Liền mạch / Zero-Gap</string>
+    <string name="pause_zero_gap">0 ms (Liền mạch / Zero Gap)</string>
     <string name="settings_pause_sentence">Nghỉ hết câu (. ! ? …)</string>
     <string name="settings_pause_paragraph">Nghỉ chuyển đoạn</string>
     <string name="settings_pause_clause">Nghỉ ngắt ý (, ; : —)</string>
@@ -122,4 +124,24 @@
     <string name="settings_prebuffer_2chunks_badge">⚖️ 2 Chunks (Cân bằng / Khuyên dùng): Phát sau ~3.5s, mượt mà và không lo ngắt quãng.</string>
     <string name="settings_prebuffer_3chunks_badge">🛡️ 3 Chunks (Ổn định tối đa / Chống ngắt): Phát sau ~8.0s, đệm dày tối đa chống gián đoạn khi nghe lâu.</string>
     <string name="settings_prebuffer_switched">Đã đổi bộ đệm phát sang %d chunk</string>
+
+    <!-- Voice Selector Dialog & Preview Resources -->
+    <string name="confirm">Xác nhận</string>
+    <string name="voice_filter_gender">Giới tính</string>
+    <string name="voice_filter_region">Vùng miền</string>
+    <string name="voice_filter_style">Phong cách</string>
+    <string name="voice_filter_all">Tất cả</string>
+    <string name="voice_filter_male">Nam</string>
+    <string name="voice_filter_female">Nữ</string>
+    <string name="voice_filter_north">Bắc</string>
+    <string name="voice_filter_central">Trung</string>
+    <string name="voice_filter_south">Nam</string>
+    <string name="voice_filter_storytelling">Kể chuyện</string>
+    <string name="voice_filter_natural">Tự nhiên</string>
+    <string name="voice_filter_news">Tin tức</string>
+    <string name="voice_filter_empty">Không tìm thấy giọng đọc phù hợp</string>
+    <string name="voice_filter_reset">Đặt lại bộ lọc</string>
+    <string name="voice_preview_play">Nghe thử</string>
+    <string name="voice_preview_stop">Dừng</string>
+    <string name="voice_count_format">%d giọng</string>
 </resources>

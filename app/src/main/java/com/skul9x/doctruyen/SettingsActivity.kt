@@ -118,6 +118,7 @@ open class SettingsActivity : AppCompatActivity() {
     private lateinit var btnPresetStandard: MaterialButton
     private lateinit var btnPresetFast: MaterialButton
     private lateinit var btnPresetEmotional: MaterialButton
+    private lateinit var btnPresetSeamless: MaterialButton
 
     private lateinit var switchDebugLogging: SwitchMaterial
     private lateinit var btnViewTimingLogs: MaterialButton
@@ -133,6 +134,18 @@ open class SettingsActivity : AppCompatActivity() {
         get() = ttsHolder.tempGoogleTts
 
     internal fun getOrCreateGoogleTts(): GoogleTTSManager = ttsHolder.getOrCreateGoogleTts()
+
+    internal var previewEngine: com.skul9x.doctruyen.tts.AudioPreviewEngine? = null
+
+    internal fun getOrCreateAudioPreviewEngine(): com.skul9x.doctruyen.tts.AudioPreviewEngine {
+        previewEngine?.let { return it }
+        val engine = com.skul9x.doctruyen.tts.AudioPreviewEngine(
+            context = this,
+            googleTtsWrapperProvider = { getOrCreateGoogleTts().engineWrapperInstance }
+        )
+        previewEngine = engine
+        return engine
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,6 +206,7 @@ open class SettingsActivity : AppCompatActivity() {
         btnPresetStandard = findViewById(R.id.btnPresetStandard)
         btnPresetFast = findViewById(R.id.btnPresetFast)
         btnPresetEmotional = findViewById(R.id.btnPresetEmotional)
+        btnPresetSeamless = findViewById(R.id.btnPresetSeamless)
 
         switchDebugLogging = findViewById(R.id.switchDebugLogging)
         btnViewTimingLogs = findViewById(R.id.btnViewTimingLogs)
@@ -423,87 +437,152 @@ open class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    data class VoiceOption(
-        val id: String,
-        val title: String,
-        val subtitle: String
-    )
-
-    private fun showCustomVoicePickerDialog(
+    private fun showVoicePickerDialog(
         title: String,
-        options: List<VoiceOption>,
+        voices: List<com.skul9x.doctruyen.tts.VoiceInfo>,
         selectedId: String,
-        onSelected: (VoiceOption) -> Unit
+        engineType: ITTSManager.EngineType,
+        onSelected: (String) -> Unit
     ) {
-        val selectedIndex = options.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
-        var dialog: AlertDialog? = null
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_voice_selector, null)
 
-        val adapter = object : ArrayAdapter<VoiceOption>(this, R.layout.dialog_item_voice, options) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val view = convertView ?: LayoutInflater.from(context).inflate(R.layout.dialog_item_voice, parent, false)
-                val item = getItem(position) ?: return view
+        val tvTitle = dialogView.findViewById<TextView>(R.id.tvVoiceDialogTitle)
+        val tvCount = dialogView.findViewById<TextView>(R.id.tvVoiceCountBadge)
+        val chipGroupGender = dialogView.findViewById<com.google.android.material.chip.ChipGroup>(R.id.chipGroupGender)
+        val chipGroupRegion = dialogView.findViewById<com.google.android.material.chip.ChipGroup>(R.id.chipGroupRegion)
+        val chipGroupStyle = dialogView.findViewById<com.google.android.material.chip.ChipGroup>(R.id.chipGroupStyle)
 
-                val layoutItem = view.findViewById<View>(R.id.layoutVoiceItem)
-                val rbSelected = view.findViewById<RadioButton>(R.id.rbVoiceSelected)
-                val tvTitle = view.findViewById<TextView>(R.id.tvVoiceItemTitle)
-                val tvSubtitle = view.findViewById<TextView>(R.id.tvVoiceItemSubtitle)
+        val chipGenderAll = dialogView.findViewById<com.google.android.material.chip.Chip>(R.id.chipGenderAll)
+        val chipRegionAll = dialogView.findViewById<com.google.android.material.chip.Chip>(R.id.chipRegionAll)
+        val chipStyleAll = dialogView.findViewById<com.google.android.material.chip.Chip>(R.id.chipStyleAll)
 
-                tvTitle.text = item.title
-                if (item.subtitle.isNotEmpty()) {
-                    tvSubtitle.text = item.subtitle
-                    tvSubtitle.visibility = View.VISIBLE
-                } else {
-                    tvSubtitle.visibility = View.GONE
-                }
+        val rvVoiceList = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvVoiceList)
+        val layoutEmpty = dialogView.findViewById<View>(R.id.layoutVoiceEmptyState)
+        val btnResetFilters = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnResetVoiceFilters)
+        val btnCancel = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnVoiceDialogCancel)
+        val btnConfirm = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnVoiceDialogConfirm)
 
-                val isSelected = (position == selectedIndex)
-                rbSelected.isChecked = isSelected
-                layoutItem.isSelected = isSelected
-                layoutItem.isActivated = isSelected
+        tvTitle.text = title
 
-                return view
+        val controller = com.skul9x.doctruyen.ui.VoiceSelectorController(
+            allVoices = voices,
+            initialSelectedId = selectedId,
+            previewEngine = getOrCreateAudioPreviewEngine(),
+            engineType = engineType,
+            mainRunner = { runOnUiThread(it) }
+        )
+
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+
+        val adapter = com.skul9x.doctruyen.ui.VoiceSelectorAdapter(
+            onItemClick = { item ->
+                controller.selectVoice(item.id)
+            },
+            onPreviewClick = { item ->
+                controller.togglePreview(item.voiceInfo)
+            }
+        )
+
+        rvVoiceList.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvVoiceList.adapter = adapter
+
+        controller.onItemsChanged = { items, isEmpty ->
+            adapter.submitList(items)
+            tvCount.text = getString(R.string.voice_count_format, items.size)
+            if (isEmpty) {
+                layoutEmpty.visibility = View.VISIBLE
+                rvVoiceList.visibility = View.GONE
+            } else {
+                layoutEmpty.visibility = View.GONE
+                rvVoiceList.visibility = View.VISIBLE
             }
         }
 
-        dialog = AlertDialog.Builder(this)
-            .setTitle(title)
-            .setAdapter(adapter) { _, which ->
-                val selected = options[which]
-                onSelected(selected)
-                dialog?.dismiss()
+        // Initialize display with current filtered state
+        controller.onItemsChanged?.invoke(controller.currentItems, controller.isEmptyState)
+
+        chipGroupGender.setOnCheckedStateChangeListener { _, checkedIds ->
+            val gender = when {
+                checkedIds.contains(R.id.chipGenderMale) -> com.skul9x.doctruyen.tts.VoiceGender.MALE
+                checkedIds.contains(R.id.chipGenderFemale) -> com.skul9x.doctruyen.tts.VoiceGender.FEMALE
+                else -> com.skul9x.doctruyen.tts.VoiceGender.ALL
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            controller.setGenderFilter(gender)
+        }
+
+        chipGroupRegion.setOnCheckedStateChangeListener { _, checkedIds ->
+            val region = when {
+                checkedIds.contains(R.id.chipRegionNorth) -> com.skul9x.doctruyen.tts.VoiceRegion.NORTH
+                checkedIds.contains(R.id.chipRegionCentral) -> com.skul9x.doctruyen.tts.VoiceRegion.CENTRAL
+                checkedIds.contains(R.id.chipRegionSouth) -> com.skul9x.doctruyen.tts.VoiceRegion.SOUTH
+                else -> com.skul9x.doctruyen.tts.VoiceRegion.ALL
+            }
+            controller.setRegionFilter(region)
+        }
+
+        chipGroupStyle.setOnCheckedStateChangeListener { _, checkedIds ->
+            val style = when {
+                checkedIds.contains(R.id.chipStyleStory) -> com.skul9x.doctruyen.tts.VoiceStyle.STORYTELLING
+                checkedIds.contains(R.id.chipStyleNatural) -> com.skul9x.doctruyen.tts.VoiceStyle.NATURAL
+                checkedIds.contains(R.id.chipStyleNews) -> com.skul9x.doctruyen.tts.VoiceStyle.NEWS
+                else -> com.skul9x.doctruyen.tts.VoiceStyle.ALL
+            }
+            controller.setStyleFilter(style)
+        }
+
+        btnResetFilters.setOnClickListener {
+            chipGenderAll.isChecked = true
+            chipRegionAll.isChecked = true
+            chipStyleAll.isChecked = true
+            controller.resetFilters()
+        }
+
+        btnCancel.setOnClickListener {
+            dialog?.dismiss()
+        }
+
+        btnConfirm.setOnClickListener {
+            controller.confirmSelection()
+            dialog?.dismiss()
+        }
+
+        controller.onVoiceConfirmed = { chosenId ->
+            onSelected(chosenId)
+        }
+
+        dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .setOnDismissListener {
+                controller.onDismiss()
+            }
+            .setOnCancelListener {
+                controller.onDismiss()
+            }
             .create()
 
         dialog.show()
-        dialog.listView?.divider = null
-        dialog.listView?.dividerHeight = 0
     }
 
     private fun showVieNeuVoicePickerDialog() {
         val available = VoicePresets.availableVoices
         val voiceList = if (available.isNotEmpty()) available else listOf("Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
 
-        val options = voiceList.map { name ->
-            val preset = VoicePresets.getVoice(name)
-            val desc = preset?.getFormattedDescription() ?: ""
-            VoiceOption(
-                id = name,
-                title = name,
-                subtitle = desc
-            )
+        val voices = voiceList.map { name ->
+            VoicePresets.getVoice(name)?.toVoiceInfo()
+                ?: com.skul9x.doctruyen.tts.VoiceInfo(id = name, displayName = name)
         }
 
         val currentVoice = UserConfig.getTtsVoice(this) ?: VoicePresets.defaultVoiceName
 
-        showCustomVoicePickerDialog(
+        showVoicePickerDialog(
             title = getString(R.string.settings_select_voice_dialog),
-            options = options,
-            selectedId = currentVoice
-        ) { selected ->
-            UserConfig.setTtsVoice(this, selected.id)
+            voices = voices,
+            selectedId = currentVoice,
+            engineType = ITTSManager.EngineType.VIENEU
+        ) { selectedId ->
+            UserConfig.setTtsVoice(this, selectedId)
             updateActiveVoiceDisplay()
-            Toast.makeText(this, getString(R.string.settings_voice_current, selected.title), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_voice_current, selectedId), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -516,25 +595,18 @@ open class SettingsActivity : AppCompatActivity() {
             return
         }
 
-        val options = availableVoices.map { voice ->
-            val sub = if (voice.description.isNotEmpty()) "${voice.gender} • ${voice.description}" else voice.gender
-            VoiceOption(
-                id = voice.id,
-                title = voice.displayName,
-                subtitle = sub
-            )
-        }
-
         val currentVoice = UserConfig.getGoogleTtsVoice(this) ?: availableVoices.firstOrNull()?.id ?: ""
 
-        showCustomVoicePickerDialog(
+        showVoicePickerDialog(
             title = getString(R.string.settings_select_voice_dialog),
-            options = options,
-            selectedId = currentVoice
-        ) { selected ->
-            UserConfig.setGoogleTtsVoice(this, selected.id)
+            voices = availableVoices,
+            selectedId = currentVoice,
+            engineType = ITTSManager.EngineType.GOOGLE_TTS
+        ) { selectedId ->
+            UserConfig.setGoogleTtsVoice(this, selectedId)
             updateActiveVoiceDisplay()
-            Toast.makeText(this, getString(R.string.settings_voice_current, selected.title), Toast.LENGTH_SHORT).show()
+            val matchedName = availableVoices.find { it.id == selectedId }?.displayName ?: selectedId
+            Toast.makeText(this, getString(R.string.settings_voice_current, matchedName), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -573,7 +645,15 @@ open class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupCadenceAndPauses() {
-        fun formatMs(ms: Int): String = "$ms ms"
+        fun formatMs(ms: Int): String = if (ms == 0) "0 ms (Liền mạch / Zero Gap)" else "$ms ms"
+
+        val pauseLabelFormatter = com.google.android.material.slider.LabelFormatter { value ->
+            val ms = value.toInt()
+            if (ms == 0) "0 ms (Zero Gap)" else "$ms ms"
+        }
+        sliderPauseSentence.setLabelFormatter(pauseLabelFormatter)
+        sliderPauseParagraph.setLabelFormatter(pauseLabelFormatter)
+        sliderPauseClause.setLabelFormatter(pauseLabelFormatter)
 
         fun updatePauseUIFromConfig() {
             val sentence = UserConfig.getPauseSentence(this)
@@ -632,6 +712,12 @@ open class SettingsActivity : AppCompatActivity() {
             updatePauseUIFromConfig()
             Toast.makeText(this, getString(R.string.preset_emotional), Toast.LENGTH_SHORT).show()
         }
+
+        btnPresetSeamless.setOnClickListener {
+            UserConfig.applyPausePreset(this, "SEAMLESS")
+            updatePauseUIFromConfig()
+            Toast.makeText(this, getString(R.string.preset_seamless), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupDiagnostics() {
@@ -651,6 +737,10 @@ open class SettingsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            previewEngine?.release()
+            previewEngine = null
+        } catch (e: Throwable) {}
         ttsHolder.onDestroy()
     }
 }

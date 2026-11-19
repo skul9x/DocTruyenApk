@@ -385,12 +385,12 @@ class VieNeuTTSManager(
         pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
         val config = if (targetVoice == "Thiền Tâm Đức") {
-            (if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+            (if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
                 clausePauseMs = profile.clausePauseMs,
                 sentencePauseMs = profile.sentencePauseMs
             )
         } else {
-            if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+            if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
         }
         pipe.startReading(
             text = content,
@@ -434,12 +434,12 @@ class VieNeuTTSManager(
         pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
         val config = if (targetVoice == "Thiền Tâm Đức") {
-            (if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+            (if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
                 clausePauseMs = profile.clausePauseMs,
                 sentencePauseMs = profile.sentencePauseMs
             )
         } else {
-            if (pauseConfig.sentencePauseMs > 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+            if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
         }
         pipe.startReadingWithTitlePause(
             title = title,
@@ -520,14 +520,7 @@ class VieNeuTTSManager(
         val presets = VoicePresets.getVoicePresets()
         if (presets.isNotEmpty()) {
             return presets.map { preset ->
-                VoiceInfo(
-                    id = preset.name,
-                    displayName = preset.getFormattedDisplayName(),
-                    description = preset.getFormattedDescription(),
-                    gender = preset.genderDisplay,
-                    region = preset.regionDisplay,
-                    isDefault = preset.name == VoicePresets.defaultVoiceName
-                )
+                preset.toVoiceInfo(isDefault = preset.name == VoicePresets.defaultVoiceName)
             }
         }
         val defaultList = listOf("Hải Đăng", "Trúc Ly", "Minh Đức", "Phạm Tuyên", "Thái Sơn", "Xuân Vĩnh", "Thanh Bình", "Ngọc Linh", "Đoan Trang")
@@ -536,7 +529,8 @@ class VieNeuTTSManager(
                 id = name,
                 displayName = name,
                 description = "VieNeu Neural Voice",
-                isDefault = name == VoicePresets.defaultVoiceName
+                isDefault = name == VoicePresets.defaultVoiceName,
+                style = "Phong cách tự nhiên"
             )
         }
     }

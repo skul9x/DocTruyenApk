@@ -150,15 +150,15 @@ object UserConfig {
     const val KEY_TTS_DEBUG_LOGGING = "tts_debug_logging"
 
     const val DEFAULT_PAUSE_SENTENCE = 400
-    const val MIN_PAUSE_SENTENCE = 150
+    const val MIN_PAUSE_SENTENCE = 0
     const val MAX_PAUSE_SENTENCE = 1000
 
     const val DEFAULT_PAUSE_PARAGRAPH = 650
-    const val MIN_PAUSE_PARAGRAPH = 300
+    const val MIN_PAUSE_PARAGRAPH = 0
     const val MAX_PAUSE_PARAGRAPH = 1500
 
     const val DEFAULT_PAUSE_CLAUSE = 180
-    const val MIN_PAUSE_CLAUSE = 50
+    const val MIN_PAUSE_CLAUSE = 0
     const val MAX_PAUSE_CLAUSE = 500
 
     const val DEFAULT_DEBUG_LOGGING = true
@@ -215,6 +215,11 @@ object UserConfig {
                 setPauseSentence(context, 600)
                 setPauseParagraph(context, 900)
                 setPauseClause(context, 250)
+            }
+            "SEAMLESS", "ZERO_GAP" -> { // Liền mạch / Zero-Gap
+                setPauseSentence(context, 0)
+                setPauseParagraph(context, 0)
+                setPauseClause(context, 0)
             }
             else -> { // STANDARD / Tự nhiên / Chuẩn
                 setPauseSentence(context, DEFAULT_PAUSE_SENTENCE)
