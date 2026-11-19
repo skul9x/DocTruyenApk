@@ -3,7 +3,7 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-10-08T08:58:00+07:00"
+    "updated_at": "2026-11-19T22:55:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
@@ -114,6 +114,28 @@
         "OnnxSessionManager (coerceIn(2, 4) CPU threads via XNNPACK EP)",
         "VieNeuTTSManager (thread-safe state synchronization)",
         "CoreTtsEngineStabilityAndThreadingTest.kt"
+      ]
+    },
+    {
+      "name": "R8 Full Mode & Anti-Bot Network Resilience",
+      "status": "Implemented & Verified (2026-11-19)",
+      "components": [
+        "proguard-rules.pro (retrofit2.Call, retrofit2.Response, kotlin.coroutines.Continuation type preserving)",
+        "MainActivity & StoryDetailActivity (auto cookie invalidation & re-verification on JsonSyntaxException)",
+        "HostingVerifier (responsive dialog width avoiding Chromium JS throttle, CookieManager flush)",
+        "AssetExtractionAndProguardRulesTest.kt"
+      ]
+    },
+    {
+      "name": "Performance Bottlenecks Remediation (PERF-001..013)",
+      "status": "Completed & Verified (6/6 Phases)",
+      "components": [
+        "Phase 01: Hygiene, Dead Assets Removal (85MB purged), largeHeap, precompiled Regexes",
+        "Phase 02: Zero-Copy KV-Cache Ping-Pong & Forced GC Elimination",
+        "Phase 03: Flat Embeddings & NpzReader Array(16) { FloatArray } Contiguous Channels",
+        "Phase 04: Dedicated AudioTrack Worker Thread (priority -19) & Channel Backpressure",
+        "Phase 05: Matrix Unrolling (ILP 4 accumulators) & Acoustic Tail Trimming (BabbleGuard)",
+        "Phase 06: Asset Streaming Buffer (64KB) & Release R8 Minification"
       ]
     },
     {

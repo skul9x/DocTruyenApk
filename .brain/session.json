@@ -1,23 +1,25 @@
 {
-  "updated_at": "2026-11-19T19:43:00+07:00",
+  "updated_at": "2026-11-19T23:08:00+07:00",
   "working_on": {
-    "feature": "Remediate All Performance Bottlenecks from audit_per.md",
-    "task": "Completed Phase 06: Asset Streaming Buffer & Release R8 Minification (All 6 Phases Completed!)",
-    "status": "all_phases_completed",
+    "feature": "Fix GitHub Actions CI/CD Build Failure",
+    "task": "Fixed unresolved reference loadStoryDetail in StoryDetailActivity.kt",
+    "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
-      "app/build.gradle.kts",
-      "app/proguard-rules.pro",
-      "app/src/test/java/com/skul9x/doctruyen/performance/AssetExtractionAndProguardRulesTest.kt",
-      "plans/261119-1830-fix-audit-performance-bottlenecks/phase-06-asset-streaming-buffer-and-release-r8-minify.md",
-      "plans/261119-1830-fix-audit-performance-bottlenecks/plan.md"
+      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt"
     ],
     "blockers": [],
-    "notes": "Phase 06 fully verified by AssetExtractionAndProguardRulesTest (5/5 tests passed 100%). Model asset extraction streaming buffer upgraded to 64KB (ASSET_STREAM_BUFFER_SIZE) reducing I/O syscall overhead by 8x; reliable version-code-driven asset invalidation via KEY_LAST_EXTRACTED_VERSION and SharedPreferences guarantees APK update asset synchronization; R8 minification and resource shrinking enabled in release build with comprehensive ProGuard rules protecting ONNX Runtime, Rust SeaG2P JNI, Retrofit, Gson @SerializedName, Glide, and AndroidX Media."
+    "notes": "Resolved compilation error 'Unresolved reference: loadStoryDetail' in StoryDetailActivity.kt by referencing loadStoryContent() and resetting loadedStoryId. Handled CancellationException and unified anti-bot JsonSyntaxException detection."
   },
   "pending_tasks": [],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-19T23:08:00+07:00",
+      "type": "bug_fix",
+      "description": "Fixed 'Unresolved reference: loadStoryDetail' in StoryDetailActivity.kt line 364 by replacing with loadStoryContent() and resetting loadedStoryId = -1. Added CancellationException handling and unified auth error condition matching MainActivity.",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt"
+      ]
+    },
     {
       "timestamp": "2026-11-19T22:50:00+07:00",
       "type": "bug_fix",

@@ -350,18 +350,26 @@ class StoryDetailActivity : AppCompatActivity() {
                 } else {
                     showErrorState("Không thể tải nội dung truyện")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Coroutine was cancelled (e.g. activity destroyed or refreshed)
+                return@launch
             } catch (e: Exception) {
                 DebugLogger.logError(TAG, "Lỗi tải chi tiết truyện: ${e.message}", e)
                 val isAuthError = e is com.google.gson.JsonSyntaxException ||
                                   e is com.google.gson.stream.MalformedJsonException ||
-                                  e.cause is com.google.gson.stream.MalformedJsonException
+                                  e.cause is com.google.gson.stream.MalformedJsonException ||
+                                  e.message?.contains("Forbidden") == true ||
+                                  e.message?.contains("403") == true ||
+                                  e.message?.contains("html") == true ||
+                                  e.message?.contains("Expected BEGIN_OBJECT") == true
                 if (isAuthError) {
                     RetrofitClient.clearCookie(this@StoryDetailActivity)
                     val url = com.skul9x.doctruyen.utils.UserConfig.getBaseUrl(this@StoryDetailActivity)
                     com.skul9x.doctruyen.network.HostingVerifier.verify(this@StoryDetailActivity, url) { success ->
                         runOnUiThread {
                             if (success) {
-                                loadStoryDetail(storyId)
+                                loadedStoryId = -1
+                                loadStoryContent()
                             } else {
                                 showErrorState("Phiên làm việc hết hạn, vui lòng thử lại.")
                             }
