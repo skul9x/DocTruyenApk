@@ -351,6 +351,24 @@ class StoryDetailActivity : AppCompatActivity() {
                     showErrorState("Không thể tải nội dung truyện")
                 }
             } catch (e: Exception) {
+                DebugLogger.logError(TAG, "Lỗi tải chi tiết truyện: ${e.message}", e)
+                val isAuthError = e is com.google.gson.JsonSyntaxException ||
+                                  e is com.google.gson.stream.MalformedJsonException ||
+                                  e.cause is com.google.gson.stream.MalformedJsonException
+                if (isAuthError) {
+                    RetrofitClient.clearCookie(this@StoryDetailActivity)
+                    val url = com.skul9x.doctruyen.utils.UserConfig.getBaseUrl(this@StoryDetailActivity)
+                    com.skul9x.doctruyen.network.HostingVerifier.verify(this@StoryDetailActivity, url) { success ->
+                        runOnUiThread {
+                            if (success) {
+                                loadStoryDetail(storyId)
+                            } else {
+                                showErrorState("Phiên làm việc hết hạn, vui lòng thử lại.")
+                            }
+                        }
+                    }
+                    return@launch
+                }
                 showErrorState(getString(R.string.error_loading))
             } finally {
                 isLoadingContent = false

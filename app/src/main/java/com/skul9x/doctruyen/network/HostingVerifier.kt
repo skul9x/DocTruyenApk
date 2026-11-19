@@ -35,11 +35,11 @@ object HostingVerifier {
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         dialog.setCancelable(false)
         
-        // Make dialog invisible to user - 1x1 pixel, no dim
+        // Set appropriate size so Chromium engine renders and executes JS without throttling
         dialog.window?.apply {
-            setLayout(1, 1)
-            setDimAmount(0f)
-            addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+            val width = (context.resources.displayMetrics.widthPixels * 0.85).toInt()
+            setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+            setDimAmount(0.2f)
         }
         
         val webView = dialog.findViewById<WebView>(R.id.webView)
@@ -72,13 +72,18 @@ object HostingVerifier {
                 com.skul9x.doctruyen.utils.DebugLogger.log("HostingVerifier", "Page Loaded: $loadedUrl\nCookies: $cookies", com.skul9x.doctruyen.utils.LogType.INFO)
 
                 if (cookies != null && cookies.contains("__test")) {
-                    // Successfully verified - silently
+                    CookieManager.getInstance().flush()
+                    // Successfully verified
                     RetrofitClient.saveCookie(context, cookies)
-                    dialog.dismiss()
+                    if (dialog.isShowing) {
+                        try { dialog.dismiss() } catch (ignored: Exception) {}
+                    }
                     onResult(true)
-                } else if (verificationAttempts >= 5) {
-                    // Timeout - silent failure
-                    dialog.dismiss()
+                } else if (verificationAttempts >= 8) {
+                    // Timeout
+                    if (dialog.isShowing) {
+                        try { dialog.dismiss() } catch (ignored: Exception) {}
+                    }
                     onResult(false)
                 }
                 // Otherwise wait for next page load
@@ -92,7 +97,9 @@ object HostingVerifier {
             ) {
                 super.onReceivedError(view, request, error)
                 if (request?.isForMainFrame == true) {
-                    dialog.dismiss()
+                    if (dialog.isShowing) {
+                        try { dialog.dismiss() } catch (ignored: Exception) {}
+                    }
                     onResult(false)
                 }
             }
@@ -105,7 +112,9 @@ object HostingVerifier {
                 failingUrl: String?
             ) {
                 super.onReceivedError(view, errorCode, description, failingUrl)
-                dialog.dismiss()
+                if (dialog.isShowing) {
+                    try { dialog.dismiss() } catch (ignored: Exception) {}
+                }
                 onResult(false)
             }
         }

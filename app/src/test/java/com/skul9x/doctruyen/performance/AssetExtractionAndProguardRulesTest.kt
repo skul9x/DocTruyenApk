@@ -334,6 +334,18 @@ class AssetExtractionAndProguardRulesTest {
             "Must keep com.skul9x.doctruyen.network.**",
             content.contains("com.skul9x.doctruyen.network.**")
         )
+        assertTrue(
+            "Must keep interface retrofit2.Call",
+            content.contains("interface retrofit2.Call")
+        )
+        assertTrue(
+            "Must keep class retrofit2.Response",
+            content.contains("class retrofit2.Response")
+        )
+        assertTrue(
+            "Must keep class kotlin.coroutines.Continuation for R8 suspend functions",
+            content.contains("class kotlin.coroutines.Continuation")
+        )
 
         // 6. Glide
         assertTrue(

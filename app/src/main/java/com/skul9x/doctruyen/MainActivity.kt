@@ -322,12 +322,15 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             } catch (e: Exception) {
                 // Check for Auth/Parsing error (Cookie expired -> Server returns HTML -> GSON fails)
-                val isAuthError = e is com.google.gson.stream.MalformedJsonException || 
+                val isAuthError = e is com.google.gson.JsonSyntaxException ||
+                                  e is com.google.gson.stream.MalformedJsonException || 
+                                  e.cause is com.google.gson.stream.MalformedJsonException ||
                                   e.message?.contains("Forbidden") == true ||
                                   e.message?.contains("403") == true ||
-                                  e.message?.contains("html") == true
+                                  e.message?.contains("html") == true ||
+                                  e.message?.contains("Expected BEGIN_OBJECT") == true
 
-                if (isAuthError && RetrofitClient.cookie.isNotEmpty()) {
+                if (isAuthError) {
                     withContext(Dispatchers.Main) {
                          Toast.makeText(this@MainActivity, "Phiên hết hạn, đang xác thực lại...", Toast.LENGTH_SHORT).show()
                          RetrofitClient.clearCookie(this@MainActivity)

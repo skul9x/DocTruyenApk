@@ -19,6 +19,18 @@
   "pending_tasks": [],
   "recent_changes": [
     {
+      "timestamp": "2026-11-19T22:50:00+07:00",
+      "type": "bug_fix",
+      "description": "Fixed 'java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType' caused by R8 full mode stripping generic signatures from Kotlin suspend coroutines in Retrofit. Added explicit ProGuard rules for retrofit2.Call, retrofit2.Response, and kotlin.coroutines.Continuation. Additionally improved HostingVerifier to prevent Chromium WebView throttling and robustly handled JsonSyntaxException for expired cookie auto-recovery.",
+      "files": [
+        "app/proguard-rules.pro",
+        "app/src/test/java/com/skul9x/doctruyen/performance/AssetExtractionAndProguardRulesTest.kt",
+        "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/network/HostingVerifier.kt"
+      ]
+    },
+    {
       "timestamp": "2026-11-19T19:43:00+07:00",
       "type": "performance_fix",
       "description": "Completed Phase 06: Asset Streaming Buffer & Release R8 Minification. Upgraded copyAssetFile buffer from 8KB to 64KB (ASSET_STREAM_BUFFER_SIZE = 64 * 1024); added version-code-driven model invalidation in ensureAssetsExtracted checking getAppVersionCode against SharedPreferences; enabled isMinifyEnabled = true and isShrinkResources = true in build.gradle.kts release buildType; added comprehensive ProGuard rules in proguard-rules.pro; verified SeaG2P.kt 64KB buffer extraction; fully verified with single comprehensive test suite AssetExtractionAndProguardRulesTest (5/5 tests passed 100%).",
