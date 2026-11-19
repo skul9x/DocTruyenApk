@@ -1,5 +1,28 @@
 # Changelog - DocTruyen Android App
 
+## [v1.14] - [2026-11-19] Hotfix CI/CD Release Build & Coroutine Cancellation Resilience
+### Fixed
+- **Biên dịch Kotlin trên Release CI/CD (`StoryDetailActivity.kt`)**:
+  - Khắc phục lỗi `Unresolved reference 'loadStoryDetail'` bằng cách gọi chuẩn `loadStoryContent()` và vô hiệu hóa cache `loadedStoryId = -1` để tự động tải lại chi tiết truyện sau khi refresh cookie anti-bot.
+  - Bổ sung cơ chế bắt `kotlinx.coroutines.CancellationException` độc lập trước khối bắt `Exception` chung nhằm bảo vệ vòng đời Coroutine theo Activity lifecycle.
+  - Đồng bộ hóa toàn diện các điều kiện nhận diện anti-bot JavaScript challenge (`JsonSyntaxException`, `MalformedJsonException`, `403`, `html`, `BEGIN_OBJECT`) đồng nhất giữa `MainActivity` và `StoryDetailActivity`.
+
+## [v1.13] - [2026-11-19] Tối Ưu Toàn Diện Hiệu Năng (PERF-001..013), R8 Minification & Anti-Bot Cookie Resilience
+### Added & Improved
+- **Khắc Phục Crash Retrofit Suspend Functions Dưới R8 Full Mode (`proguard-rules.pro`)**:
+  - Bổ sung explicit ProGuard keep-rules bảo vệ `interface retrofit2.Call`, `class retrofit2.Response`, và `class kotlin.coroutines.Continuation` ngăn R8 tước bỏ thông tin generic type arguments (`ParameterizedType`).
+- **Nâng Cấp HostingVerifier & Cơ Chế Phục Hồi Cookie Anti-Bot (`HostingVerifier.kt`, `MainActivity.kt`, `StoryDetailActivity.kt`)**:
+  - Thay đổi kích thước WebView Dialog (chiều rộng 85% màn hình) để Chromium trên Android 15 không bóp nghẹt luồng JavaScript challenge (throttling).
+  - Tự động gọi `CookieManager.getInstance().flush()`.
+  - Tự động bắt `JsonSyntaxException` khi session hết hạn (server trả challenge HTML thay vì JSON) để xóa cookie cũ và tự động kích hoạt xác thực lại trong suốt.
+- **Giải Quyết Triệt Để 13 Nút Thắt Hiệu Năng (Phases 01 - 06)**:
+  - *Phase 01*: Khai báo `android:largeHeap="true"`, xóa bỏ 85MB model thừa, tiền biên dịch HTML regex & chuyển xử lý sang `Dispatchers.Default`, tối ưu animation với `ViewPropertyAnimator`, cache singleton `ApiService`, đặt log level `NONE` cho release.
+  - *Phase 02*: Chuyển giao native `OnnxTensor` không qua mảng đệm (`FloatArray`) cho KV-Cache autoregressive decoding và 16 acoustic channels, triệt tiêu lệnh cưỡng bức `System.gc()`.
+  - *Phase 03*: Tái cấu trúc mảng bộ nhớ phẳng `Array(16) { FloatArray }` liên tục trong `NpzReader`, tiết kiệm >100MB RAM phân tán và loại bỏ 16,384 cấp phát mảng con.
+  - *Phase 04*: Luồng phát âm thanh chuyên dụng `AudioTrackWorkerThread` (priority `-19`), áp dụng `Channel<Pair<Int, ShortArray>>(capacity = 4)` backpressure thay thế polling loop, đảm bảo thời gian phản hồi dừng/tạm dừng < 50ms.
+  - *Phase 05*: Kỹ thuật loop unrolling 4 tích lũy (ILP) cho phép CPU xử lý song song các phép nhân vô hướng logits; cắt đuôi ảo giác tiếng ồn (acoustic tail trimming) với micro-fade 5ms trong BabbleGuard.
+  - *Phase 06*: Nâng kích thước buffer streaming khi giải nén assets từ 8KB lên 64KB, kích hoạt `isMinifyEnabled = true` và `isShrinkResources = true` trong build release.
+
 ## [v1.12] - [2026-10-08] Nâng Cấp VieNeu-TTS v3 Turbo: 25 Giọng Đọc, Sliding Window Penalty, QuickSelect Top-256, Emotion Tags & Babble Guard
 ### Added & Improved
 - **Đồng Bộ 25 Preset Voices & Checkpoint Hugging Face (`voices_v3_turbo.json`, `VoicePresets.kt`, `VieNeuTTSManager.kt`)**:
