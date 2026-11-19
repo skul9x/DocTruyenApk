@@ -1,8 +1,8 @@
 # Handover Document: Retrofit R8 ParameterizedType Fix & Network Resilience
 
-**Date:** 2026-11-19 23:08  
+**Date:** 2026-11-19 23:12  
 **Project:** DocTruyen (VieNeu-TTS v3 Turbo On-Device Neural Reader)  
-**Status:** CI/CD Compilation Fix Applied
+**Status:** Completed & Shipped (Release v1.14 on GitHub)
 
 ---
 

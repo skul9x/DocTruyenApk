@@ -1,14 +1,14 @@
 {
-  "updated_at": "2026-11-19T23:08:00+07:00",
+  "updated_at": "2026-11-19T23:12:00+07:00",
   "working_on": {
     "feature": "Fix GitHub Actions CI/CD Build Failure",
-    "task": "Fixed unresolved reference loadStoryDetail in StoryDetailActivity.kt",
+    "task": "Fixed compilation error and verified GitHub Actions CI/CD Release v1.14 build SUCCESS",
     "status": "completed",
     "files": [
       "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt"
     ],
     "blockers": [],
-    "notes": "Resolved compilation error 'Unresolved reference: loadStoryDetail' in StoryDetailActivity.kt by referencing loadStoryContent() and resetting loadedStoryId. Handled CancellationException and unified anti-bot JsonSyntaxException detection."
+    "notes": "CI/CD Run #20 (44562704296) completed with SUCCESS. Release v1.14 generated with doctruyenapk-v1.14.apk attached."
   },
   "pending_tasks": [],
   "recent_changes": [
