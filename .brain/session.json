@@ -1,50 +1,64 @@
 {
-  "updated_at": "2026-10-08T08:58:30+07:00",
+  "updated_at": "2026-11-20T17:05:00+07:00",
   "working_on": {
-    "feature": "Upgrade VieNeu-TTS v3 Turbo Features & Engine",
-    "task": "Completed Phase 01 (25 Voice Presets & Aliases), Phase 02 (Sliding-Window Penalty & QuickSelect Top-256), Phase 03 (Emotion Tags Extraction & Novel Bracket Separation), and Phase 04 (Babble Guard Anti-Hallucination & Retry Loop).",
+    "feature": "Punctuation-First Natural Text Segmentation (Plan A)",
+    "task": "Completed Plan A (Phase 01: Core Segmenter Refactor & Phase 02: Pipeline Integration & Verification).",
     "status": "completed",
     "files": [
-      "app/src/main/assets/vieneu/voices_v3_turbo.json",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/RepetitionHistory.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTokenizer.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuard.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsAndCheckpointSyncTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SlidingWindowRepetitionAndSamplingTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EmotionTagsAndBracketSeparationTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuardAntiHallucinationTest.kt",
-      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/plan.md",
-      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-01-voice-presets-and-checkpoint-sync.md",
-      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-02-sliding-window-repetition-and-top-k-sampling.md",
-      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-03-emotion-tags-and-bracket-separation.md",
-      "plans/261007-1937-upgrade-vieneu-v3-turbo-features/phase-04-babble-guard-anti-hallucination.md",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstSegmenterCoreTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstPipelineIntegrationTest.kt",
+      "plans/261120-1628-punctuation-first-segmentation/plan.md",
+      "plans/261120-1628-punctuation-first-segmentation/phase-01-punctuation-first-segmenter-core.md",
+      "plans/261120-1628-punctuation-first-segmentation/phase-02-pipeline-integration-verification.md",
       "CHANGELOG.md",
-      ".brain/brain.json",
+      ".brain/session_log.txt",
       ".brain/session.json",
+      ".brain/brain.json",
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "All 4 verification tests (VoicePresetsAndCheckpointSyncTest, SlidingWindowRepetitionAndSamplingTest, EmotionTagsAndBracketSeparationTest, BabbleGuardAntiHallucinationTest) passed with 100% success rate."
+    "notes": "Plan A (Punctuation-First Natural Text Segmentation) is fully implemented and verified. SmartTextSegmenter refactored with DEFAULT_MAX_CHARS = 200, SAFE_MAX_CHARS = 200, clause accumulation up to 75 chars, compound word preservation ('sẵn sàng'), and colon normalization retention (':.'). Full sample story segments into 23 natural chunks (down from 26). All 3 unit tests in PunctuationFirstPipelineIntegrationTest passed 100%."
   },
   "pending_tasks": [
     {
       "task": "End-to-End Live Audio Playback Quality Check on Real Device",
       "priority": "medium",
-      "notes": "Verify auditory naturalness of [cười], [thở dài], [hắng giọng] tags and ultra-short dialogue responses on physical Android hardware."
+      "notes": "Verify auditory naturalness of 200-char punctuation-first chunks, pauses, and [cười], [thở dài], [hắng giọng] tags on physical Android hardware."
     },
     {
-      "task": "Automated Release v1.12 CI/CD Packaging",
+      "task": "Automated Release v1.13 CI/CD Packaging",
       "priority": "low",
-      "notes": "Tag v1.12 on git and trigger GitHub Actions workflow to build release APK with updated assets."
+      "notes": "Tag v1.13 on git and trigger GitHub Actions workflow to build release APK with updated segmentation assets."
     }
   ],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-20T17:05:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02: Pipeline, Pause Duration & Integration Verification. Validated TTSAudioPipeline lookahead pre-buffering heuristics, pause duration assignments (CLAUSE_BREAK 180ms, SENTENCE_BREAK 400ms, PARAGRAPH_BREAK 650ms, TITLE_BREAK 1000ms), and 11-paragraph sample story segmentation into 23 natural punctuation chunks. Updated OptimizedTextChunkingAndStateTest.kt assertions to expect DEFAULT_MAX_CHARS = 200. Verified via PunctuationFirstPipelineIntegrationTest.kt (3/3 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstPipelineIntegrationTest.kt",
+        "plans/261120-1628-punctuation-first-segmentation/phase-02-pipeline-integration-verification.md",
+        "plans/261120-1628-punctuation-first-segmentation/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T16:51:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: Punctuation-First Segmenter Core Refactor. Configured DEFAULT_MAX_CHARS = 200 and SAFE_MAX_CHARS = 200. Refactored splitSentenceIntoSubClauses to extract sub-clauses at punctuation boundaries ([,;:—–-]) without mid-clause word-chopping, preserving compound words (e.g. 'sẵn sàng') and colon normalization ': -> :.'. Added emergency whitespace-boundary fallback for run-on clauses > 200 chars. Verified via PunctuationFirstSegmenterCoreTest.kt (4/4 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstSegmenterCoreTest.kt",
+        "plans/261120-1628-punctuation-first-segmentation/phase-01-punctuation-first-segmenter-core.md",
+        "plans/261120-1628-punctuation-first-segmentation/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
     {
       "timestamp": "2026-10-08T08:55:00+07:00",
       "type": "feature",
@@ -55,41 +69,18 @@
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
         "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuardAntiHallucinationTest.kt"
       ]
-    },
-    {
-      "timestamp": "2026-10-07T20:50:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 03: Safe Emotion Tags Extraction ([cười], [thở dài], [hắng giọng]) mapping to tokens 9, 10, 11 with novel bracket protection ([1], [CV]) and pre-G2P bypass. Verified via EmotionTagsAndBracketSeparationTest.kt.",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTokenizer.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/EmotionTagsAndBracketSeparationTest.kt"
-      ]
-    },
-    {
-      "timestamp": "2026-10-07T13:50:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 02: 64-frame sliding-window circular buffer repetition penalty (RepetitionHistory) and QuickSelect Top-256 logit partitioning in VieNeuOnnxEngine. Verified via SlidingWindowRepetitionAndSamplingTest.kt.",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/RepetitionHistory.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SlidingWindowRepetitionAndSamplingTest.kt"
-      ]
-    },
-    {
-      "timestamp": "2026-10-07T13:00:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 01: Synchronized 25 preset voices from upstream, transparent alias resolution (Minh Quân Pro -> Hải Đăng), Adam bựa retention, and Thiền Tâm Đức cadence profile. Verified via VoicePresetsAndCheckpointSyncTest.kt.",
-      "files": [
-        "app/src/main/assets/vieneu/voices_v3_turbo.json",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VoicePresets.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsAndCheckpointSyncTest.kt"
-      ]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
+    {
+      "decision": "Natural prosody clause accumulation up to 75 chars within 200 chars safe limit",
+      "reason": "Allows short introductory clauses (like 'Ngày xưa,', 'Bất ngờ,') to naturally group with subsequent words while preventing runaway clauses over 200 chars and eliminating mechanical word-chopping on compound words like 'sẵn sàng'."
+    },
+    {
+      "decision": "Punctuation-First Sub-Clause Extraction with SAFE_MAX_CHARS = 200",
+      "reason": "Prevents mechanical mid-clause word-chopping on Vietnamese compound words (such as 'sẵn sàng') while keeping pauses natural and aligned with punctuation marks."
+    },
     {
       "decision": "64-Frame Sliding Window Repetition Penalty",
       "reason": "Prevents acoustic voice drift and metallic tonal decay on long sentences caused by unbounded HashSet penalty."

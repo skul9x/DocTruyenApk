@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-10-08T08:58:00+07:00"
+    "updated_at": "2026-11-20T17:05:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "VieNeu-TTS v3 Turbo Upgraded (25 Voices, Sliding-Window Penalty, QuickSelect Top-256, Emotion Tags & Babble Guard)",
+    "status": "VieNeu-TTS v3 Turbo Punctuation-First Segmentation (Plan A - All Phases Completed)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -33,7 +33,7 @@
     },
     "text_segmentation": {
       "module": "SmartTextSegmenter & EmotionTagParser",
-      "features": "Linguistic Vietnamese context-aware paragraph/sentence/clause/dialogue parsing (<=75 chars), quote-aware boundary protection, emotion tag mapping ([cười], [thở dài], [hắng giọng] -> tokens 9, 10, 11), novel footnote bracket protection ([1], [CV])"
+      "features": "Punctuation-first natural chunking (DEFAULT_MAX_CHARS = 200, SAFE_MAX_CHARS = 200), compound word preservation, quote-aware boundary protection, emotion tag mapping ([cười], [thở dài], [hắng giọng] -> tokens 9, 10, 11), novel footnote bracket protection ([1], [CV]), :. retention"
     },
     "telemetry_diagnostics": {
       "module": "TtsMetricsLogger, DevicePerformanceHelper & DebugLogger",
@@ -67,6 +67,15 @@
     ]
   },
   "features": [
+    {
+      "name": "Punctuation-First Natural Text Segmentation (Plan A)",
+      "status": "Fully Implemented & Verified (Phases 01 & 02)",
+      "components": [
+        "SmartTextSegmenter.kt (DEFAULT_MAX_CHARS = 200, SAFE_MAX_CHARS = 200, punctuation-first delimiter priority, prosody clause accumulation <= 75 chars, compound word protection, emergency whitespace fallback, :. retention)",
+        "PunctuationFirstSegmenterCoreTest.kt (4/4 tests passed)",
+        "PunctuationFirstPipelineIntegrationTest.kt (3/3 tests passed, 23 natural story chunks)"
+      ]
+    },
     {
       "name": "25 Preset Voices, Aliases, Profile & Checkpoint Sync",
       "status": "Implemented & Verified (Phase 01)",
@@ -138,6 +147,10 @@
     }
   ],
   "decisions_made": [
+    {
+      "decision": "Natural prosody clause accumulation up to 75 chars within 200 chars safe limit",
+      "reason": "Allows short introductory clauses (like 'Ngày xưa,', 'Bất ngờ,') to naturally group with subsequent words while preventing runaway clauses over 200 chars and eliminating mechanical word-chopping on compound words."
+    },
     {
       "decision": "64-Frame Sliding Window Repetition Penalty (RepetitionHistory)",
       "reason": "Replaced cumulative HashSet which permanently penalized tokens and caused voice degradation / robotic cadence in long paragraphs."

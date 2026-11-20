@@ -1,5 +1,22 @@
 # Changelog - DocTruyen Android App
 
+## [v1.13] - [2026-11-20] Punctuation-First Natural Text Segmentation (Plan A)
+### Added & Improved
+- **Punctuation-First Natural Text Segmentation (`SmartTextSegmenter.kt`)**:
+  - Refactored sentence chunking to prioritize natural punctuation boundaries (`,`, `.`, `!`, `?`, `…`, `:`, `;`, `—`, `–`).
+  - Removed mechanical 75-character mid-clause word-chopping; raised default chunk length ceiling to `DEFAULT_MAX_CHARS = 200` (`SAFE_MAX_CHARS = 200`).
+  - Guaranteed compound word integrity (e.g. "sẵn sàng", "khiêm tốn") up to 200 characters without mid-token splitting.
+  - Preserved colon normalization behavior (`puncNorm` producing `:.`).
+  - Added emergency whitespace-boundary splitting safeguard for run-on sentences exceeding 200 characters without punctuation.
+- **Comprehensive Unit Testing**:
+  - Created `PunctuationFirstSegmenterCoreTest.kt` verifying 4-chunk dialogue segmentation integrity, compound word preservation, colon normalization, and emergency fallback over 200 characters (100% passed).
+- **Pipeline Integration & Pause Duration Verification (`TTSAudioPipeline.kt`, `PauseConfig`, `SmartTextSegmenter.kt`)**:
+  - Validated pipeline lookahead pre-buffering heuristics and streaming playback with natural punctuation chunks up to 200 characters without buffer underruns or frame-capping truncation.
+  - Aligned prosody pause duration metadata across story narration: `CLAUSE_BREAK` (180ms), `SENTENCE_BREAK` (400ms), `PARAGRAPH_BREAK` (650ms), and `TITLE_BREAK` (1000ms).
+  - Validated 11-paragraph sample story ("Một trí khôn hơn trăm trí khôn") segmentation into exactly 23 natural punctuation chunks (down from 26 fragmented chunks).
+  - Updated legacy regression assertions in `OptimizedTextChunkingAndStateTest.kt` to reflect `DEFAULT_MAX_CHARS = 200`.
+  - Created and passed comprehensive unit test `PunctuationFirstPipelineIntegrationTest.kt` (3/3 passed).
+
 ## [v1.12] - [2026-10-08] Nâng Cấp VieNeu-TTS v3 Turbo: 25 Giọng Đọc, Sliding Window Penalty, QuickSelect Top-256, Emotion Tags & Babble Guard
 ### Added & Improved
 - **Đồng Bộ 25 Preset Voices & Checkpoint Hugging Face (`voices_v3_turbo.json`, `VoicePresets.kt`, `VieNeuTTSManager.kt`)**:

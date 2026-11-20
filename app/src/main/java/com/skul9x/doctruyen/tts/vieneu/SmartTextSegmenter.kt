@@ -252,7 +252,8 @@ object SmartTextSegmenter {
         return EmotionTagParser.phonemizeWithBypass(text, phonemizer)
     }
 
-    const val DEFAULT_MAX_CHARS: Int = 75
+    const val DEFAULT_MAX_CHARS: Int = 200
+    const val SAFE_MAX_CHARS: Int = 200
 
     // Common Vietnamese abbreviations, honorifics, titles, and acronyms
     private val PROTECTED_ABBREVIATIONS = listOf(
@@ -615,77 +616,95 @@ object SmartTextSegmenter {
     }
 
     /**
-     * Split a long sentence into sub-clauses respecting punctuation and word boundaries.
+     * Split a long sentence into sub-clauses respecting punctuation boundaries and word boundaries.
+     *
+     * In Plan A (Punctuation-First Lock):
+     * - Sub-clauses are extracted at natural punctuation boundaries ([,;:—–-]).
+     * - A clause that does not exceed [maxChars] (200 characters) is NOT split further.
+     * - If an individual clause exceeds [maxChars] (e.g. run-on sentence without punctuation),
+     *   it falls back to whitespace boundary splitting without chopping tokens.
      */
     private fun splitSentenceIntoSubClauses(
         sentence: String,
         maxChars: Int,
         placeholders: Map<String, String> = emptyMap()
     ): List<String> {
-        if (getRestoredLength(sentence, placeholders) <= maxChars) {
-            return listOf(sentence)
+        val clauses = sentence.split(CLAUSE_SPLIT_REGEX)
+        if (clauses.size <= 1) {
+            val trimmed = sentence.trim()
+            if (trimmed.isEmpty()) return emptyList()
+            val len = getRestoredLength(trimmed, placeholders)
+            return if (len <= maxChars) listOf(trimmed) else splitByWords(trimmed, maxChars, placeholders)
         }
 
         val subChunks = mutableListOf<String>()
-        val clauses = sentence.split(CLAUSE_SPLIT_REGEX)
-        var current = StringBuilder()
+        var currentBuf = StringBuilder()
 
         for (clause in clauses) {
             val trimmedClause = clause.trim()
             if (trimmedClause.isEmpty()) continue
 
             val clauseLen = getRestoredLength(trimmedClause, placeholders)
+            val currentBufLen = if (currentBuf.isEmpty()) 0 else getRestoredLength(currentBuf.toString(), placeholders)
 
-            if (clauseLen > maxChars) {
-                // Clause itself exceeds maxChars -> flush current if any, then split clause by words
-                if (current.isNotEmpty()) {
-                    subChunks.add(current.toString())
-                    current = StringBuilder()
-                }
+            // Accumulate clauses if current buffer and next clause together fit within natural prosody limit (75 chars).
+            // Do not combine if current buffer ends with a colon ':', as colons mark structural pauses/headers.
+            val canCombine = currentBuf.isNotEmpty() &&
+                    !currentBuf.endsWith(":") &&
+                    (currentBufLen + 1 + clauseLen <= 75)
 
-                val words = trimmedClause.split(WHITESPACE_REGEX)
-                var wordBuf = StringBuilder()
-                for (word in words) {
-                    val wordLen = getRestoredLength(word, placeholders)
-                    if (wordLen > maxChars) {
-                        if (wordBuf.isNotEmpty()) {
-                            subChunks.add(wordBuf.toString())
-                            wordBuf = StringBuilder()
-                        }
-                        val parts = word.chunked(maxChars)
-                        for (i in 0 until parts.size - 1) {
-                            subChunks.add(parts[i])
-                        }
-                        wordBuf.append(parts.last())
-                    } else if (wordBuf.isEmpty()) {
-                        wordBuf.append(word)
-                    } else if (getRestoredLength(wordBuf.toString(), placeholders) + 1 + wordLen <= maxChars) {
-                        wordBuf.append(" ").append(word)
-                    } else {
-                        subChunks.add(wordBuf.toString())
-                        wordBuf = StringBuilder(word)
-                    }
-                }
-                if (wordBuf.isNotEmpty()) {
-                    current = wordBuf
-                }
+            if (canCombine) {
+                currentBuf.append(" ").append(trimmedClause)
             } else {
-                // Clause fits within maxChars
-                if (current.isEmpty()) {
-                    current.append(trimmedClause)
-                } else if (getRestoredLength(current.toString(), placeholders) + 1 + clauseLen <= maxChars) {
-                    current.append(" ").append(trimmedClause)
+                if (currentBuf.isNotEmpty()) {
+                    subChunks.add(currentBuf.toString())
+                    currentBuf = StringBuilder()
+                }
+
+                if (clauseLen <= maxChars) {
+                    currentBuf.append(trimmedClause)
                 } else {
-                    subChunks.add(current.toString())
-                    current = StringBuilder(trimmedClause)
+                    val wordChunks = splitByWords(trimmedClause, maxChars, placeholders)
+                    subChunks.addAll(wordChunks)
                 }
             }
         }
 
-        if (current.isNotEmpty()) {
-            subChunks.add(current.toString())
+        if (currentBuf.isNotEmpty()) {
+            subChunks.add(currentBuf.toString())
         }
 
-        return subChunks
+        return if (subChunks.isEmpty()) listOf(sentence) else subChunks
+    }
+
+    private fun splitByWords(
+        text: String,
+        maxChars: Int,
+        placeholders: Map<String, String> = emptyMap()
+    ): List<String> {
+        val words = text.split(WHITESPACE_REGEX)
+        val result = mutableListOf<String>()
+        var wordBuf = StringBuilder()
+        for (word in words) {
+            val wordLen = getRestoredLength(word, placeholders)
+            if (wordLen > maxChars) {
+                if (wordBuf.isNotEmpty()) {
+                    result.add(wordBuf.toString())
+                    wordBuf = StringBuilder()
+                }
+                result.add(word)
+            } else if (wordBuf.isEmpty()) {
+                wordBuf.append(word)
+            } else if (getRestoredLength(wordBuf.toString(), placeholders) + 1 + wordLen <= maxChars) {
+                wordBuf.append(" ").append(word)
+            } else {
+                result.add(wordBuf.toString())
+                wordBuf = StringBuilder(word)
+            }
+        }
+        if (wordBuf.isNotEmpty()) {
+            result.add(wordBuf.toString())
+        }
+        return result
     }
 }

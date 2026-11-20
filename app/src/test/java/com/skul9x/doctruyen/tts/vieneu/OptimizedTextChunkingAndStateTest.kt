@@ -97,7 +97,7 @@ class OptimizedTextChunkingAndStateTest {
 
     @Test
     fun testVietnameseChunkSizeBoundsAndSubClauseSplitting() {
-        assertEquals("Default max characters must be 75", 75, SmartTextSegmenter.DEFAULT_MAX_CHARS)
+        assertEquals("Default max characters must be 200", 200, SmartTextSegmenter.DEFAULT_MAX_CHARS)
 
         val diverseParagraphs = listOf(
             // Long narrative sentence (> 150 chars) with commas and semicolons
@@ -115,8 +115,8 @@ class OptimizedTextChunkingAndStateTest {
             assertTrue("Segmented chunks must not be empty", chunks.isNotEmpty())
             for (chunk in chunks) {
                 assertTrue(
-                    "Chunk length (${chunk.text.length}) must be <= 80 chars: '${chunk.text}'",
-                    chunk.text.length <= 80
+                    "Chunk length (${chunk.text.length}) must be <= 200 chars: '${chunk.text}'",
+                    chunk.text.length <= 200
                 )
                 assertTrue("Chunk text must not be blank", chunk.text.isNotBlank())
             }
@@ -130,7 +130,7 @@ class OptimizedTextChunkingAndStateTest {
 
         assertTrue(chunks.isNotEmpty())
         for (chunk in chunks) {
-            assertTrue("Chunk length must be <= 80 chars", chunk.text.length <= 80)
+            assertTrue("Chunk length must be <= 200 chars", chunk.text.length <= 200)
         }
 
         val fullReconstructed = chunks.joinToString(" ") { it.text }
