@@ -13,10 +13,6 @@
     native <methods>;
 }
 -keep class com.skul9x.doctruyen.tts.vieneu.SeaG2P { *; }
--keepclassmembers class com.skul9x.doctruyen.tts.vieneu.SeaG2P {
-    private external fun nativeInit(java.lang.String);
-    private external fun nativePhonemize(java.lang.String);
-}
 
 # ==========================================
 # 3. RETROFIT & OKHTTP & GSON DATA MODELS
