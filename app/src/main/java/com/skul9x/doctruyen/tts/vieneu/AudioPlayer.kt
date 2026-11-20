@@ -4,15 +4,38 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
+
+/**
+ * Shared dispatchers for audio playback hardware isolation.
+ */
+object AudioDispatchers {
+    /**
+     * Dedicated single-thread audio dispatcher with MAX_PRIORITY thread.
+     * Prevents hardware AudioTrack blocking writes from monopolizing Dispatchers.Default compute pool.
+     */
+    val AudioTrackDispatcher: CoroutineDispatcher by lazy {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "VieNeu-AudioTrack-Thread").apply {
+                isDaemon = true
+                priority = Thread.MAX_PRIORITY
+            }
+        }.asCoroutineDispatcher()
+    }
+}
 
 /**
  * Low-latency audio player using Android's AudioTrack API in streaming mode.
  * Supports 48 kHz mono 16-bit PCM playback.
  */
-class AudioPlayer(
+open class AudioPlayer(
     val sampleRate: Int = 48000,
     val channelConfig: Int = AudioFormat.CHANNEL_OUT_MONO,
-    val encoding: Int = AudioFormat.ENCODING_PCM_16BIT
+    val encoding: Int = AudioFormat.ENCODING_PCM_16BIT,
+    val audioDispatcher: CoroutineDispatcher = AudioDispatchers.AudioTrackDispatcher
 ) {
 
     private val lock = Any()
@@ -41,7 +64,7 @@ class AudioPlayer(
     /**
      * Initializes the underlying AudioTrack with a buffer size >= 2 * minBufferSize.
      */
-    fun init() {
+    open fun init() {
         synchronized(lock) {
             if (audioTrack != null && !needsReinit) {
                 return
@@ -87,7 +110,7 @@ class AudioPlayer(
     /**
      * Resets the AudioPlayer by releasing the existing AudioTrack and creating a fresh one.
      */
-    fun reset() {
+    open fun reset() {
         synchronized(lock) {
             release()
             init()
@@ -95,10 +118,19 @@ class AudioPlayer(
     }
 
     /**
+     * Writes 16-bit PCM audio samples to the AudioTrack asynchronously on dedicated audioDispatcher.
+     * Prevents blocking calls on Dispatchers.Default.
+     */
+    open suspend fun writeSuspended(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int =
+        withContext(audioDispatcher) {
+            write(pcm16, offset, size)
+        }
+
+    /**
      * Writes 16-bit PCM audio samples to the AudioTrack.
      * Blocks if the buffer is full until all samples are written or track is stopped.
      */
-    fun write(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int {
+    open fun write(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int {
         val track: AudioTrack?
         synchronized(lock) {
             track = audioTrack
@@ -136,7 +168,7 @@ class AudioPlayer(
     /**
      * Starts audio playback.
      */
-    fun play() {
+    open fun play() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -153,7 +185,7 @@ class AudioPlayer(
     /**
      * Pauses audio playback without dropping queued audio.
      */
-    fun pause() {
+    open fun pause() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -170,7 +202,7 @@ class AudioPlayer(
     /**
      * Stops audio playback, flushes buffered audio, and marks player for re-initialization.
      */
-    fun stop() {
+    open fun stop() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -190,7 +222,7 @@ class AudioPlayer(
     /**
      * Flushes currently buffered audio.
      */
-    fun flush() {
+    open fun flush() {
         synchronized(lock) {
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
@@ -205,7 +237,7 @@ class AudioPlayer(
     /**
      * Adjusts the volume / gain of the player (0.0f = silent, 1.0f = full volume).
      */
-    fun setVolume(volume: Float) {
+    open fun setVolume(volume: Float) {
         synchronized(lock) {
             val clamped = volume.coerceIn(0f, 1f)
             try {
@@ -219,7 +251,7 @@ class AudioPlayer(
     /**
      * Releases the AudioTrack and native resources.
      */
-    fun release() {
+    open fun release() {
         synchronized(lock) {
             try {
                 audioTrack?.let {

@@ -679,12 +679,13 @@ class VieNeuTTSManager(
                         val tokenizer = VieNeuTokenizer.fromFile(tokenizerFile)
                         val headsFile = File(backboneDir, "vieneu_v3_heads.npz")
                         val headsReader = NpzReader.read(headsFile)
+                        val audioFlat = headsReader.getChannelFlatArrays("audio_emb")
                         VieNeuOnnxEngine(
                             sessionManager = sessionManager,
                             config = config,
                             tokenizer = tokenizer,
                             textEmbeddings = headsReader.get2D("text_emb")!!,
-                            audioEmbeddings = headsReader.get3D("audio_emb")!!,
+                            flatAudioEmbeddingsIn = audioFlat,
                             xvecW = headsReader.get2D("xvec_w"),
                             xvecB = headsReader.getFloatArray("xvec_b"),
                             xvecLnW = headsReader.getFloatArray("xvec_ln_w"),
@@ -707,8 +708,8 @@ class VieNeuTTSManager(
                 )
                 pipeline = newPipeline
 
-                TtsMetricsLogger.logEngineReload(normPrecision)
-                DebugLogger.log(TAG, "✅ VieNeuOnnxEngine hot-reloaded successfully with precision: $normPrecision [EP: ${newEngine.executionProvider}]", LogType.INFO)
+                TtsMetricsLogger.logEngineReload(newEngine.quantizationType.name)
+                DebugLogger.log(TAG, "✅ VieNeuOnnxEngine hot-reloaded successfully with precision: ${newEngine.quantizationType.name} [EP: ${newEngine.executionProvider}]", LogType.INFO)
 
                 if (pendingTitle != null || pendingContent != null) {
                     checkPendingSpeech()

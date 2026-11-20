@@ -31,6 +31,13 @@ class OnnxSessionManager(
         FP16
     }
 
+    data class SessionOptionsResult(
+        val sessionOptions: OrtSession.SessionOptions,
+        val executionProvider: String,
+        val intraOpThreads: Int = 1,
+        val interOpThreads: Int = 1
+    )
+
     private var closed = false
     val isClosed: Boolean
         get() = closed
@@ -112,10 +119,69 @@ class OnnxSessionManager(
             return null
         }
 
+        @androidx.annotation.VisibleForTesting
+        var lastConfiguredIntraOpThreads: Int = 0
+
+        @androidx.annotation.VisibleForTesting
+        var lastConfiguredInterOpThreads: Int = 0
+
+        fun hasInt8Assets(context: Context): Boolean {
+            val assets = listAssets(context, "vieneu/backbone_int8")
+            if (!assets.isNullOrEmpty()) return true
+            return try {
+                val targetBase = File(context.filesDir, "vieneu")
+                val int8Dir = File(targetBase, "backbone_int8")
+                int8Dir.exists() && int8Dir.list()?.isNotEmpty() == true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        fun isPrecisionAvailable(context: Context, precision: String): Boolean {
+            val norm = when (precision.trim().uppercase()) {
+                "INT8" -> "INT8"
+                "FP32" -> "FP32"
+                else -> return false
+            }
+            return if (norm == "INT8") {
+                hasInt8Assets(context)
+            } else {
+                val assets = listAssets(context, "vieneu/backbone")
+                if (!assets.isNullOrEmpty()) return true
+                try {
+                    val targetBase = File(context.filesDir, "vieneu")
+                    val fp32Dir = File(targetBase, "backbone")
+                    fp32Dir.exists() && fp32Dir.list()?.isNotEmpty() == true
+                } catch (_: Throwable) {
+                    false
+                }
+            }
+        }
+
+        fun getAvailablePrecisions(context: Context): List<String> {
+            val list = mutableListOf<String>()
+            if (isPrecisionAvailable(context, "FP32")) list.add("FP32")
+            if (isPrecisionAvailable(context, "INT8")) list.add("INT8")
+            return list
+        }
+
+        fun resolveEffectivePrecision(context: Context, precision: String): String {
+            val norm = when (precision.trim().uppercase()) {
+                "INT8" -> "INT8"
+                "FP32" -> "FP32"
+                else -> "FP32"
+            }
+            return if (norm == "INT8" && !hasInt8Assets(context)) {
+                "FP32"
+            } else {
+                norm
+            }
+        }
+
         fun configureSessionOptions(
             quantizationType: QuantizationType,
             threads: Int = 0
-        ): Pair<OrtSession.SessionOptions, String> {
+        ): SessionOptionsResult {
             val sessionOptions = OrtSession.SessionOptions().apply {
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                 setExecutionMode(OrtSession.SessionOptions.ExecutionMode.SEQUENTIAL)
@@ -124,6 +190,14 @@ class OnnxSessionManager(
             val bigCoreCount = DevicePerformanceHelper.getBigCoreCount().coerceIn(2, 4)
             val effectiveThreads = if (threads > 0) threads else bigCoreCount
             var epUsed = "CPU"
+
+            // Set intra-op threads on SessionOptions before registering execution providers
+            // to ensure CPU fallback operators also run with effectiveThreads instead of 1
+            sessionOptions.setIntraOpNumThreads(effectiveThreads)
+            sessionOptions.setInterOpNumThreads(1)
+            sessionOptions.addConfigEntry("session.intra_op.allow_spinning", "0")
+            lastConfiguredIntraOpThreads = effectiveThreads
+            lastConfiguredInterOpThreads = 1
 
             when (quantizationType) {
                 QuantizationType.FP16 -> {
@@ -138,37 +212,27 @@ class OnnxSessionManager(
                     }
 
                     if (!nnapiSuccess) {
-                        sessionOptions.setIntraOpNumThreads(1)
-                        sessionOptions.setInterOpNumThreads(1)
-                        sessionOptions.addConfigEntry("session.intra_op.allow_spinning", "0")
                         try {
                             sessionOptions.addXnnpack(mapOf("intra_op_num_threads" to effectiveThreads.toString()))
                             epUsed = "XNNPACK (Fallback)"
                         } catch (_: Throwable) {
-                            val intra = effectiveThreads
-                            sessionOptions.setIntraOpNumThreads(intra)
                             epUsed = "CPU (Fallback)"
                         }
                     }
                 }
                 QuantizationType.INT8, QuantizationType.FP32 -> {
-                    sessionOptions.setIntraOpNumThreads(1)
-                    sessionOptions.setInterOpNumThreads(1)
-                    sessionOptions.addConfigEntry("session.intra_op.allow_spinning", "0")
                     try {
                         sessionOptions.addXnnpack(mapOf("intra_op_num_threads" to effectiveThreads.toString()))
                         epUsed = "XNNPACK"
                         Log.i(TAG, "Configured XNNPACK EP with $effectiveThreads threads for $quantizationType model")
                     } catch (e: Throwable) {
                         Log.w(TAG, "Failed to add XNNPACK EP: ${e.message}. Falling back to standard CPU thread pool.")
-                        val intra = effectiveThreads
-                        sessionOptions.setIntraOpNumThreads(intra)
                         epUsed = "CPU"
                     }
                 }
             }
 
-            return Pair(sessionOptions, epUsed)
+            return SessionOptionsResult(sessionOptions, epUsed, effectiveThreads, 1)
         }
 
         fun create(
@@ -186,14 +250,10 @@ class OnnxSessionManager(
             val acousticPath = File(backboneDir, "vieneu_acoustic_cached.onnx").absolutePath
             val codecPath = File(codecDir, "moss_audio_tokenizer_decode_full.onnx").absolutePath
 
+            val effectivePrecision = resolveEffectivePrecision(context, precision)
             val detectedQuant = detectQuantizationType(prefillPath)
-            val normPrecision = when (precision.trim().uppercase()) {
-                "INT8" -> "INT8"
-                "FP32" -> "FP32"
-                else -> "FP32"
-            }
-            if (normPrecision != detectedQuant.name) {
-                Log.w(TAG, "⚠️ Precision mismatch: Requested $precision ($normPrecision) but detected quantization is $detectedQuant on $prefillPath. INT8 model assets may be missing from APK.")
+            if (effectivePrecision != detectedQuant.name) {
+                Log.w(TAG, "⚠️ Precision mismatch: Effective precision is $effectivePrecision but detected quantization is $detectedQuant on $prefillPath.")
             }
             val (sessionOptions, epUsed) = configureSessionOptions(detectedQuant, threads)
 
@@ -279,6 +339,13 @@ class OnnxSessionManager(
             return assetListProvider?.invoke(context, path) ?: try {
                 context.assets.list(path)
             } catch (_: Exception) {
+                val candidateDirs = listOf(File("src/main/assets"), File("app/src/main/assets"))
+                for (base in candidateDirs) {
+                    val target = File(base, path)
+                    if (target.exists()) {
+                        return target.list() ?: emptyArray()
+                    }
+                }
                 null
             }
         }
@@ -295,16 +362,15 @@ class OnnxSessionManager(
                 else -> "FP32"
             }
 
+            val effectivePrecision = resolveEffectivePrecision(context, precision)
             val int8Assets = listAssets(context, "vieneu/backbone_int8")
-            val assetFolder = if (normPrecision == "INT8") {
-                if (!int8Assets.isNullOrEmpty()) {
-                    Log.i(TAG, "Found INT8 assets in 'vieneu/backbone_int8' (${int8Assets.size} files). Selecting INT8 backbone.")
-                    "vieneu/backbone_int8"
-                } else {
-                    Log.w(TAG, "⚠️ INT8 precision requested, but 'vieneu/backbone_int8' assets not found or empty. Falling back to FP32 backbone. INT8 model assets may be missing from APK.")
-                    "vieneu/backbone"
-                }
+            val assetFolder = if (effectivePrecision == "INT8") {
+                Log.i(TAG, "Found INT8 assets in 'vieneu/backbone_int8' (${int8Assets?.size ?: 0} files). Selecting INT8 backbone.")
+                "vieneu/backbone_int8"
             } else {
+                if (normPrecision == "INT8") {
+                    Log.i(TAG, "ℹ️ INT8 precision requested, but 'vieneu/backbone_int8' assets not bundled in this build. Selecting FP32 backbone.")
+                }
                 "vieneu/backbone"
             }
             val targetSubdir = if (assetFolder.endsWith("backbone_int8")) "backbone_int8" else "backbone"

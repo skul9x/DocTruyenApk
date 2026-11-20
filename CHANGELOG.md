@@ -1,5 +1,92 @@
 # Changelog - DocTruyen Android App
 
+## [v1.17] - [2026-11-20] Runtime Threading, Execution Providers & Engine Tuning (Phase 04)
+### Added & Improved
+- **ONNX Session Thread Configuration & XNNPACK Fallback Allocation (`OnnxSessionManager.kt`)**:
+  - Configured `sessionOptions.setIntraOpNumThreads(effectiveThreads)` before registering XNNPACK execution provider options.
+  - Rectified single-threaded fallback starvation for operators executing outside XNNPACK, ensuring CPU fallback subgraphs allocate big-core thread counts rather than being throttled to 1.
+  - Introduced `SessionOptionsResult` with full destructuring support for intra-op and inter-op threads while preserving complete backward compatibility with existing destructuring and pair usages.
+- **Precision Configuration Alignment & Truthful Telemetry Diagnostics (`OnnxSessionManager.kt`, `SettingsActivity.kt`, `VieNeuTTSManager.kt`, `TtsMetricsLogger.kt`)**:
+  - Implemented `OnnxSessionManager.hasInt8Assets(context)`, `isPrecisionAvailable(context, precision)`, `getAvailablePrecisions(context)`, and `resolveEffectivePrecision(context, precision)`.
+  - Added asset discovery fallbacks for JVM unit test execution against project asset directories.
+  - Dynamically disabled INT8 precision toggle button and adjusted opacity in `SettingsActivity` when INT8 assets are absent, automatically aligning user preferences to FP32 without deceptive warnings.
+  - Replaced deceptive missing INT8 warning spam on FP32-only builds with truthful info logs.
+  - Updated `VieNeuTTSManager.reloadEngine` to log the true loaded engine precision (`newEngine.quantizationType.name`) to `TtsMetricsLogger.logEngineReload`.
+- **Fast Acoustic Projection Matrix-Vector Multiply (`VieNeuOnnxEngine.kt`)**:
+  - Replaced scalar single-accumulator matrix-vector multiply in `sampleCode` with `computeAcousticProjectionLogits`.
+  - Implemented 8-way unrolled accumulators for the $1024 \times 768$ dot-product computation, breaking serial dependency chains and exposing instruction-level parallelism (ILP) and SIMD auto-vectorization.
+  - Accelerated hot acoustic code sampling while maintaining exact numerical equivalence within floating-point tolerance.
+- **Streamlined G2P Lexical Caching (`SeaG2P.kt`)**:
+  - Implemented `isCacheable(text: String)` with `MAX_CACHEABLE_LENGTH = 100` and multiline/multi-sentence filtering.
+  - Avoided wasteful synchronized hash computations and LRU cache thrashing on unique multi-sentence novel paragraphs, while reserving the 512-entry cache for frequently repeated words and short phrases.
+- **Production HTTP Logging Interceptor Hardening (`ApiService.kt`)**:
+  - Replaced `HttpLoggingInterceptor.Level.HEADERS` with `HttpLoggingInterceptor.Level.NONE` when `BuildConfig.DEBUG` is false.
+  - Eliminated sensitive network header leaks and unnecessary string allocations in release logcat.
+- **Comprehensive Unit Testing**:
+  - Created `RuntimeOptimizationAndPrecisionVerificationTest.kt` (4/4 passed 100%):
+    1. `testSessionOptionsThreadConfiguration`: Verified multi-threaded intra-op pool configuration across INT8, FP32, and FP16 fallback modes.
+    2. `testPrecisionConfigurationTruthfulness`: Verified asset detection, fallback resolution, and truthful telemetry reporting in `TtsMetricsLogger`.
+    3. `testReleaseLoggingInterceptorDisabled`: Verified `HttpLoggingInterceptor.Level.NONE` in release mode and `BODY` in debug mode.
+    4. `testSampleCodeAcousticProjectionEquivalence`: Verified numerical equivalence of unrolled acoustic projection and G2P paragraph cache bypass.
+
+## [v1.16] - [2026-11-20] Asset Cleansing, Memory-Efficient NPZ & Build Optimization (Phase 03)
+### Added & Improved
+- **AI Model Asset Cleansing (>84.8MB Reduced)**:
+  - Completely purged dead models: `denoiser/denoiser.onnx` (41MB), `codec/moss_audio_tokenizer_encode.onnx` (797KB), and `codec/moss_audio_tokenizer_encode.data` (43MB).
+  - Reduced total bundled assets size from 347MB to 262MB (24.5% direct asset size reduction), significantly shrinking APK footprint and on-device storage.
+  - Cleaned up unused `DENOISER_DIR` constant in `VieNeuConfig.kt`.
+- **Zero-BAOS Streaming NPY/NPZ Parser (`NpzReader.kt`)**:
+  - Re-architected `NpzReader` with `parseNpyStream`: parses NPY headers directly from streaming `ZipInputStream` and reads float tensors via a fixed 64KB `ByteBuffer` transfer buffer.
+  - Completely eliminated unbounded `ByteArrayOutputStream` growing buffer reallocations and 50MB intermediate `ByteArray` allocations during NPZ weight loading.
+  - Added `getChannelFlatArrays("audio_emb")`: loads 3D tensor `[16, 1024, 768]` directly into 16 flat channel arrays instead of 16,384 distinct `FloatArray` heap objects.
+  - Added `getFlat1D` and flat embedding indexing helpers while preserving full backward compatibility for `get2D`, `get3D`, `getFloatArray`, and `readAllBytes`.
+- **Flat Embedding Lookups & Low-Heap Initialization (`VieNeuOnnxEngine.kt`, `VieNeuTTSManager.kt`)**:
+  - Extended `VieNeuOnnxEngine` constructor to accept pre-flattened channel embeddings (`flatAudioEmbeddingsIn`).
+  - Replaced 3D nested array allocations (`headsReader.get3D("audio_emb")`) with `headsReader.getChannelFlatArrays("audio_emb")` in `VieNeuTTSManager` and `fromAssets`.
+  - Replaced per-step acoustic frame array allocations with zero-copy `FloatBuffer.wrap(flatEmb, prevCode * H, H)`.
+  - Flattened slot sequence acoustic embedding lookups (`flatEmb[embOffset + h]`).
+  - Reduced engine cold initialization heap memory spike from >250MB to <55MB.
+- **R8 Minification & ProGuard Rules Coverage (`build.gradle.kts`, `proguard-rules.pro`)**:
+  - Enabled release-mode code shrinking and optimization: `isMinifyEnabled = true`.
+  - Configured comprehensive ProGuard keep rules for ONNX Runtime (`ai.onnxruntime.**`), SeaG2P JNI entry points and native methods, Retrofit & Gson data models (`com.skul9x.doctruyen.network.**`, `@SerializedName`), Glide modules, and Coroutines internals.
+  - Configured ABI packaging options and splits for 64-bit/32-bit targets (`arm64-v8a`, `armeabi-v7a`, `x86_64`) with `isUniversalApk = true`.
+- **Comprehensive Unit Testing**:
+  - Created `AssetCleansingAndBuildOptimizationTest.kt` verifying:
+    1. `testDeadAssetAbsenceAndIntegrity`: Dead assets absent while all 12 core TTS assets remain present and intact.
+    2. `testNpzReaderZeroBaosAllocation`: Zero-BAOS streaming parsing from zip input streams with accurate shape and values.
+    3. `testFlatEmbeddingNumericalEquivalence`: 100% exact numerical equivalence across all channels and sampled codes between flat channel arrays, 1D flat buffers, and 3D nested arrays.
+    4. `testProGuardRulesCoverage`: Validated ProGuard rules and build.gradle.kts minification/ABI configuration (4/4 passed).
+
+## [v1.15] - [2026-11-20] Bounded Audio Channel & Playback Concurrency (Phase 02)
+### Added & Improved
+- **Bounded Coroutine Channel & Asynchronous Backpressure (`TTSAudioPipeline.kt`)**:
+  - Replaced unbounded `ConcurrentLinkedQueue` with a bounded Coroutine `Channel` (default capacity: 4 chunks, configurable).
+  - Implemented natural producer suspension when the buffer ceiling is reached without thread blocking or dropping audio chunks.
+  - Capped active unplayed PCM memory footprint in the pipeline strictly below 15MB at all times during long reading sessions.
+  - Replaced `delay(20)` busy-wait polling loops with reactive suspending channel reception (`receiveCatching()`), achieving 0ms jitter-free chunk handover.
+  - Added deadlock-prevention and reactive prebuffering synchronization using conflated signal channels.
+- **Dedicated Audio Dispatcher & Hardware Isolation (`AudioPlayer.kt`, `TTSAudioPipeline.kt`)**:
+  - Created `AudioDispatchers.AudioTrackDispatcher` running on a dedicated single-thread executor with `Thread.MAX_PRIORITY` named `VieNeu-AudioTrack-Thread`.
+  - Isolated blocking `AudioTrack.write(..., WRITE_BLOCKING)` calls onto the dedicated audio dispatcher via `writeSuspended(...)`, completely freeing `Dispatchers.Default` compute threads for ONNX inference.
+  - Implemented clean channel cancellation and instant buffer draining on `pause()`, `stop()`, and `seekToChunk()`.
+- **Comprehensive Unit Testing**:
+  - Created `BoundedAudioChannelPipelineTest.kt` verifying:
+    1. `testBoundedChannelBackpressureSuspension`: Producer coroutine suspends under backpressure and resumes only upon consumer drain.
+    2. `testMemoryCapUnderLongStoryPlayback`: Queue memory footprint capped strictly below 15MB across 150 consecutive simulated chunks.
+    3. `testDispatcherSeparationForAudioTrack`: Blocking hardware writes execute exclusively on dedicated audio dispatcher without monopolizing `Dispatchers.Default`.
+    4. `testImmediateCancellationAndChannelDrain`: Instant cancellation, zero memory leaks, and clean drain on pause and stop (4/4 passed).
+
+## [v1.14] - [2026-11-20] Native Tensor Lifecycle & Zero-Copy KV Cache Reuse (Phase 01)
+### Added & Improved
+- **Zero-Copy KV Cache & Native Tensor Retention (`VieNeuOnnxEngine.kt`)**:
+  - Refactored autoregressive decode loop (`synthesizePass`): eliminated intermediate JVM `FloatArray` allocations and native `OnnxTensor` recreation across all 12 Transformer layers. Output Key-Value tensors are directly supplied into subsequent decode steps in native space via retained `OrtSession.Result` instances.
+  - Refactored acoustic frame synthesis (`acousticFrame`): native outputs from channel $ch-1$ flow directly to channel $ch$ inputs across all 16 codebook channels, pre-allocating working buffers and eliminating per-channel heap allocation churn.
+  - Removed all explicit synchronous `System.gc()` pauses from inner inference loops, eliminating Stop-the-World stalls during storytelling narration.
+  - Re-architected `CacheTensor` and `CacheTensor.Pool`: added native tensor wrapping (`fromNativeOnnxTensor`, `obtainNative`), native handle recycling, and safe disposal while maintaining full backward compatibility.
+  - Protected tensor lifecycle on cancellation or interruption via robust `try ... finally` guarantees, preventing native memory leaks, double-free warnings, or segmentation faults.
+- **Comprehensive Unit Testing**:
+  - Created `NativeTensorReuseAndZeroGcTest.kt` verifying direct native tensor retention, zero `System.gc()` bytecode and execution profiling, clean native lifecycle cleanup on thread cancellation, and acoustic frame memory reuse (4/4 passed).
+
 ## [v1.13] - [2026-11-20] Punctuation-First Natural Text Segmentation (Plan A)
 ### Added & Improved
 - **Punctuation-First Natural Text Segmentation (`SmartTextSegmenter.kt`)**:

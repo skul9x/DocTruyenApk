@@ -288,6 +288,15 @@ open class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupPrecisionSelector() {
+        val int8Available = com.skul9x.doctruyen.tts.vieneu.OnnxSessionManager.isPrecisionAvailable(this, "INT8")
+        btnPrecisionInt8.isEnabled = int8Available
+        if (!int8Available) {
+            btnPrecisionInt8.alpha = 0.5f
+            if (UserConfig.getTtsPrecision(this) == "INT8") {
+                UserConfig.setTtsPrecision(this, "FP32")
+            }
+        }
+
         val currentPrecision = UserConfig.getTtsPrecision(this)
         if (currentPrecision == "FP32") {
             togglePrecisionGroup.check(R.id.btnPrecisionFp32)

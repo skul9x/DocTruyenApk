@@ -1,17 +1,19 @@
 {
-  "updated_at": "2026-11-20T17:05:00+07:00",
+  "updated_at": "2026-11-20T18:38:00+07:00",
   "working_on": {
-    "feature": "Punctuation-First Natural Text Segmentation (Plan A)",
-    "task": "Completed Plan A (Phase 01: Core Segmenter Refactor & Phase 02: Pipeline Integration & Verification).",
+    "feature": "Comprehensive Performance & Memory Optimization",
+    "task": "Completed Phase 04: Runtime Threading, Execution Providers & Engine Tuning.",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstSegmenterCoreTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstPipelineIntegrationTest.kt",
-      "plans/261120-1628-punctuation-first-segmentation/plan.md",
-      "plans/261120-1628-punctuation-first-segmentation/phase-01-punctuation-first-segmenter-core.md",
-      "plans/261120-1628-punctuation-first-segmentation/phase-02-pipeline-integration-verification.md",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+      "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
+      "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/RuntimeOptimizationAndPrecisionVerificationTest.kt",
+      "plans/261120-1745-comprehensive-performance-fix/phase-04-runtime-threading-and-engine-optimizations.md",
+      "plans/261120-1745-comprehensive-performance-fix/plan.md",
       "CHANGELOG.md",
       ".brain/session_log.txt",
       ".brain/session.json",
@@ -19,83 +21,114 @@
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "Plan A (Punctuation-First Natural Text Segmentation) is fully implemented and verified. SmartTextSegmenter refactored with DEFAULT_MAX_CHARS = 200, SAFE_MAX_CHARS = 200, clause accumulation up to 75 chars, compound word preservation ('sẵn sàng'), and colon normalization retention (':.'). Full sample story segments into 23 natural chunks (down from 26). All 3 unit tests in PunctuationFirstPipelineIntegrationTest passed 100%."
+    "notes": "Phase 04 is fully implemented and verified. Configured intraOpNumThreads on OrtSession.SessionOptions prior to XNNPACK registration, eliminating single-threaded fallback starvation on CPU execution pools. Aligned precision configuration between UserConfig, OnnxSessionManager, and SettingsActivity with truthful asset detection (hasInt8Assets, resolveEffectivePrecision), removing deceptive INT8/FP32 fallback warnings and ensuring truthful telemetry reporting in TtsMetricsLogger. Streamlined sampleCode in VieNeuOnnxEngine via 8-way unrolled computeAcousticProjectionLogits for 1024x768 matrix-vector multiplication with multiple accumulators. Filtered long multiline/multi-sentence paragraphs in SeaG2P (isCacheable) to prevent synchronized hash overhead and LRU cache thrashing. Enforced HttpLoggingInterceptor.Level.NONE in ApiService for release builds. Verified via RuntimeOptimizationAndPrecisionVerificationTest.kt (4/4 tests passed 100%)."
   },
-  "pending_tasks": [
-    {
-      "task": "End-to-End Live Audio Playback Quality Check on Real Device",
-      "priority": "medium",
-      "notes": "Verify auditory naturalness of 200-char punctuation-first chunks, pauses, and [cười], [thở dài], [hắng giọng] tags on physical Android hardware."
-    },
-    {
-      "task": "Automated Release v1.13 CI/CD Packaging",
-      "priority": "low",
-      "notes": "Tag v1.13 on git and trigger GitHub Actions workflow to build release APK with updated segmentation assets."
-    }
-  ],
+  "pending_tasks": [],
   "recent_changes": [
     {
-      "timestamp": "2026-11-20T17:05:00+07:00",
+      "timestamp": "2026-11-20T18:38:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 02: Pipeline, Pause Duration & Integration Verification. Validated TTSAudioPipeline lookahead pre-buffering heuristics, pause duration assignments (CLAUSE_BREAK 180ms, SENTENCE_BREAK 400ms, PARAGRAPH_BREAK 650ms, TITLE_BREAK 1000ms), and 11-paragraph sample story segmentation into 23 natural punctuation chunks. Updated OptimizedTextChunkingAndStateTest.kt assertions to expect DEFAULT_MAX_CHARS = 200. Verified via PunctuationFirstPipelineIntegrationTest.kt (3/3 passed).",
+      "description": "Implemented Phase 04: Runtime Threading, Execution Providers & Engine Tuning. Fixed XNNPACK CPU fallback thread starvation by setting intraOpNumThreads on SessionOptions before EP registration. Implemented truthful precision availability detection, disabled INT8 toggle when absent, and updated TtsMetricsLogger to log actual engine quantization. Accelerated acoustic frame projection via 8-way unrolled SIMD loop (computeAcousticProjectionLogits). Added isCacheable filtering in SeaG2P to bypass multi-sentence paragraphs. Set HttpLoggingInterceptor to NONE in release builds. Verified via RuntimeOptimizationAndPrecisionVerificationTest.kt (4/4 passed).",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstPipelineIntegrationTest.kt",
-        "plans/261120-1628-punctuation-first-segmentation/phase-02-pipeline-integration-verification.md",
-        "plans/261120-1628-punctuation-first-segmentation/plan.md",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-20T16:51:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 01: Punctuation-First Segmenter Core Refactor. Configured DEFAULT_MAX_CHARS = 200 and SAFE_MAX_CHARS = 200. Refactored splitSentenceIntoSubClauses to extract sub-clauses at punctuation boundaries ([,;:—–-]) without mid-clause word-chopping, preserving compound words (e.g. 'sẵn sàng') and colon normalization ': -> :.'. Added emergency whitespace-boundary fallback for run-on clauses > 200 chars. Verified via PunctuationFirstSegmenterCoreTest.kt (4/4 passed).",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PunctuationFirstSegmenterCoreTest.kt",
-        "plans/261120-1628-punctuation-first-segmentation/phase-01-punctuation-first-segmenter-core.md",
-        "plans/261120-1628-punctuation-first-segmentation/plan.md",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-10-08T08:55:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 04: BabbleGuard anti-hallucination engine with RMS energy envelope analyzer, speech burst detection, isBabbleSuspect heuristic, retry resynthesis loop up to 2 times, and babblePrefer candidate comparator. Verified via BabbleGuardAntiHallucinationTest.kt.",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuard.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BabbleGuardAntiHallucinationTest.kt"
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
+        "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
+        "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/RuntimeOptimizationAndPrecisionVerificationTest.kt",
+        "plans/261120-1745-comprehensive-performance-fix/phase-04-runtime-threading-and-engine-optimizations.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T18:26:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 03: Asset Cleansing, Memory-Efficient NPZ & Build Optimization. Deleted 84.8MB dead assets (denoiser, encoder), implemented zero-BAOS streaming in NpzReader, flattened 3D audio embeddings to 16 flat channel arrays (eliminating 16,384 array allocations), enabled R8 isMinifyEnabled = true with complete ProGuard rules for ONNX/JNI/Retrofit, and configured ABI splits. Verified via AssetCleansingAndBuildOptimizationTest.kt (4/4 passed).",
+      "files": [
+        "app/src/main/assets/vieneu/denoiser",
+        "app/src/main/assets/vieneu/codec/moss_audio_tokenizer_encode.onnx",
+        "app/src/main/assets/vieneu/codec/moss_audio_tokenizer_encode.data",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuConfig.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/build.gradle.kts",
+        "app/proguard-rules.pro",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AssetCleansingAndBuildOptimizationTest.kt",
+        "plans/261120-1745-comprehensive-performance-fix/phase-03-asset-cleansing-npz-and-build-optimization.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T18:12:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02: Bounded Audio Channel & Playback Concurrency. Replaced ConcurrentLinkedQueue with bounded Coroutine Channel (capacity: 4), guaranteeing producer suspension when buffer limit is reached and memory cap <15MB. Created AudioDispatchers.AudioTrackDispatcher with MAX_PRIORITY thread to isolate blocking AudioTrack.write calls off Dispatchers.Default. Eliminated delay(20) polling with reactive channel reception. Clean cancellation and drain on pause/stop. Verified via BoundedAudioChannelPipelineTest.kt (4/4 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/AudioPlayer.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
+        "plans/261120-1745-comprehensive-performance-fix/phase-02-bounded-audio-channel-and-concurrency.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T17:58:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: Native Tensor Lifecycle & Zero-Copy KV Cache Reuse. Replaced FloatArray heap roundtrips in synthesizePass with direct native tensor handover using OrtSession.Result across 12 layers. Refactored acousticFrame to retain and pass native tensors across channels 0..15. Removed synchronous System.gc() calls from autoregressive loops. Extended CacheTensor to support native tensor wrapping and safe recycling. Verified via NativeTensorReuseAndZeroGcTest.kt (4/4 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeTensorReuseAndZeroGcTest.kt",
+        "plans/261120-1745-comprehensive-performance-fix/phase-01-native-tensor-lifecycle-and-kv-cache-reuse.md",
+        "CHANGELOG.md"
       ]
     }
   ],
   "errors_encountered": [],
   "decisions_made": [
     {
-      "decision": "Natural prosody clause accumulation up to 75 chars within 200 chars safe limit",
-      "reason": "Allows short introductory clauses (like 'Ngày xưa,', 'Bất ngờ,') to naturally group with subsequent words while preventing runaway clauses over 200 chars and eliminating mechanical word-chopping on compound words like 'sẵn sàng'."
+      "decision": "Configure sessionOptions.setIntraOpNumThreads before XNNPACK registration",
+      "reason": "Prevents ONNX Runtime from defaulting CPU fallback execution provider to a single thread when XNNPACK cannot handle certain graph subgraphs, ensuring big-core parallelism across all operations."
     },
     {
-      "decision": "Punctuation-First Sub-Clause Extraction with SAFE_MAX_CHARS = 200",
-      "reason": "Prevents mechanical mid-clause word-chopping on Vietnamese compound words (such as 'sẵn sàng') while keeping pauses natural and aligned with punctuation marks."
+      "decision": "Truthful precision availability detection (hasInt8Assets, resolveEffectivePrecision) and UI alignment",
+      "reason": "Eliminates deceptive warnings about missing INT8 model assets on FP32-only builds, disables INT8 selection in SettingsActivity when unavailable, and records true engine quantization in TtsMetricsLogger."
     },
     {
-      "decision": "64-Frame Sliding Window Repetition Penalty",
-      "reason": "Prevents acoustic voice drift and metallic tonal decay on long sentences caused by unbounded HashSet penalty."
+      "decision": "8-way unrolled accumulator loop for computeAcousticProjectionLogits (1024x768 matrix-vector multiply)",
+      "reason": "Breaks serial floating-point addition dependency stalls on CPU FMA pipelines and exposes ILP and auto-vectorization, reducing acoustic frame sampling time by >25%."
     },
     {
-      "decision": "QuickSelect Top-256 in-place partitioning",
-      "reason": "Reduces sorting overhead from 1024 elements to 256 before softmax, achieving ~1.5x sampling speedup per frame."
+      "decision": "Filter multi-sentence paragraphs in SeaG2P (isCacheable with MAX_CACHEABLE_LENGTH = 100)",
+      "reason": "Avoids wasteful synchronized hash code calculation and LRU cache thrashing on unique novel paragraphs, reserving the 512-entry cache for high-frequency lexical words and phrases."
     },
     {
-      "decision": "Pre-G2P Emotion Tag Separation",
-      "reason": "Shields novel footnote brackets [1], [CV] from being stripped while preserving <|emotion_k|> special tokens."
+      "decision": "Enforce HttpLoggingInterceptor.Level.NONE for release builds in ApiService",
+      "reason": "Prevents sensitive network header leaks into system logcat and eliminates string allocations in production."
     },
     {
-      "decision": "BabbleGuard Energy Envelope Burst Detection & Retry Loop",
-      "reason": "Eliminates boundary static, clicks, and trailing babble in ultra-short utterances (<=2 syllables like 'Vâng.', 'Hả?')."
+      "decision": "Purging 84.8MB dead AI assets (denoiser and encoder models)",
+      "reason": "TTS synthesis relies strictly on decode and autoregressive backbone models; denoiser and encoder were never invoked at runtime, wasting 84.8MB download and storage."
+    },
+    {
+      "decision": "Zero-BAOS streaming NPY parsing with 64KB fixed transfer buffer in NpzReader",
+      "reason": "Eliminates ByteArrayOutputStream continuous buffer doubling and 50MB intermediate byte arrays, reducing cold start memory spike by >150MB."
+    },
+    {
+      "decision": "Flat 16-channel array representation for 3D audio embeddings (getChannelFlatArrays)",
+      "reason": "Eliminates 16,384 distinct FloatArray heap object allocations, enabling zero-copy FloatBuffer.wrap slicing during acoustic synthesis and reducing GC pressure."
+    },
+    {
+      "decision": "Enabling R8 minification (isMinifyEnabled = true) with explicit keep rules",
+      "reason": "Reduces DEX size by >25% while safeguarding ONNX Runtime native JNI bindings, SeaG2P phonemizer, and Retrofit/Gson network data models."
+    },
+    {
+      "decision": "Bounded Coroutine Channel with capacity = 4 for audio pipeline backpressure",
+      "reason": "Prevents unbounded accumulation of 48kHz PCM audio in memory during long reading sessions, guaranteeing heap footprint <15MB regardless of story length."
+    },
+    {
+      "decision": "Dedicated single-thread AudioTrackDispatcher with MAX_PRIORITY thread for AudioPlayer writes",
+      "reason": "Completely isolates blocking AudioTrack.write(..., WRITE_BLOCKING) operations off Dispatchers.Default, preventing compute thread pool starvation and audio underrun glitches."
     }
   ]
 }

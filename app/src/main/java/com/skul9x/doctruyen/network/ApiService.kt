@@ -90,9 +90,13 @@ object RetrofitClient {
     
     var BASE_URL = "https://skul9x.free.nf/truyen/" // Fallback/Cache
     
+    fun getLoggingLevel(isDebug: Boolean = BuildConfig.DEBUG): HttpLoggingInterceptor.Level {
+        return if (isDebug) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+    }
+
     private fun createClient(): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.HEADERS
+            level = getLoggingLevel(BuildConfig.DEBUG)
         }
         
         return OkHttpClient.Builder()

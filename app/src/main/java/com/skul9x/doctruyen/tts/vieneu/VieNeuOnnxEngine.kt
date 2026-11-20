@@ -2,6 +2,7 @@ package com.skul9x.doctruyen.tts.vieneu
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.util.Log
 import java.io.File
@@ -25,13 +26,41 @@ class VieNeuOnnxEngine(
     val config: VieNeuConfig,
     val tokenizer: VieNeuTokenizer,
     val textEmbeddings: Array<FloatArray>,           // (textVocabSize, hiddenSize)
-    val audioEmbeddings: Array<Array<FloatArray>>,    // (nVq, audioVocabSize, hiddenSize)
+    audioEmbeddingsIn: Array<Array<FloatArray>>? = null,    // (nVq, audioVocabSize, hiddenSize) - legacy/compat
     val xvecW: Array<FloatArray>?,                   // (hiddenSize, speakerEmbeddingDim)
     val xvecB: FloatArray?,                          // (hiddenSize)
     val xvecLnW: FloatArray?,                        // (hiddenSize)
     val xvecLnB: FloatArray?,                        // (hiddenSize)
-    val xvecLnEps: Float = 1e-5f
+    val xvecLnEps: Float = 1e-5f,
+    flatAudioEmbeddingsIn: Array<FloatArray>? = null,
+    val flatAudioWeights: FloatArray? = null
 ) : AutoCloseable {
+
+    constructor(
+        sessionManager: OnnxSessionManager,
+        config: VieNeuConfig,
+        tokenizer: VieNeuTokenizer,
+        textEmbeddings: Array<FloatArray>,
+        audioEmbeddings: Array<Array<FloatArray>>,
+        xvecW: Array<FloatArray>?,
+        xvecB: FloatArray?,
+        xvecLnW: FloatArray?,
+        xvecLnB: FloatArray?,
+        xvecLnEps: Float = 1e-5f
+    ) : this(
+        sessionManager = sessionManager,
+        config = config,
+        tokenizer = tokenizer,
+        textEmbeddings = textEmbeddings,
+        audioEmbeddingsIn = audioEmbeddings,
+        xvecW = xvecW,
+        xvecB = xvecB,
+        xvecLnW = xvecLnW,
+        xvecLnB = xvecLnB,
+        xvecLnEps = xvecLnEps,
+        flatAudioEmbeddingsIn = null,
+        flatAudioWeights = null
+    )
 
     val quantizationType: OnnxSessionManager.QuantizationType
         get() = sessionManager.quantizationType
@@ -53,21 +82,66 @@ class VieNeuOnnxEngine(
     private var topKLogitsBuffer = FloatArray(256)
     private var probsBuffer = DoubleArray(256)
 
-    // W2 optimization: Contiguous flattened audio embeddings per channel for cache locality
+    // Flat audio embeddings per channel for cache locality and zero-copy slicing
     // shape: flatAudioEmbeddings[ch] has size (audioVocabSize * hiddenSize)
-    val flatAudioEmbeddings: Array<FloatArray> = Array(audioEmbeddings.size) { ch ->
-        val vSize = audioEmbeddings[ch].size
-        val hSize = config.hiddenSize
-        val flat = FloatArray(vSize * hSize)
-        for (v in 0 until vSize) {
-            val emb = audioEmbeddings[ch][v]
-            System.arraycopy(emb, 0, flat, v * hSize, hSize)
+    val flatAudioEmbeddings: Array<FloatArray> = when {
+        flatAudioEmbeddingsIn != null -> flatAudioEmbeddingsIn
+        audioEmbeddingsIn != null -> Array(audioEmbeddingsIn.size) { ch ->
+            val vSize = audioEmbeddingsIn[ch].size
+            val hSize = config.hiddenSize
+            val flat = FloatArray(vSize * hSize)
+            for (v in 0 until vSize) {
+                val emb = audioEmbeddingsIn[ch][v]
+                System.arraycopy(emb, 0, flat, v * hSize, hSize)
+            }
+            flat
         }
-        flat
+        flatAudioWeights != null -> {
+            val nChannels = config.nVq
+            val channelStride = flatAudioWeights.size / nChannels
+            Array(nChannels) { ch ->
+                val slice = FloatArray(channelStride)
+                System.arraycopy(flatAudioWeights, ch * channelStride, slice, 0, channelStride)
+                slice
+            }
+        }
+        else -> throw IllegalArgumentException("Either flatAudioEmbeddingsIn, audioEmbeddingsIn, or flatAudioWeights must be provided")
     }
+
+    private var _cachedAudioEmbeddings3D: Array<Array<FloatArray>>? = audioEmbeddingsIn
+
+    val audioEmbeddings: Array<Array<FloatArray>>
+        get() {
+            val existing = _cachedAudioEmbeddings3D
+            if (existing != null) return existing
+            val nCh = flatAudioEmbeddings.size
+            val H = config.hiddenSize
+            val vSize = flatAudioEmbeddings[0].size / H
+            val res = Array(nCh) { ch ->
+                Array(vSize) { v ->
+                    val slice = FloatArray(H)
+                    System.arraycopy(flatAudioEmbeddings[ch], v * H, slice, 0, H)
+                    slice
+                }
+            }
+            _cachedAudioEmbeddings3D = res
+            return res
+        }
+
     // Pre-allocated channel logits buffer
-    private val channelLogitsBuffer: Array<FloatArray> = Array(audioEmbeddings.size) { ch ->
-        FloatArray(audioEmbeddings[ch].size)
+    private val channelLogitsBuffer: Array<FloatArray> = Array(flatAudioEmbeddings.size) { ch ->
+        FloatArray(flatAudioEmbeddings[ch].size / config.hiddenSize)
+    }
+
+    fun getAudioEmbeddingVector(ch: Int, code: Int): FloatArray {
+        val H = config.hiddenSize
+        val vec = FloatArray(H)
+        System.arraycopy(flatAudioEmbeddings[ch], code * H, vec, 0, H)
+        return vec
+    }
+
+    fun getTextEmbeddingVector(tokenId: Int): FloatArray {
+        return textEmbeddings[tokenId]
     }
 
     private var cachedEmptyPastK: OnnxTensor? = null
@@ -210,9 +284,8 @@ class VieNeuOnnxEngine(
         val L = config.numHiddenLayers // 12
 
         // 1. Prefill Step
-        var h: FloatArray // size H (last hidden vector)
-        var pastK: List<CacheTensor>
-        var pastV: List<CacheTensor>
+        val h = FloatArray(H) // size H (last hidden vector)
+        var prevResult: OrtSession.Result? = null
 
         val prefillInputs = HashMap<String, OnnxTensor>()
         val promptTensor = OnnxTensor.createTensor(
@@ -222,124 +295,96 @@ class VieNeuOnnxEngine(
         )
         prefillInputs["inputs_embeds"] = promptTensor
 
-        sessionManager.prefillSession.run(prefillInputs).use { preResult ->
-            promptTensor.close()
-
-            val hiddenTensor = preResult.get(0) as OnnxTensor
-            val hiddenFb = hiddenTensor.floatBuffer
-            val hiddenFlat = FloatArray(hiddenFb.remaining())
-            hiddenFb.get(hiddenFlat)
-
-            // Extract last hidden row: hidden[0, tPrompt-1, :]
-            h = FloatArray(H)
-            System.arraycopy(hiddenFlat, (tPrompt - 1) * H, h, 0, H)
-
-            val kList = ArrayList<CacheTensor>(L)
-            val vList = ArrayList<CacheTensor>(L)
-            for (i in 0 until L) {
-                val kt = preResult.get(1 + i) as OnnxTensor
-                val vt = preResult.get(1 + L + i) as OnnxTensor
-                kList.add(CacheTensor.fromOnnxTensor(kt))
-                vList.add(CacheTensor.fromOnnxTensor(vt))
-            }
-            pastK = kList
-            pastV = vList
-        }
-
         // 2. Autoregressive Loop
         val effectiveMaxFrames = min(maxNewFrames, maxExpectedFrames(phonemes))
         val frames = ArrayList<IntArray>()
         val hist = if (kotlin.math.abs(repetitionPenalty - 1.0f) > 1e-4f) {
-            RepetitionHistory(nChannels = config.nVq, window = 64, vocabSize = audioEmbeddings[0].size)
+            RepetitionHistory(nChannels = config.nVq, window = 64, vocabSize = flatAudioEmbeddings[0].size / config.hiddenSize)
         } else {
             null
         }
 
-        val nextKList = ArrayList<CacheTensor>(L)
-        val nextVList = ArrayList<CacheTensor>(L)
+        val slotRow = IntArray(config.nVq + 1)
+        slotRow[0] = config.speechGenerationStartTokenId
+        val decodeInputs = HashMap<String, OnnxTensor>(2 * L + 4)
 
-        for (t in 0 until effectiveMaxFrames) {
-            val (codes, eos) = acousticFrame(
-                h = h,
-                temperature = temperature,
-                topK = topK,
-                topP = topP,
-                repetitionPenalty = repetitionPenalty,
-                hist = hist
-            )
-            frames.add(codes)
-            if (eos) {
-                break
-            }
+        var promptTensorClosed = false
+        try {
+            val preResult = sessionManager.prefillSession.run(prefillInputs)
+            promptTensor.close()
+            promptTensorClosed = true
 
-            // Build decode step slot: [sgs, codes[0], ..., codes[15]]
-            val slotRow = IntArray(config.nVq + 1)
-            slotRow[0] = config.speechGenerationStartTokenId
-            System.arraycopy(codes, 0, slotRow, 1, config.nVq)
+            val hiddenTensor = preResult.get(0) as OnnxTensor
+            val hiddenFb = hiddenTensor.floatBuffer
+            hiddenFb.position((tPrompt - 1) * H)
+            hiddenFb.get(h)
 
-            val slotEmbeds = embedRows(arrayOf(slotRow), anchor) // shape (1, 1, H)
-            val decodeInputs = HashMap<String, OnnxTensor>()
-            val seTensor = OnnxTensor.createTensor(
-                env,
-                FloatBuffer.wrap(slotEmbeds),
-                longArrayOf(1, 1, H.toLong())
-            )
-            val posTensor = OnnxTensor.createTensor(
-                env,
-                LongBuffer.wrap(longArrayOf((tPrompt + t).toLong())),
-                longArrayOf(1, 1)
-            )
-            decodeInputs["inputs_embeds"] = seTensor
-            decodeInputs["position_ids"] = posTensor
+            prevResult = preResult
 
-            val createdCacheTensors = ArrayList<OnnxTensor>(2 * L)
-            for (i in 0 until L) {
-                val kt = pastK[i].toOnnxTensor(env)
-                val vt = pastV[i].toOnnxTensor(env)
-                createdCacheTensors.add(kt)
-                createdCacheTensors.add(vt)
-                decodeInputs["past_k_$i"] = kt
-                decodeInputs["past_v_$i"] = vt
-            }
+            for (t in 0 until effectiveMaxFrames) {
+                if (Thread.currentThread().isInterrupted) {
+                    throw InterruptedException("Synthesis cancelled")
+                }
 
-            sessionManager.decodeSession.run(decodeInputs).use { decResult ->
+                val (codes, eos) = acousticFrame(
+                    h = h,
+                    temperature = temperature,
+                    topK = topK,
+                    topP = topP,
+                    repetitionPenalty = repetitionPenalty,
+                    hist = hist
+                )
+                frames.add(codes)
+                if (eos) {
+                    break
+                }
+
+                // Build decode step slot: [sgs, codes[0], ..., codes[15]]
+                System.arraycopy(codes, 0, slotRow, 1, config.nVq)
+
+                val slotEmbeds = embedRows(arrayOf(slotRow), anchor) // shape (1, 1, H)
+                val seTensor = OnnxTensor.createTensor(
+                    env,
+                    FloatBuffer.wrap(slotEmbeds),
+                    longArrayOf(1, 1, H.toLong())
+                )
+                val posTensor = OnnxTensor.createTensor(
+                    env,
+                    LongBuffer.wrap(longArrayOf((tPrompt + t).toLong())),
+                    longArrayOf(1, 1)
+                )
+
+                decodeInputs.clear()
+                decodeInputs["inputs_embeds"] = seTensor
+                decodeInputs["position_ids"] = posTensor
+
+                for (i in 0 until L) {
+                    decodeInputs["past_k_$i"] = prevResult!!.get(1 + i) as OnnxTensor
+                    decodeInputs["past_v_$i"] = prevResult!!.get(1 + L + i) as OnnxTensor
+                }
+
+                val decResult = sessionManager.decodeSession.run(decodeInputs)
                 seTensor.close()
                 posTensor.close()
-                for (ct in createdCacheTensors) ct.close()
 
-                val hiddenTensor = decResult.get(0) as OnnxTensor
-                val hiddenFb = hiddenTensor.floatBuffer
-                h = FloatArray(H)
-                hiddenFb.get(h)
+                val hiddenTensorDec = decResult.get(0) as OnnxTensor
+                val hiddenFbDec = hiddenTensorDec.floatBuffer
+                hiddenFbDec.position(0)
+                hiddenFbDec.get(h)
 
-                nextKList.clear()
-                nextVList.clear()
-                for (i in 0 until L) {
-                    val kt = decResult.get(1 + i) as OnnxTensor
-                    val vt = decResult.get(1 + L + i) as OnnxTensor
-                    nextKList.add(CacheTensor.fromOnnxTensor(kt))
-                    nextVList.add(CacheTensor.fromOnnxTensor(vt))
-                }
-
-                // C2 Fix: Recycle and clear old CacheTensors before replacement
-                for (i in 0 until L) {
-                    pastK[i].recycle()
-                    pastV[i].recycle()
-                }
-
-                pastK = ArrayList(nextKList)
-                pastV = ArrayList(nextVList)
+                // Handover: close old previous result and retain current result natively
+                prevResult!!.close()
+                prevResult = decResult
             }
-
-            // Periodic GC hint every 100 frames as a safety net
-            if ((t + 1) % 100 == 0) {
-                System.gc()
+        } finally {
+            if (!promptTensorClosed) {
+                try {
+                    promptTensor.close()
+                } catch (_: Throwable) {}
             }
+            prevResult?.close()
+            prevResult = null
         }
-
-        // Clean up last pastK/pastV after loop
-        for (ct in pastK) ct.recycle()
-        for (ct in pastV) ct.recycle()
 
         val backboneDuration = System.currentTimeMillis() - backboneStart
 
@@ -507,81 +552,81 @@ class VieNeuOnnxEngine(
         feed0["past_k_0"] = emptyPastK
         feed0["past_v_0"] = emptyPastV
 
-        var slot0: FloatArray
-        var pk: CacheTensor
-        var pv: CacheTensor
+        val slot0 = FloatArray(H)
+        val vec = FloatArray(H)
         val codes = IntArray(config.nVq)
+        var prevOut: OrtSession.Result? = null
 
-        sessionManager.acousticSession.run(feed0).use { out0 ->
+        var initialTensorsClosed = false
+        try {
+            val out0 = sessionManager.acousticSession.run(feed0)
             tokTensor.close()
             posTensor0.close()
+            initialTensorsClosed = true
 
-            val hiddenTensor = out0.get(0) as OnnxTensor
-            val hiddenFb = hiddenTensor.floatBuffer
-            val hiddenFlat = FloatArray(hiddenFb.remaining())
-            hiddenFb.get(hiddenFlat)
+            val hiddenTensor0 = out0.get(0) as OnnxTensor
+            val hiddenFb0 = hiddenTensor0.floatBuffer
 
             // hidden shape: (1, 2, H)
-            slot0 = FloatArray(H)
-            val vec0 = FloatArray(H)
-            System.arraycopy(hiddenFlat, 0, slot0, 0, H)
-            System.arraycopy(hiddenFlat, H, vec0, 0, H)
-
-            val kt = out0.get(1) as OnnxTensor
-            val vt = out0.get(2) as OnnxTensor
-            pk = CacheTensor.fromOnnxTensor(kt)
-            pv = CacheTensor.fromOnnxTensor(vt)
+            hiddenFb0.position(0)
+            hiddenFb0.get(slot0)
+            hiddenFb0.get(vec)
 
             // Sample code for channel 0
-            codes[0] = sampleCode(0, vec0, temperature, topK, topP, repetitionPenalty, hist)
+            codes[0] = sampleCode(0, vec, temperature, topK, topP, repetitionPenalty, hist)
             hist?.add(0, codes[0])
-        }
 
-        // Subsequent channels 1..15
-        for (ch in 1 until config.nVq) {
-            val prevCode = codes[ch - 1]
-            val emb = audioEmbeddings[ch - 1][prevCode] // size H
+            prevOut = out0
 
-            val feed = HashMap<String, OnnxTensor>()
-            val embTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(emb), longArrayOf(1, 1, H.toLong()))
-            val posTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf((ch + 1).toLong())), longArrayOf(1, 1))
-            val pastKTensor = pk.toOnnxTensor(env)
-            val pastVTensor = pv.toOnnxTensor(env)
+            // Subsequent channels 1..15
+            val feed = HashMap<String, OnnxTensor>(8)
+            for (ch in 1 until config.nVq) {
+                if (Thread.currentThread().isInterrupted) {
+                    throw InterruptedException("Acoustic frame synthesis cancelled")
+                }
 
-            feed["token_emb"] = embTensor
-            feed["position_ids"] = posTensor
-            feed["past_k_0"] = pastKTensor
-            feed["past_v_0"] = pastVTensor
+                val prevCode = codes[ch - 1]
+                val flatEmb = flatAudioEmbeddings[ch - 1]
 
-            sessionManager.acousticSession.run(feed).use { out ->
+                val embTensor = OnnxTensor.createTensor(
+                    env,
+                    FloatBuffer.wrap(flatEmb, prevCode * H, H),
+                    longArrayOf(1, 1, H.toLong())
+                )
+                val posTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf((ch + 1).toLong())), longArrayOf(1, 1))
+
+                feed.clear()
+                feed["token_emb"] = embTensor
+                feed["position_ids"] = posTensor
+                feed["past_k_0"] = prevOut!!.get(1) as OnnxTensor
+                feed["past_v_0"] = prevOut!!.get(2) as OnnxTensor
+
+                val out = sessionManager.acousticSession.run(feed)
                 embTensor.close()
                 posTensor.close()
-                pastKTensor.close()
-                pastVTensor.close()
 
-                val hiddenTensor = out.get(0) as OnnxTensor
-                val hiddenFb = hiddenTensor.floatBuffer
-                val vec = FloatArray(H)
-                hiddenFb.get(vec)
+                val hiddenTensorCh = out.get(0) as OnnxTensor
+                val hiddenFbCh = hiddenTensorCh.floatBuffer
+                hiddenFbCh.position(0)
+                hiddenFbCh.get(vec)
 
-                val kt = out.get(1) as OnnxTensor
-                val vt = out.get(2) as OnnxTensor
-                
-                // Recycle previous intermediate pk and pv before replacing
-                pk.recycle()
-                pv.recycle()
-
-                pk = CacheTensor.fromOnnxTensor(kt)
-                pv = CacheTensor.fromOnnxTensor(vt)
+                // Handover: close old previous result and retain current result natively
+                prevOut!!.close()
+                prevOut = out
 
                 codes[ch] = sampleCode(ch, vec, temperature, topK, topP, repetitionPenalty, hist)
                 hist?.add(ch, codes[ch])
             }
+        } finally {
+            if (!initialTensorsClosed) {
+                try {
+                    tokTensor.close()
+                    posTensor0.close()
+                } catch (_: Throwable) {}
+            }
+            prevOut?.close()
+            prevOut = null
         }
-
-        // Recycle final pk and pv after completing all channels
-        pk.recycle()
-        pv.recycle()
 
         // Text logits for EOS check: slot0 @ text_emb.T
         // W1 optimization: compute dot product for EOS token (token 6) and verify if it dominates vs other candidate tokens
@@ -621,20 +666,12 @@ class VieNeuOnnxEngine(
         repetitionPenalty: Float = 1.2f,
         hist: RepetitionHistory? = null
     ): Int {
-        val audioVocabSize = audioEmbeddings[ch].size // 1024
-        val logits = channelLogitsBuffer[ch]
         val H = config.hiddenSize
+        val audioVocabSize = flatAudioEmbeddings[ch].size / H // 1024
+        val logits = channelLogitsBuffer[ch]
         val flatEmb = flatAudioEmbeddings[ch]
 
-        // W2 optimization: single loop with contiguous stride access for matrix-vector multiply
-        for (v in 0 until audioVocabSize) {
-            val offset = v * H
-            var dot = 0f
-            for (h in 0 until H) {
-                dot += vec[h] * flatEmb[offset + h]
-            }
-            logits[v] = dot
-        }
+        computeAcousticProjectionLogits(vec, flatEmb, logits, H, audioVocabSize)
 
         return topKSample(
             logits = logits,
@@ -657,19 +694,12 @@ class VieNeuOnnxEngine(
         repetitionPenalty: Float,
         prev: Set<Int>?
     ): Int {
-        val audioVocabSize = audioEmbeddings[ch].size
-        val logits = channelLogitsBuffer[ch]
         val H = config.hiddenSize
+        val audioVocabSize = flatAudioEmbeddings[ch].size / H
+        val logits = channelLogitsBuffer[ch]
         val flatEmb = flatAudioEmbeddings[ch]
 
-        for (v in 0 until audioVocabSize) {
-            val offset = v * H
-            var dot = 0f
-            for (h in 0 until H) {
-                dot += vec[h] * flatEmb[offset + h]
-            }
-            logits[v] = dot
-        }
+        computeAcousticProjectionLogits(vec, flatEmb, logits, H, audioVocabSize)
 
         return topKSample(
             logits = logits,
@@ -972,9 +1002,10 @@ class VieNeuOnnxEngine(
             for (ch in 0 until nVq) {
                 val audioId = rows[t][ch + 1]
                 if (audioId != config.audioPadTokenId) {
-                    val audioVec = audioEmbeddings[ch][audioId]
+                    val flatEmb = flatAudioEmbeddings[ch]
+                    val embOffset = audioId * H
                     for (h in 0 until H) {
-                        result[offset + h] += audioVec[h]
+                        result[offset + h] += flatEmb[embOffset + h]
                     }
                 }
             }
@@ -1018,18 +1049,28 @@ class VieNeuOnnxEngine(
     }
 
     /**
-     * Helper holder for float cache tensors (past_k / past_v).
+     * Helper holder for cache tensors (past_k / past_v).
+     * Supports zero-copy native OnnxTensor retention and pooling.
      */
     data class CacheTensor(
         var shape: LongArray,
-        var data: FloatArray
-    ) {
+        var data: FloatArray,
+        var nativeTensor: OnnxTensor? = null
+    ) : AutoCloseable {
+        val isNative: Boolean get() = nativeTensor != null
+
         fun toOnnxTensor(env: OrtEnvironment): OnnxTensor {
-            return OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape)
+            return nativeTensor ?: OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape)
         }
 
         fun recycle() {
+            nativeTensor?.close()
+            nativeTensor = null
             Pool.release(this)
+        }
+
+        override fun close() {
+            recycle()
         }
 
         object Pool {
@@ -1042,26 +1083,44 @@ class VieNeuOnnxEngine(
                 return if (cached != null) {
                     cached.shape = shape
                     cached.data = data
+                    cached.nativeTensor = null
                     cached
                 } else {
-                    CacheTensor(shape, data)
+                    CacheTensor(shape, data, null)
+                }
+            }
+
+            @Synchronized
+            fun obtainNative(tensor: OnnxTensor): CacheTensor {
+                val cached = if (pool.isNotEmpty()) pool.removeLast() else null
+                val s = tensor.info.shape.clone()
+                return if (cached != null) {
+                    cached.shape = s
+                    cached.data = FloatArray(0)
+                    cached.nativeTensor = tensor
+                    cached
+                } else {
+                    CacheTensor(s, FloatArray(0), tensor)
                 }
             }
 
             @Synchronized
             fun release(tensor: CacheTensor) {
+                tensor.nativeTensor?.close()
+                tensor.nativeTensor = null
+                tensor.data = FloatArray(0)
+                tensor.shape = LongArray(0)
                 if (pool.size < MAX_POOL_SIZE) {
-                    tensor.data = FloatArray(0)
-                    tensor.shape = LongArray(0)
                     pool.addLast(tensor)
-                } else {
-                    tensor.data = FloatArray(0)
-                    tensor.shape = LongArray(0)
                 }
             }
 
             @Synchronized
             fun clear() {
+                for (t in pool) {
+                    t.nativeTensor?.close()
+                    t.nativeTensor = null
+                }
                 pool.clear()
             }
         }
@@ -1074,6 +1133,10 @@ class VieNeuOnnxEngine(
                 fb.get(array)
                 return Pool.obtain(shape, array)
             }
+
+            fun fromNativeOnnxTensor(tensor: OnnxTensor): CacheTensor {
+                return Pool.obtainNative(tensor)
+            }
         }
 
         override fun equals(other: Any?): Boolean {
@@ -1082,18 +1145,65 @@ class VieNeuOnnxEngine(
             other as CacheTensor
             if (!shape.contentEquals(other.shape)) return false
             if (!data.contentEquals(other.data)) return false
+            if (nativeTensor != other.nativeTensor) return false
             return true
         }
 
         override fun hashCode(): Int {
             var result = shape.contentHashCode()
             result = 31 * result + data.contentHashCode()
+            result = 31 * result + (nativeTensor?.hashCode() ?: 0)
             return result
         }
     }
 
     companion object {
         private const val TAG = "VieNeuOnnxEngine"
+
+        /**
+         * Fast matrix-vector projection for acoustic frame sampling: logits = vec @ flatEmb^T
+         * Computes vocabSize dot products of dimension H using 8-way unrolled accumulators.
+         * Eliminates serial loop-carried dependency stalls and exposes ILP to SIMD pipelines.
+         */
+        fun computeAcousticProjectionLogits(
+            vec: FloatArray,
+            flatEmb: FloatArray,
+            logits: FloatArray,
+            H: Int,
+            vocabSize: Int
+        ) {
+            val hLimit = H - 7
+            for (v in 0 until vocabSize) {
+                val offset = v * H
+                var d0 = 0f
+                var d1 = 0f
+                var d2 = 0f
+                var d3 = 0f
+                var d4 = 0f
+                var d5 = 0f
+                var d6 = 0f
+                var d7 = 0f
+                var h = 0
+
+                while (h < hLimit) {
+                    val o = offset + h
+                    d0 += vec[h] * flatEmb[o]
+                    d1 += vec[h + 1] * flatEmb[o + 1]
+                    d2 += vec[h + 2] * flatEmb[o + 2]
+                    d3 += vec[h + 3] * flatEmb[o + 3]
+                    d4 += vec[h + 4] * flatEmb[o + 4]
+                    d5 += vec[h + 5] * flatEmb[o + 5]
+                    d6 += vec[h + 6] * flatEmb[o + 6]
+                    d7 += vec[h + 7] * flatEmb[o + 7]
+                    h += 8
+                }
+                while (h < H) {
+                    d0 += vec[h] * flatEmb[offset + h]
+                    h++
+                }
+                logits[v] = ((d0 + d1) + (d2 + d3)) + ((d4 + d5) + (d6 + d7))
+            }
+        }
 
         const val MAX_FRAMES_PER_PHONE: Double = 2.0
         const val FRAME_CAP_SLACK: Int = 24
@@ -1153,8 +1263,13 @@ class VieNeuOnnxEngine(
 
             val textEmb = headsReader.get2D("text_emb")
                 ?: throw IllegalStateException("text_emb missing from vieneu_v3_heads.npz")
-            val audioEmb = headsReader.get3D("audio_emb")
-                ?: throw IllegalStateException("audio_emb missing from vieneu_v3_heads.npz")
+            val audioFlat = headsReader.getChannelFlatArrays("audio_emb")
+                ?: headsReader.get3D("audio_emb")?.let { Array(it.size) { ch ->
+                    val vSize = it[ch].size
+                    val flat = FloatArray(vSize * config.hiddenSize)
+                    for (v in 0 until vSize) System.arraycopy(it[ch][v], 0, flat, v * config.hiddenSize, config.hiddenSize)
+                    flat
+                }} ?: throw IllegalStateException("audio_emb missing from vieneu_v3_heads.npz")
             val xvecW = headsReader.get2D("xvec_w")
             val xvecB = headsReader.getFloatArray("xvec_b")
             val xvecLnW = headsReader.getFloatArray("xvec_ln_w")
@@ -1169,12 +1284,12 @@ class VieNeuOnnxEngine(
                 config = config,
                 tokenizer = tokenizer,
                 textEmbeddings = textEmb,
-                audioEmbeddings = audioEmb,
                 xvecW = xvecW,
                 xvecB = xvecB,
                 xvecLnW = xvecLnW,
                 xvecLnB = xvecLnB,
-                xvecLnEps = xvecLnEps
+                xvecLnEps = xvecLnEps,
+                flatAudioEmbeddingsIn = audioFlat
             )
         }
 

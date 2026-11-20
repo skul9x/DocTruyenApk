@@ -8,6 +8,29 @@ import java.util.LinkedHashMap
 
 object SeaG2P {
     private const val MAX_CACHE_SIZE = 512
+    const val MAX_CACHEABLE_LENGTH = 100
+
+    /**
+     * Determines whether text is a short, repeatable lexical item suitable for phoneme caching.
+     * Excludes long multi-sentence paragraphs and multiline passages to avoid wasteful
+     * synchronized hashing and cache thrashing.
+     */
+    fun isCacheable(text: String): Boolean {
+        if (text.length > MAX_CACHEABLE_LENGTH) return false
+        if (text.contains('\n') || text.contains('\r')) return false
+        var sentenceTerminators = 0
+        for (i in text.indices) {
+            val c = text[i]
+            if (c == '.' || c == '!' || c == '?') {
+                sentenceTerminators++
+                if (sentenceTerminators > 1) return false
+                if (i < text.length - 1 && text[i + 1].isWhitespace()) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
 
     // Thread-safe JVM-compatible LRU cache (bounded LinkedHashMap)
     private val phonemeCache: MutableMap<String, String> = Collections.synchronizedMap(
@@ -147,7 +170,10 @@ object SeaG2P {
             return ""
         }
 
-        phonemeCache[trimmed]?.let { return it }
+        val cacheable = isCacheable(trimmed)
+        if (cacheable) {
+            phonemeCache[trimmed]?.let { return it }
+        }
 
         val phonemes = try {
             nativePhonemize(trimmed)
@@ -157,7 +183,7 @@ object SeaG2P {
             trimmed
         }
 
-        if (phonemes.isNotEmpty()) {
+        if (cacheable && phonemes.isNotEmpty()) {
             phonemeCache[trimmed] = phonemes
         }
 
