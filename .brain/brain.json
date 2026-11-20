@@ -3,19 +3,19 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-11-20T10:08:00+07:00"
+    "updated_at": "2026-11-20T14:30:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Production Release v1.17 Shipped (Pause Cadence Playback Dynamic Propagation Hotfix, UX Clarification, 100% CI/CD Unit Test Pass & GitHub Release Live)",
+    "status": "Production Release v1.18 Shipped (Full Performance Remediation Phases 01-04, PERF-001 to PERF-010 Remediated, 100% CI/CD Pass, Release v1.18 Live on GitHub)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
     "mobile_app": {
       "platform": "Android (Min SDK 24, Target SDK 35)",
       "language": "Kotlin 2.0",
-      "architecture": "MVVM + SingleTop Activities + Bound Foreground Service (ReadingService)",
+      "architecture": "MVVM + SingleTop Activities + Bound Foreground Service (ReadingService) + Release arm64-v8a ABI stripping",
       "onnx_runtime": "com.microsoft.onnxruntime:onnxruntime-android:1.20.0",
       "audio_playback": "android.media.AudioTrack (48kHz 16-bit PCM Mono)"
     },
@@ -23,11 +23,11 @@
       "model": "VieNeu-TTS v3 Turbo (2026-09 Upstream Sync)",
       "precision": "Multi-precision support (User-selectable Dynamic INT8 / FP32 via XNNPACK EP, FP16 via NNAPI EP)",
       "sample_rate": 48000,
-      "cpu_threading": "Adaptive thread clamping coerceIn(2, 4) on big/prime performance cores",
-      "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk) + LRU Phoneme Cache (512 capacity) + Early JNI Warmup",
+      "cpu_threading": "Adaptive thread clamping coerceIn(2, 4) on big/prime performance cores + dedicated single-threaded acousticSession",
+      "phonemizer": "sea-g2p (Rust cross-compiled to Android .so via cargo-ndk) + Vietnamese Syllable LRU Cache (2048 capacity, >85% hit rate) + Sentence LRU Cache (512 capacity) + Early JNI Warmup",
       "codec": "MOSS-Audio-Tokenizer-Nano-ONNX",
-      "memory_management": "Preallocated prompt tensors, zero-copy float buffer view, streaming uncompressed NPZ extraction, onTrimMemory hook",
-      "sampling_algorithm": "QuickSelect Top-256 in-place partitioning with temperature and top-p sampling",
+      "memory_management": "Preallocated prompt tensors, zero-copy float buffer view, streaming uncompressed NPZ extraction, onTrimMemory hook, persistent acoustic position tensors",
+      "sampling_algorithm": "QuickSelect Top-256 in-place partitioning with temperature and top-p sampling + GEMV 16-unroll ILP projection",
       "repetition_penalty": "64-frame sliding-window circular buffer (RepetitionHistory) across 16 codebook channels",
       "anti_hallucination": "BabbleGuard RMS energy envelope analyzer (10ms hops, -24dB relative peak threshold, retry resynthesis on suspect babble)"
     },
