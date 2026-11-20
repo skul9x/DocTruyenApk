@@ -74,6 +74,9 @@
    - Triệt tiêu hoàn toàn rò rỉ headers nhạy cảm và chi phí cấp phát chuỗi log trong logcat production.
 6. **Bộ Kiểm Thử Phase 04**:
    - `RuntimeOptimizationAndPrecisionVerificationTest.kt` (4/4 tests passed 100%).
+7. **Build & Release Production v1.14**:
+   - Đã push lên GitHub origin `main` và chạy CI/CD pipeline thành công 100%.
+   - Release: `v1.14` kèm file `doctruyenapk-v1.14.apk`.
 
 ---
 

@@ -1,8 +1,8 @@
 {
-  "updated_at": "2026-11-20T18:38:00+07:00",
+  "updated_at": "2026-11-20T19:02:00+07:00",
   "working_on": {
     "feature": "Comprehensive Performance & Memory Optimization",
-    "task": "Completed Phase 04: Runtime Threading, Execution Providers & Engine Tuning.",
+    "task": "Completed Phase 04 & Successfully Deployed Release v1.14 via GitHub Actions CI/CD.",
     "status": "completed",
     "files": [
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
@@ -11,6 +11,7 @@
       "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
       "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+      "app/proguard-rules.pro",
       "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/RuntimeOptimizationAndPrecisionVerificationTest.kt",
       "plans/261120-1745-comprehensive-performance-fix/phase-04-runtime-threading-and-engine-optimizations.md",
       "plans/261120-1745-comprehensive-performance-fix/plan.md",
@@ -21,10 +22,19 @@
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "Phase 04 is fully implemented and verified. Configured intraOpNumThreads on OrtSession.SessionOptions prior to XNNPACK registration, eliminating single-threaded fallback starvation on CPU execution pools. Aligned precision configuration between UserConfig, OnnxSessionManager, and SettingsActivity with truthful asset detection (hasInt8Assets, resolveEffectivePrecision), removing deceptive INT8/FP32 fallback warnings and ensuring truthful telemetry reporting in TtsMetricsLogger. Streamlined sampleCode in VieNeuOnnxEngine via 8-way unrolled computeAcousticProjectionLogits for 1024x768 matrix-vector multiplication with multiple accumulators. Filtered long multiline/multi-sentence paragraphs in SeaG2P (isCacheable) to prevent synchronized hash overhead and LRU cache thrashing. Enforced HttpLoggingInterceptor.Level.NONE in ApiService for release builds. Verified via RuntimeOptimizationAndPrecisionVerificationTest.kt (4/4 tests passed 100%)."
+    "notes": "All 4 phases of Comprehensive Performance & Memory Optimization have been implemented, verified, committed, pushed, and built via CI/CD into Release v1.14 (doctruyenapk-v1.14.apk)."
   },
   "pending_tasks": [],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-20T18:58:00+07:00",
+      "type": "deployment",
+      "description": "Fixed R8 syntax issue in proguard-rules.pro, committed and pushed to origin main, and completed GitHub Actions CI/CD pipeline. Released v1.14 with signed APK doctruyenapk-v1.14.apk.",
+      "files": [
+        "app/proguard-rules.pro",
+        "CHANGELOG.md"
+      ]
+    },
     {
       "timestamp": "2026-11-20T18:38:00+07:00",
       "type": "feature",
