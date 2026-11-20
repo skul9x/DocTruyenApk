@@ -148,6 +148,8 @@ object UserConfig {
     const val KEY_TTS_PAUSE_PARAGRAPH = "tts_pause_paragraph"
     const val KEY_TTS_PAUSE_CLAUSE = "tts_pause_clause"
     const val KEY_TTS_DEBUG_LOGGING = "tts_debug_logging"
+    const val KEY_TTS_PREWARM_ENABLED = "tts_prewarm_enabled"
+    const val DEFAULT_TTS_PREWARM_ENABLED = true
 
     const val DEFAULT_PAUSE_SENTENCE = 400
     const val MIN_PAUSE_SENTENCE = 0
@@ -199,6 +201,14 @@ object UserConfig {
 
     fun setDebugLoggingEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_TTS_DEBUG_LOGGING, enabled).apply()
+    }
+
+    fun isPrewarmEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_TTS_PREWARM_ENABLED, DEFAULT_TTS_PREWARM_ENABLED)
+    }
+
+    fun setPrewarmEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_TTS_PREWARM_ENABLED, enabled).apply()
     }
 
     /**

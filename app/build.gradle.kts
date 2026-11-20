@@ -57,6 +57,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
+        debug {
+            ndk {
+                abiFilters += listOf("x86_64", "arm64-v8a")
+            }
         }
     }
     buildFeatures {

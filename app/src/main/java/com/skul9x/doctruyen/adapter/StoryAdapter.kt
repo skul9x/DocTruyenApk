@@ -98,7 +98,7 @@ class StoryAdapter(
                 com.bumptech.glide.load.model.GlideUrl(imageUrl)
             } else null
 
-            // Optimized Glide loading with priority and caching
+            // Optimized Glide loading with priority and caching (zero per-bind listener allocations)
             Glide.with(itemView.context)
                 .load(glideUrl)
                 .priority(com.bumptech.glide.Priority.HIGH)
@@ -108,28 +108,6 @@ class StoryAdapter(
                 .placeholder(R.drawable.placeholder_story)
                 .error(R.drawable.placeholder_story)
                 .centerCrop()
-                .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
-                    override fun onLoadFailed(
-                        e: com.bumptech.glide.load.engine.GlideException?,
-                        model: Any?,
-                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
-                        isFirstResource: Boolean
-                    ): Boolean {
-                        com.skul9x.doctruyen.utils.DebugLogger.log("IMAGE_ERROR", "Failed: $imageUrl | Error: ${e?.message}")
-                        return false // Let Glide handle error placeholder
-                    }
-
-                    override fun onResourceReady(
-                        resource: android.graphics.drawable.Drawable,
-                        model: Any,
-                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
-                        dataSource: com.bumptech.glide.load.DataSource,
-                        isFirstResource: Boolean
-                    ): Boolean {
-                        com.skul9x.doctruyen.utils.DebugLogger.log("IMAGE_OK", "Loaded: $imageUrl from $dataSource")
-                        return false
-                    }
-                })
                 .into(imgStory)
 
             // Click listener

@@ -65,6 +65,7 @@ class StoryDetailActivity : AppCompatActivity() {
     
     // Pre-warming state
     private var isPrewarmTriggered = false
+    private var prewarmDebounceJob: kotlinx.coroutines.Job? = null
     
     // UI state cache to prevent redundant widget re-rendering
     private var lastRenderedState: com.skul9x.doctruyen.tts.ITTSManager.TTSState? = null
@@ -86,8 +87,8 @@ class StoryDetailActivity : AppCompatActivity() {
             
             DebugLogger.log(TAG, "Service bound: isBound=$isBound, currentStoryId=$storyId", LogType.INFO)
             
-            // Trigger queued prewarm if story content was already loaded before service connected
-            triggerPrewarmIfReady()
+            // Trigger queued debounced prewarm if story content was already loaded before service connected
+            schedulePrewarmDebounced()
             
             // Connect to state updates
             boundService.setStateCallback { state ->
@@ -172,6 +173,7 @@ class StoryDetailActivity : AppCompatActivity() {
     
     override fun onStop() {
         super.onStop()
+        cancelPendingPrewarm()
         if (isBound) {
             readingService?.removeStateCallback()
             unbindService(serviceConnection)
@@ -344,8 +346,8 @@ class StoryDetailActivity : AppCompatActivity() {
                         DebugLogger.log(TAG, "⚡ auto_play flag is true: triggering immediate playback takeover", LogType.INFO)
                         handlePlayPause()
                     } else {
-                        // Proactively trigger background pre-warming for instant playback
-                        triggerPrewarmIfReady()
+                        // Proactively schedule debounced background pre-warming
+                        schedulePrewarmDebounced()
                     }
                 } else {
                     showErrorState("Không thể tải nội dung truyện")
@@ -385,6 +387,37 @@ class StoryDetailActivity : AppCompatActivity() {
     }
 
     /**
+     * Schedules background neural TTS prewarming with a 3-second debounce window.
+     * If the user navigates away or starts playing before 3s, the job is cancelled without synthesis.
+     */
+    fun schedulePrewarmDebounced() {
+        if (!com.skul9x.doctruyen.utils.UserConfig.isPrewarmEnabled(this)) {
+            DebugLogger.log(TAG, "⏩ Prewarming disabled in UserConfig, skipping", LogType.INFO)
+            return
+        }
+        if (isPrewarmTriggered) return
+
+        prewarmDebounceJob?.cancel()
+        prewarmDebounceJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(PREWARM_DEBOUNCE_DELAY_MS)
+            triggerPrewarmIfReady()
+        }
+    }
+
+    private fun cancelPendingPrewarm() {
+        if (prewarmDebounceJob?.isActive == true) {
+            DebugLogger.log(TAG, "🧹 Cancelling pending debounced pre-warm job", LogType.INFO)
+            prewarmDebounceJob?.cancel()
+            prewarmDebounceJob = null
+        }
+        val service = readingService
+        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
+            DebugLogger.log(TAG, "🧹 Cancelling active service pre-warm", LogType.INFO)
+            service.cancelPrewarm()
+        }
+    }
+
+    /**
      * Proactively triggers background TTS pre-warming if story content and service are both ready.
      * Queued calls from onServiceConnected or loadStoryContent will safely resolve here.
      */
@@ -420,6 +453,10 @@ class StoryDetailActivity : AppCompatActivity() {
     }
     
     private fun handlePlayPause() {
+        // Cancel pending debounced prewarm if user triggers play/pause directly
+        prewarmDebounceJob?.cancel()
+        prewarmDebounceJob = null
+
         // Safe null check - with user feedback if service not ready
         val service = readingService
         if (service == null || !isBound) {
@@ -538,28 +575,19 @@ class StoryDetailActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        // Promptly cancel background pre-warming job if active and service is not currently playing
-        val service = readingService
-        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
-            DebugLogger.log(TAG, "🧹 onDestroy: Cancelling active pre-warm", LogType.INFO)
-            service.cancelPrewarm()
-        }
+        cancelPendingPrewarm()
     }
     
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this) {
-            // Cancel active pre-warming when user navigates back and service is not playing
-            val service = readingService
-            if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
-                DebugLogger.log(TAG, "🧹 onBackPressed: Cancelling active pre-warm", LogType.INFO)
-                service.cancelPrewarm()
-            }
+            cancelPendingPrewarm()
             finish()
             ActivityTransitionHelper.applyCloseTransition(this@StoryDetailActivity)
         }
     }
 
     companion object {
+        const val PREWARM_DEBOUNCE_DELAY_MS = 3000L
         val SCRIPT_REGEX = Regex("<script[^>]*>.*?</script>", RegexOption.IGNORE_CASE)
         val EVENT_HANDLER_REGEX = Regex("\\s*on\\w+\\s*=\\s*[\"'][^\"']*[\"']", RegexOption.IGNORE_CASE)
         val JAVASCRIPT_URI_REGEX = Regex("javascript:", RegexOption.IGNORE_CASE)

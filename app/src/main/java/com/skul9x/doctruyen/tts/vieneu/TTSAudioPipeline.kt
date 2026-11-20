@@ -11,7 +11,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -385,10 +384,13 @@ class TTSAudioPipeline(
                     val codecDuration: Long
 
                     if (engine != null) {
-                        val inferResult = withContext(NonCancellable) {
-                            val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
-                            engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
-                        }
+                        val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
+                        val inferResult = engine.inferWithTiming(
+                            phonemes = phonemes,
+                            voiceName = voiceName,
+                            temperature = effectiveTemp,
+                            cancellationSignal = { !isActive }
+                        )
                         pcmFloat = inferResult.pcm
                         backboneDuration = inferResult.timing.backboneDurationMs
                         codecDuration = inferResult.timing.codecDurationMs
@@ -476,7 +478,7 @@ class TTSAudioPipeline(
                 // Pre-buffering phase: Suspend until target duration or chunk count is reached without delay() loops
                 setState(PipelineState.Buffering(bufferedChunks = 0, targetChunks = targetChunks))
 
-                while (isActive && prebufferList.size < targetChunks && prebufferDurationMs < targetDurationMs) {
+                while (isActive && prebufferList.size < remainingChunks && prebufferDurationMs < targetDurationMs) {
                     val chunk = try {
                         chunkChannel.receive()
                     } catch (e: ClosedReceiveChannelException) {

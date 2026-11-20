@@ -19,7 +19,7 @@ import java.io.InputStream
  * 3. getBackboneDir resolves to backbone_int8 for INT8 request and backbone for FP32 request in dual-asset environment.
  * 4. INT8 model file path passes quantization detection as QuantizationType.INT8.
  * 5. Switching requested precision from INT8 to FP32 correctly points to the corresponding model directory without state pollution.
- * 6. Ancillary files (config.json, tokenizer.json, vieneu_v3_heads.npz) in both directories are preserved.
+ * 6. Ancillary files (config.json, tokenizer.json, vieneu_v3_heads.npz) are excluded from disk extraction to save flash memory.
  * 7. Asset extraction efficiency: avoid re-copying existing intact model assets.
  * 8. Fallback to FP32 if INT8 assets are missing.
  */
@@ -117,10 +117,10 @@ class DualAssetExtractionAndDetectionTest {
         assertTrue("vieneu_decode_step.onnx in int8 directory should exist", File(int8BackboneDir, "vieneu_decode_step.onnx").exists())
         assertTrue("vieneu_acoustic_cached.onnx in int8 directory should exist", File(int8BackboneDir, "vieneu_acoustic_cached.onnx").exists())
 
-        // Ancillary files in int8
-        assertTrue("config.json in int8 directory should exist", File(int8BackboneDir, "config.json").exists())
-        assertTrue("tokenizer.json in int8 directory should exist", File(int8BackboneDir, "tokenizer.json").exists())
-        assertTrue("vieneu_v3_heads.npz in int8 directory should exist", File(int8BackboneDir, "vieneu_v3_heads.npz").exists())
+        // Ancillary files in int8 are excluded from disk extraction (loaded directly from assets)
+        assertFalse("config.json in int8 directory should not exist (loaded from assets)", File(int8BackboneDir, "config.json").exists())
+        assertFalse("tokenizer.json in int8 directory should not exist (loaded from assets)", File(int8BackboneDir, "tokenizer.json").exists())
+        assertFalse("vieneu_v3_heads.npz in int8 directory should not exist (loaded from assets)", File(int8BackboneDir, "vieneu_v3_heads.npz").exists())
 
         // Common files
         assertTrue("codec directory should exist", File(extractedBase, "codec").exists())
@@ -142,10 +142,10 @@ class DualAssetExtractionAndDetectionTest {
         assertTrue("vieneu_decode_step.onnx in backbone directory should exist", File(fp32BackboneDir, "vieneu_decode_step.onnx").exists())
         assertTrue("vieneu_acoustic_cached.onnx in backbone directory should exist", File(fp32BackboneDir, "vieneu_acoustic_cached.onnx").exists())
 
-        // Ancillary files in fp32
-        assertTrue("config.json in backbone directory should exist", File(fp32BackboneDir, "config.json").exists())
-        assertTrue("tokenizer.json in backbone directory should exist", File(fp32BackboneDir, "tokenizer.json").exists())
-        assertTrue("vieneu_v3_heads.npz in backbone directory should exist", File(fp32BackboneDir, "vieneu_v3_heads.npz").exists())
+        // Ancillary files in fp32 are excluded from disk extraction (loaded directly from assets)
+        assertFalse("config.json in backbone directory should not exist (loaded from assets)", File(fp32BackboneDir, "config.json").exists())
+        assertFalse("tokenizer.json in backbone directory should not exist (loaded from assets)", File(fp32BackboneDir, "tokenizer.json").exists())
+        assertFalse("vieneu_v3_heads.npz in backbone directory should not exist (loaded from assets)", File(fp32BackboneDir, "vieneu_v3_heads.npz").exists())
 
         // Resolution
         val resolvedDir = OnnxSessionManager.getBackboneDir(extractedBase, "FP32")

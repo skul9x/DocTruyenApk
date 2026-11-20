@@ -2,6 +2,7 @@ package com.skul9x.doctruyen.utils
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.skul9x.doctruyen.BuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -26,7 +27,13 @@ object DebugLogger {
     private val logBuffer = ArrayDeque<LogEntry>(MAX_LOG_ENTRIES)
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
+    @Volatile
+    var isDebugEnabled: Boolean = BuildConfig.DEBUG
+
     fun log(tag: String, message: String, type: LogType = LogType.INFO) {
+        if (!isDebugEnabled) {
+            return
+        }
         val entry = LogEntry(System.currentTimeMillis(), tag, message, type)
         synchronized(logBuffer) {
             if (logBuffer.size >= MAX_LOG_ENTRIES) {
@@ -40,6 +47,9 @@ object DebugLogger {
     }
 
     fun logError(tag: String, message: String, e: Throwable? = null) {
+        if (!isDebugEnabled) {
+            return
+        }
         val extra = e?.let { "\nException: ${it.message}\n${it.stackTraceToString()}" } ?: ""
         log(tag, "$message$extra", LogType.ERROR)
     }

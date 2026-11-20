@@ -22,8 +22,13 @@ class OnnxSessionManager(
     val env: OrtEnvironment,
     val quantizationType: QuantizationType = QuantizationType.FP32,
     val executionProvider: String = "XNNPACK",
-    val sessionOptions: OrtSession.SessionOptions? = null
+    val sessionOptions: OrtSession.SessionOptions? = null,
+    val acousticSessionOptions: OrtSession.SessionOptions? = null
 ) : AutoCloseable {
+
+    val acousticIntraOpThreads: Int = 1
+
+    fun getAcousticIntraOpNumThreads(): Int = 1
 
     enum class QuantizationType {
         FP32,
@@ -40,6 +45,7 @@ class OnnxSessionManager(
     private var internalAcousticSession: OrtSession? = acousticSession
     private var internalCodecSession: OrtSession? = codecSession
     private var internalSessionOptions: OrtSession.SessionOptions? = sessionOptions
+    private var internalAcousticSessionOptions: OrtSession.SessionOptions? = acousticSessionOptions
 
     override fun close() {
         if (closed) return
@@ -49,11 +55,13 @@ class OnnxSessionManager(
         try { internalAcousticSession?.close() } catch (_: Exception) {}
         try { internalCodecSession?.close() } catch (_: Exception) {}
         try { internalSessionOptions?.close() } catch (_: Exception) {}
+        try { internalAcousticSessionOptions?.close() } catch (_: Exception) {}
         internalPrefillSession = null
         internalDecodeSession = null
         internalAcousticSession = null
         internalCodecSession = null
         internalSessionOptions = null
+        internalAcousticSessionOptions = null
     }
 
     companion object {
@@ -171,6 +179,55 @@ class OnnxSessionManager(
             return Pair(sessionOptions, epUsed)
         }
 
+        fun configureAcousticSessionOptions(
+            quantizationType: QuantizationType
+        ): Pair<OrtSession.SessionOptions, String> {
+            val sessionOptions = OrtSession.SessionOptions().apply {
+                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                setExecutionMode(OrtSession.SessionOptions.ExecutionMode.SEQUENTIAL)
+                setIntraOpNumThreads(1)
+                setInterOpNumThreads(1)
+                addConfigEntry("session.intra_op.allow_spinning", "0")
+                addConfigEntry("intra_op_num_threads", "1")
+            }
+
+            var epUsed = "CPU"
+            when (quantizationType) {
+                QuantizationType.FP16 -> {
+                    var nnapiSuccess = false
+                    try {
+                        sessionOptions.addNnapi(EnumSet.of(NNAPIFlags.USE_FP16))
+                        epUsed = "NNAPI"
+                        nnapiSuccess = true
+                        Log.i(TAG, "Configured NNAPI EP (USE_FP16) for acoustic session")
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "NNAPI EP initialization failed for acoustic session: ${e.message}")
+                    }
+
+                    if (!nnapiSuccess) {
+                        try {
+                            sessionOptions.addXnnpack(mapOf("intra_op_num_threads" to "1"))
+                            epUsed = "XNNPACK (Fallback)"
+                        } catch (_: Throwable) {
+                            epUsed = "CPU (Fallback)"
+                        }
+                    }
+                }
+                QuantizationType.INT8, QuantizationType.FP32 -> {
+                    try {
+                        sessionOptions.addXnnpack(mapOf("intra_op_num_threads" to "1"))
+                        epUsed = "XNNPACK"
+                        Log.i(TAG, "Configured XNNPACK EP with 1 thread for acoustic session")
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "Failed to add XNNPACK EP for acoustic session: ${e.message}. Falling back to standard CPU single-thread.")
+                        epUsed = "CPU"
+                    }
+                }
+            }
+
+            return Pair(sessionOptions, epUsed)
+        }
+
         fun create(
             context: Context,
             threads: Int = 0,
@@ -196,14 +253,15 @@ class OnnxSessionManager(
                 Log.w(TAG, "⚠️ Precision mismatch: Requested $precision ($normPrecision) but detected quantization is $detectedQuant on $prefillPath. INT8 model assets may be missing from APK.")
             }
             val (sessionOptions, epUsed) = configureSessionOptions(detectedQuant, threads)
+            val (acousticSessionOptions, acousticEpUsed) = configureAcousticSessionOptions(detectedQuant)
 
-            Log.i(TAG, "Creating ONNX sessions [Quantization: $detectedQuant, EP: $epUsed, Precision: $precision]...")
+            Log.i(TAG, "Creating ONNX sessions [Quantization: $detectedQuant, EP: $epUsed, AcousticEP: $acousticEpUsed, Precision: $precision]...")
             val prefillSession = env.createSession(prefillPath, sessionOptions)
             val decodeSession = env.createSession(decodePath, sessionOptions)
-            val acousticSession = env.createSession(acousticPath, sessionOptions)
+            val acousticSession = env.createSession(acousticPath, acousticSessionOptions)
             val codecSession = env.createSession(codecPath, sessionOptions)
 
-            Log.i(TAG, "All 4 ONNX sessions initialized successfully [EP: $epUsed]")
+            Log.i(TAG, "All 4 ONNX sessions initialized successfully [EP: $epUsed, Acoustic: $acousticEpUsed]")
             return OnnxSessionManager(
                 prefillSession = prefillSession,
                 decodeSession = decodeSession,
@@ -212,7 +270,8 @@ class OnnxSessionManager(
                 env = env,
                 quantizationType = detectedQuant,
                 executionProvider = epUsed,
-                sessionOptions = sessionOptions
+                sessionOptions = sessionOptions,
+                acousticSessionOptions = acousticSessionOptions
             )
         }
 
@@ -251,10 +310,11 @@ class OnnxSessionManager(
 
             val detectedQuant = quantizationTypeOverride ?: detectQuantizationType(prefillPath)
             val (sessionOptions, epUsed) = configureSessionOptions(detectedQuant, threads)
+            val (acousticSessionOptions, _) = configureAcousticSessionOptions(detectedQuant)
 
             val prefillSession = env.createSession(prefillPath, sessionOptions)
             val decodeSession = env.createSession(decodePath, sessionOptions)
-            val acousticSession = env.createSession(acousticPath, sessionOptions)
+            val acousticSession = env.createSession(acousticPath, acousticSessionOptions)
             val codecSession = env.createSession(codecPath, sessionOptions)
 
             return OnnxSessionManager(
@@ -265,7 +325,8 @@ class OnnxSessionManager(
                 env = env,
                 quantizationType = detectedQuant,
                 executionProvider = epUsed,
-                sessionOptions = sessionOptions
+                sessionOptions = sessionOptions,
+                acousticSessionOptions = acousticSessionOptions
             )
         }
 
@@ -360,7 +421,9 @@ class OnnxSessionManager(
                     if (subChildren != null && subChildren.isNotEmpty()) {
                         copyAssetFolder(context, childPath, subTarget, forceOverwrite)
                     } else {
-                        copyAssetFile(context, childPath, subTarget, forceOverwrite)
+                        if (isExtractableNativeAsset(childPath)) {
+                            copyAssetFile(context, childPath, subTarget, forceOverwrite)
+                        }
                     }
                 }
             }
@@ -374,6 +437,18 @@ class OnnxSessionManager(
             return targetBase
         }
 
+        /**
+         * Returns true if the asset file is a native binary required by C++ runtimes
+         * (.onnx, .data, .bin) that strictly requires a POSIX filesystem path.
+         * Configuration (.json) and weight archives (.npz) are loaded directly
+         * from APK assets and excluded from disk extraction to save flash storage.
+         */
+        @androidx.annotation.VisibleForTesting
+        fun isExtractableNativeAsset(assetPath: String): Boolean {
+            val lower = assetPath.lowercase()
+            return lower.endsWith(".onnx") || lower.endsWith(".data") || lower.endsWith(".bin")
+        }
+
         @androidx.annotation.VisibleForTesting
         fun copyAssetFolder(
             context: Context,
@@ -385,12 +460,11 @@ class OnnxSessionManager(
 
             if (children.isEmpty()) {
                 // It's a file
-                copyAssetFile(context, assetPath, targetDir, force)
+                if (isExtractableNativeAsset(assetPath)) {
+                    copyAssetFile(context, assetPath, targetDir, force)
+                }
             } else {
                 // It's a directory
-                if (!targetDir.exists()) {
-                    targetDir.mkdirs()
-                }
                 for (child in children) {
                     val subAssetPath = if (assetPath.isEmpty()) child else "$assetPath/$child"
                     val subTarget = File(targetDir, child)
@@ -398,7 +472,9 @@ class OnnxSessionManager(
                     if (subChildren != null && subChildren.isNotEmpty()) {
                         copyAssetFolder(context, subAssetPath, subTarget, force)
                     } else {
-                        copyAssetFile(context, subAssetPath, subTarget, force)
+                        if (isExtractableNativeAsset(subAssetPath)) {
+                            copyAssetFile(context, subAssetPath, subTarget, force)
+                        }
                     }
                 }
             }

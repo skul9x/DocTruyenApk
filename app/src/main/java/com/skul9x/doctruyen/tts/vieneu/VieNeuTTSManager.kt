@@ -319,9 +319,12 @@ class VieNeuTTSManager(
                     if (!isActive) break
 
                     val inferStart = System.currentTimeMillis()
-                    val pcmFloat = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                        eng.infer(phonemes = phonemes, voiceName = effectiveVoice, temperature = profile.temperature)
-                    }
+                    val pcmFloat = eng.infer(
+                        phonemes = phonemes,
+                        voiceName = effectiveVoice,
+                        temperature = profile.temperature,
+                        cancellationSignal = { !isActive }
+                    )
                     val inferDuration = System.currentTimeMillis() - inferStart
                     if (!isActive) break
 
