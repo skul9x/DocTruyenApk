@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-20T00:58:00+07:00",
+  "updated_at": "2026-11-20T08:05:00+07:00",
   "working_on": {
     "feature": "Voice Categorization, Audio Preview & Zero-Gap Pacing",
     "task": "Phase 04: Traditional Dialog Voice Selector UI",
@@ -178,7 +178,14 @@
       ]
     }
   ],
-  "errors_encountered": [],
+  "errors_encountered": [
+    {
+      "error": "Pause cadence configuration saved in Settings was ignored and overridden by hardcoded defaults during story playback",
+      "solution": "Defined PauseConfig.UNSPECIFIED (-1) as interface default in ITTSManager, allowing VieNeuTTSManager and GoogleTTSManager to dynamically resolve and apply user-configured cadence from UserConfig/SharedPreferences; updated Settings UI text to clarify auto-save behavior",
+      "resolved": true,
+      "file": "app/src/main/java/com/skul9x/doctruyen/tts/ITTSManager.kt"
+    }
+  ],
   "decisions_made": [
     {
       "decision": "Canonical Enum Categorization & Vietnamese Diacritics Normalization (NFD + regex + đ/Đ handling)",

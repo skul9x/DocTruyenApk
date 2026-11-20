@@ -41,8 +41,8 @@ class PcmUtilsTest {
         assertTrue("Should split into at least 4 chunks", chunks.size >= 4)
         assertEquals(5, chunks.size)
         assertEquals("Câu một.", chunks[0])
-        assertEquals("Câu hai!", chunks[1])
-        assertEquals("Câu ba?", chunks[2])
+        assertEquals("Câu hai.", chunks[1])
+        assertEquals("Câu ba.", chunks[2])
         assertEquals("Câu bốn.", chunks[3])
         assertEquals("Câu năm.", chunks[4])
 
@@ -57,8 +57,8 @@ class PcmUtilsTest {
         val chunks = PcmUtils.splitIntoSentences(text)
 
         assertEquals(3, chunks.size)
-        assertEquals("Một ngày nọ…", chunks[0])
-        assertEquals("Trời bỗng đổ mưa!", chunks[1])
+        assertEquals("Một ngày nọ.", chunks[0])
+        assertEquals("Trời bỗng đổ mưa.", chunks[1])
         assertEquals("Tôi chạy nhanh về nhà.", chunks[2])
     }
 

@@ -325,7 +325,7 @@ class OnnxSessionManager(
 
             val currentVersion = getAppVersionCode(context)
             val lastExtracted = prefs?.getLong(KEY_LAST_EXTRACTED_VERSION, -1L) ?: -1L
-            val forceOverwrite = forceReExtraction ?: (lastExtracted < 0L || currentVersion > lastExtracted)
+            val forceOverwrite = forceReExtraction ?: (prefs?.let { lastExtracted < 0L || currentVersion > lastExtracted } ?: false)
 
             val normPrecision = when (precision.trim().uppercase()) {
                 "INT8" -> "INT8"

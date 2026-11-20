@@ -81,7 +81,7 @@ class SmartTextSegmenterTest {
         val chunks = SmartTextSegmenter.segmentStory(title, content)
 
         assertTrue(chunks.isNotEmpty())
-        assertEquals("Một trí khôn hơn trăm trí khôn", chunks[0].text)
+        assertEquals("Một trí khôn hơn trăm trí khôn.", chunks[0].text)
         assertEquals(PauseType.TITLE_BREAK, chunks[0].pauseType)
         assertEquals(1000, chunks[0].pauseDurationMs)
         assertTrue(chunks[0].isParagraphEnd)

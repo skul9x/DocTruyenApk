@@ -1,5 +1,18 @@
 # Changelog - DocTruyen Android App
 
+## [v1.15] - [2026-11-20] Hotfix: Tự Động Áp Dụng Cài Đặt Nhịp Điệu (Pause Cadence) Khi Đọc Truyện & Cải Thiện UX
+### Fixed & Improved
+- **Đồng Bộ Cài Đặt Ngắt Nghỉ Khi Phát Truyện (`ITTSManager.kt`, `VieNeuTTSManager.kt`, `GoogleTTSManager.kt`)**:
+  - Bổ sung sentinel `PauseConfig.UNSPECIFIED (-1)` làm giá trị mặc định trong interface `ITTSManager`.
+  - Khắc phục lỗi cấu hình cứng mặc định (400ms câu / 650ms đoạn / 180ms ngắt ý) ghi đè cài đặt tùy chỉnh của người dùng khi `ReadingService` gọi phát truyện. Giờ đây `VieNeuTTSManager` và `GoogleTTSManager` tự động nạp chính xác các giá trị cấu hình từ `UserConfig` (`SharedPreferences`).
+  - Xử lý tương thích môi trường test không có `SharedPreferences` trong `OnnxSessionManager.ensureAssetsExtracted` tránh cưỡng bức giải nén lại.
+- **Tối Ưu Trải Nghiệm Giao Diện Cài Đặt (`strings.xml`)**:
+  - Bổ sung thông tin chỉ dẫn tự động lưu: *"⚡ Tự động lưu khi điều chỉnh. Tùy chỉnh thời gian ngừng nghỉ giữa các câu, đoạn và vế câu để tạo cảm giác tự nhiên nhất."*
+  - Đổi tên nút lưu URL thành *"Lưu & Kiểm tra máy chủ truyện"* để tránh người dùng nhầm lẫn là nút lưu chung cho toàn bộ màn hình Cài đặt.
+- **Kiểm Thử Toàn Diện**:
+  - Bổ sung bài test `testDefaultNullPauseConfigResolvesUserConfigInEngine` trong `UserConfigPauseTest.kt`.
+  - Đồng bộ hóa các assertion test cũ theo chuẩn dấu câu `puncNorm` và danh sách 25 giọng đọc (314/314 tests passed 100%).
+
 ## [v1.14] - [2026-11-19] Hotfix CI/CD Release Build & Coroutine Cancellation Resilience
 ### Fixed
 - **Biên dịch Kotlin trên Release CI/CD (`StoryDetailActivity.kt`)**:

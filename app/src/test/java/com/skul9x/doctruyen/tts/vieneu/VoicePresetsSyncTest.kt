@@ -14,9 +14,9 @@ class VoicePresetsSyncTest {
         "Quỳnh Anh", "Đức Trí", "Kim Thanh", "Ngọc Huyền", "Adam"
     )
 
-    private val northVoices = setOf("Minh Đức", "Phạm Tuyên", "Thanh Bình", "Trúc Ly", "Ngọc Linh", "Đoan Trang", "Mai Anh", "Quỳnh Anh", "Ngọc Huyền")
+    private val northVoices = setOf("Minh Đức", "Phạm Tuyên", "Thanh Bình", "Trúc Ly", "Ngọc Linh", "Đoan Trang", "Mai Anh", "Quỳnh Anh", "Ngọc Huyền", "Xuân Vĩnh")
     private val centralVoices = setOf("Quang Sơn", "Ngọc Trân")
-    private val southVoices = setOf("Thái Sơn", "Xuân Vĩnh", "Thục Đoan", "Minh Triết", "Thùy Dung", "Mỹ Duyên", "Đức Trí", "Kim Thanh", "Adam")
+    private val southVoices = setOf("Thái Sơn", "Thục Đoan", "Minh Triết", "Thùy Dung", "Mỹ Duyên", "Đức Trí", "Kim Thanh", "Adam")
 
     @Before
     fun setUp() {
@@ -30,10 +30,10 @@ class VoicePresetsSyncTest {
     @Test
     fun testAllTwentyVoicesLoadingAndMetadataIntegrity() {
         val available = VoicePresets.availableVoices
-        assertEquals("Must contain exactly 20 preset voices", 20, available.size)
+        assertEquals("Must contain all preset voices", 25, available.size)
 
         // Check default voice name is set from JSON
-        assertEquals("Adam", VoicePresets.defaultVoiceName)
+        assertEquals("Hải Đăng", VoicePresets.defaultVoiceName)
 
         for (voiceName in expectedVoices) {
             assertTrue("Expected voice '$voiceName' must be available", available.contains(voiceName))
@@ -95,9 +95,9 @@ class VoicePresetsSyncTest {
             assertEquals(preset.codes!!.size, codesFromHelper!!.size)
         }
 
-        // Test fallback resolution for unknown voice returns default voice (Adam)
+        // Test fallback resolution for unknown voice returns default voice (Hải Đăng)
         val fallback = VoicePresets.getVoice("NonExistentVoiceName")
         assertNotNull(fallback)
-        assertEquals("Adam", fallback!!.name)
+        assertEquals("Hải Đăng", fallback!!.name)
     }
 }

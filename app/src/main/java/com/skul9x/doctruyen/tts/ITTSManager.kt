@@ -25,7 +25,7 @@ interface ITTSManager {
     val currentVoiceName: String
 
     fun speak(text: String, storyId: Int = 0)
-    fun speakWithTitlePause(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = PauseConfig())
+    fun speakWithTitlePause(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = PauseConfig.UNSPECIFIED)
     fun pause()
     fun resume()
     fun stop()
@@ -35,7 +35,7 @@ interface ITTSManager {
     fun getAvailableVoices(): List<VoiceInfo>
     fun setSpeed(speed: Float)
     fun setPitch(pitch: Float)
-    fun prepareStory(storyId: Int, title: String, content: String, voice: String? = null, pauseConfig: PauseConfig = PauseConfig())
+    fun prepareStory(storyId: Int, title: String, content: String, voice: String? = null, pauseConfig: PauseConfig = PauseConfig.UNSPECIFIED)
     fun cancelPrewarm()
     fun shutdown()
 }

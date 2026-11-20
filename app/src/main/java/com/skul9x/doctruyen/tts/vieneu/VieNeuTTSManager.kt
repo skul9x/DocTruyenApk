@@ -278,19 +278,20 @@ class VieNeuTTSManager(
         title: String,
         content: String,
         voice: String? = null,
-        pauseConfig: PauseConfig = getLoadedPauseConfig()
+        pauseConfig: PauseConfig = PauseConfig.UNSPECIFIED
     ) {
         if (isUsingFallback) return
 
         val effectiveVoice = resolveVoiceName(voice ?: appContext?.let { UserConfig.getTtsVoice(it) } ?: voiceName)
         val profile = getTuningProfile(effectiveVoice)
+        val resolvedPauseConfig = if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(effectiveVoice)
         val effectivePauseConfig = if (effectiveVoice == "Thiền Tâm Đức") {
-            pauseConfig.copy(
+            resolvedPauseConfig.copy(
                 clausePauseMs = profile.clausePauseMs,
                 sentencePauseMs = profile.sentencePauseMs
             )
         } else {
-            pauseConfig
+            resolvedPauseConfig
         }
 
         // Cancel previous pre-warm job if running
@@ -357,7 +358,7 @@ class VieNeuTTSManager(
     /**
      * Start speaking text content.
      */
-    fun speakContent(content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+    fun speakContent(content: String, storyId: Int = 0, pauseConfig: PauseConfig = PauseConfig.UNSPECIFIED) {
         cancelPrewarm()
 
         if (isUsingFallback && fallbackManager != null) {
@@ -384,13 +385,14 @@ class VieNeuTTSManager(
         pipe.voiceName = targetVoice
         pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
+        val resolvedPauseConfig = if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
         val config = if (targetVoice == "Thiền Tâm Đức") {
-            (if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+            resolvedPauseConfig.copy(
                 clausePauseMs = profile.clausePauseMs,
                 sentencePauseMs = profile.sentencePauseMs
             )
         } else {
-            if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+            resolvedPauseConfig
         }
         pipe.startReading(
             text = content,
@@ -406,7 +408,7 @@ class VieNeuTTSManager(
     /**
      * Speak story title, pause 1 second, then speak content.
      */
-    private fun speakWithTitlePauseInternal(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
+    private fun speakWithTitlePauseInternal(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = PauseConfig.UNSPECIFIED) {
         cancelPrewarm()
 
         if (isUsingFallback && fallbackManager != null) {
@@ -433,13 +435,14 @@ class VieNeuTTSManager(
         pipe.voiceName = targetVoice
         pipe.temperature = profile.temperature
         pipe.preBufferChunkCount = appContext?.let { UserConfig.getPrebufferChunks(it) } ?: pipe.preBufferChunkCount
+        val resolvedPauseConfig = if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
         val config = if (targetVoice == "Thiền Tâm Đức") {
-            (if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)).copy(
+            resolvedPauseConfig.copy(
                 clausePauseMs = profile.clausePauseMs,
                 sentencePauseMs = profile.sentencePauseMs
             )
         } else {
-            if (pauseConfig.sentencePauseMs >= 0) pauseConfig else getLoadedPauseConfig(targetVoice)
+            resolvedPauseConfig
         }
         pipe.startReadingWithTitlePause(
             title = title,

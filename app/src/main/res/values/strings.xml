@@ -58,7 +58,7 @@
     <string name="settings_connection_title">📡 Kết nối máy chủ</string>
     <string name="settings_connection_desc">Nhập địa chỉ website chứa API (ví dụ: truyen.free.nf)</string>
     <string name="settings_url_hint">Địa chỉ URL</string>
-    <string name="settings_save_btn">Lưu &amp; Kiểm tra kết nối</string>
+    <string name="settings_save_btn">Lưu &amp; Kiểm tra máy chủ truyện</string>
     <string name="settings_view_logs">Xem Nhật Ký Lỗi (Debug)</string>
     <string name="settings_voice_title">🗣️ Cài đặt giọng đọc</string>
     <string name="settings_voice_current">Giọng đọc: %s</string>
@@ -79,7 +79,7 @@
 
     <!-- Cadence & Pause Settings -->
     <string name="settings_cadence_title">⏳ Nhịp điệu giọng đọc (Ngắt nghỉ câu/đoạn)</string>
-    <string name="settings_cadence_desc">Tùy chỉnh thời gian ngừng nghỉ giữa các câu, đoạn và vế câu để tạo cảm giác tự nhiên nhất.</string>
+    <string name="settings_cadence_desc">⚡ Tự động lưu khi điều chỉnh. Tùy chỉnh thời gian ngừng nghỉ giữa các câu, đoạn và vế câu để tạo cảm giác tự nhiên nhất.</string>
     <string name="settings_cadence_presets">Cấu hình mẫu</string>
     <string name="preset_standard">Chuẩn / Tự nhiên</string>
     <string name="preset_fast">Đọc nhanh / Ngắt ngắn</string>

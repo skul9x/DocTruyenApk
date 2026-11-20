@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-11-20T00:58:00+07:00"
+    "updated_at": "2026-11-20T08:15:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Production Release v1.14 Shipped (Performance Bottlenecks Remediated, R8 Full Mode & Anti-Bot Cookie Resilience, CI/CD Verified)",
+    "status": "Production Release v1.15 Shipped (Pause Cadence Playback Dynamic Propagation Hotfix, UX Clarification, 100% CI/CD Unit Test Pass)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {

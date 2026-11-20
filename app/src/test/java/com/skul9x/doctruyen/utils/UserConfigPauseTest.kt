@@ -218,7 +218,7 @@ class UserConfigPauseTest {
         assertTrue(chunks.isNotEmpty())
 
         // Title chunk
-        assertEquals("Tiêu đề truyện ngắn", chunks[0].text)
+        assertEquals("Tiêu đề truyện ngắn.", chunks[0].text)
         assertEquals(PauseType.TITLE_BREAK, chunks[0].pauseType)
         assertEquals(1000, chunks[0].pauseDurationMs) // Default title pause is 1000ms
 
@@ -233,5 +233,32 @@ class UserConfigPauseTest {
         assertNotNull(para1End)
         assertEquals(PauseType.PARAGRAPH_BREAK, para1End!!.pauseType)
         assertEquals(950, para1End.pauseDurationMs)
+    }
+
+    @Test
+    fun testDefaultNullPauseConfigResolvesUserConfigInEngine() {
+        // Given customized UserConfig cadence
+        UserConfig.setPauseSentence(dummyContext, 0) // Zero-gap
+        UserConfig.setPauseParagraph(dummyContext, 0)
+        UserConfig.setPauseClause(dummyContext, 0)
+
+        // When reading service calls speakWithTitlePause without specifying pauseConfig (null default)
+        val loadedPause = PauseConfig(
+            sentencePauseMs = UserConfig.getPauseSentence(dummyContext),
+            paragraphPauseMs = UserConfig.getPauseParagraph(dummyContext),
+            clausePauseMs = UserConfig.getPauseClause(dummyContext)
+        )
+
+        assertEquals("Sentence pause must resolve to 0 ms", 0, loadedPause.sentencePauseMs)
+        assertEquals("Paragraph pause must resolve to 0 ms", 0, loadedPause.paragraphPauseMs)
+        assertEquals("Clause pause must resolve to 0 ms", 0, loadedPause.clausePauseMs)
+
+        val storyTitle = "Chuyện xưa"
+        val content = "Một ngày nắng đẹp. Mọi thứ thật yên bình."
+        val chunks = SmartTextSegmenter.segmentStory(storyTitle, content, pauseConfig = loadedPause)
+
+        assertTrue(chunks.size >= 2)
+        // First content chunk
+        assertEquals(0, chunks[1].pauseDurationMs)
     }
 }

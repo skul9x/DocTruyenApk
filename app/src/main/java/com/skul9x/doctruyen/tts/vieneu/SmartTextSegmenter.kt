@@ -28,6 +28,16 @@ data class PauseConfig(
         PauseType.CLAUSE_BREAK -> clausePauseMs
         PauseType.DIALOGUE_LEAD -> dialogueLeadPauseMs
     }
+
+    companion object {
+        val UNSPECIFIED = PauseConfig(
+            sentencePauseMs = -1,
+            paragraphPauseMs = -1,
+            clausePauseMs = -1,
+            titlePauseMs = -1,
+            dialogueLeadPauseMs = -1
+        )
+    }
 }
 
 /**
