@@ -1,5 +1,6 @@
 package com.skul9x.doctruyen.utils
 
+import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.skul9x.doctruyen.BuildConfig
@@ -28,7 +29,11 @@ object DebugLogger {
     private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     @Volatile
-    var isDebugEnabled: Boolean = BuildConfig.DEBUG
+    var isDebugEnabled: Boolean = true
+
+    fun init(context: Context) {
+        isDebugEnabled = UserConfig.isDebugLoggingEnabled(context)
+    }
 
     fun log(tag: String, message: String, type: LogType = LogType.INFO) {
         if (!isDebugEnabled) {

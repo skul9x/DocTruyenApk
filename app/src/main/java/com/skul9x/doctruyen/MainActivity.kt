@@ -24,6 +24,8 @@ import com.skul9x.doctruyen.adapter.StoryAdapter
 import com.skul9x.doctruyen.network.HostingVerifier
 import com.skul9x.doctruyen.network.RetrofitClient
 import com.skul9x.doctruyen.network.Story
+import com.skul9x.doctruyen.utils.DebugLogger
+import com.skul9x.doctruyen.utils.LogType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -58,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DebugLogger.init(this)
+        DebugLogger.log("MainActivity", "DocTruyen started (v${BuildConfig.VERSION_NAME})", LogType.INFO)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         

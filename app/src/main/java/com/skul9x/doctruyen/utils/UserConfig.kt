@@ -196,11 +196,14 @@ object UserConfig {
     }
 
     fun isDebugLoggingEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_TTS_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING)
+        val enabled = getPrefs(context).getBoolean(KEY_TTS_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING)
+        DebugLogger.isDebugEnabled = enabled
+        return enabled
     }
 
     fun setDebugLoggingEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_TTS_DEBUG_LOGGING, enabled).apply()
+        DebugLogger.isDebugEnabled = enabled
     }
 
     fun isPrewarmEnabled(context: Context): Boolean {

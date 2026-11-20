@@ -151,6 +151,7 @@ class ReadingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        DebugLogger.init(this)
         initWakeLock()
         initMediaSession()
         initNotificationManager()

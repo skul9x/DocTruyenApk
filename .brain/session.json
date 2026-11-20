@@ -1,26 +1,20 @@
 {
-  "updated_at": "2026-11-20T14:30:00+07:00",
+  "updated_at": "2026-11-20T14:48:30+07:00",
   "working_on": {
-    "feature": "Release v1.18 Deployment & CI/CD Verification",
-    "task": "Completed Full Performance Remediation (Phases 01-04, PERF-001..010). Safely committed a14d9db, pushed to main, completed GitHub Actions workflow run 44669496938 with 100% pass rate, published Release v1.18 with doctruyenapk-v1.18.apk (502.71MB).",
+    "feature": "Debug Log Viewer & Dynamic Logger Sync Fix",
+    "task": "Fixed empty debug log viewer ('Nhật ký lỗi' blank screen) caused by hardcoded BuildConfig.DEBUG guard, desynced UserConfig preference, and missing empty-state UX.",
     "status": "completed",
     "files": [
-      "app/build.gradle.kts",
-      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/adapter/StoryAdapter.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/DebugLogActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
       "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
       "app/src/main/java/com/skul9x/doctruyen/utils/UserConfig.kt",
-      "CHANGELOG.md",
-      "abc.md"
+      "app/src/test/java/com/skul9x/doctruyen/DebugLogIntegrationTest.kt"
     ],
     "blockers": [],
-    "notes": "Release v1.18 is live on GitHub. All 10 performance bottlenecks (PERF-001..010) are resolved. Release APK size reduced by ~10.5MB, UI allocations eliminated, prewarming debounced and lifecycle-safe, G2P syllable caching active with >85% hit rate."
+    "notes": "DebugLogger.init(context) synchronizes isDebugEnabled with UserConfig at app & service launch. Settings switch dynamically updates DebugLogger. DebugLogActivity now includes contextual empty states and filter presets for timing and error views."
   },
   "pending_tasks": [],
   "recent_changes": [

@@ -268,8 +268,8 @@
       "reason": "Relies directly on Glide native error/placeholder mechanisms, generating zero listener object allocations during fling scrolling and eliminating GC frame drops."
     },
     {
-      "decision": "Early exit guard in DebugLogger.log checking @Volatile var isDebugEnabled: Boolean = BuildConfig.DEBUG",
-      "reason": "Completely avoids LogEntry object allocation, string formatting, and logBuffer mutex acquisition on production release builds."
+      "decision": "Dynamic Runtime Sync for DebugLogger & UserConfig with Contextual Empty State UX",
+      "reason": "Initializes DebugLogger.isDebugEnabled from UserConfig.isDebugLoggingEnabled at MainActivity/ReadingService startup and synchronizes setting changes dynamically, avoiding LogEntry allocations when disabled while ensuring in-app diagnostics and error reporting work reliably in production with clear empty-state guidance and intent filter preselection."
     },
     {
       "decision": "Targeted arm64-v8a ABI packaging in app/build.gradle.kts release buildType",

@@ -727,11 +727,17 @@ open class SettingsActivity : AppCompatActivity() {
         }
 
         btnViewTimingLogs.setOnClickListener {
-            startActivity(android.content.Intent(this, DebugLogActivity::class.java))
+            val intent = android.content.Intent(this, DebugLogActivity::class.java).apply {
+                putExtra(DebugLogActivity.EXTRA_FILTER, com.skul9x.doctruyen.utils.LogType.TTS_TIMING.name)
+            }
+            startActivity(intent)
         }
 
         btnViewLogs.setOnClickListener {
-            startActivity(android.content.Intent(this, DebugLogActivity::class.java))
+            val intent = android.content.Intent(this, DebugLogActivity::class.java).apply {
+                putExtra(DebugLogActivity.EXTRA_FILTER, com.skul9x.doctruyen.utils.LogType.ERROR.name)
+            }
+            startActivity(intent)
         }
     }
 

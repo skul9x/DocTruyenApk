@@ -1,5 +1,17 @@
 # Changelog - DocTruyen Android App
 
+## [2026-11-20] Sửa Lỗi Hiển Thị Nhật Ký (Debug Log Viewer Dynamic Sync & Empty State UX)
+### Fixed & Improved
+- **Đồng Bộ Động Cấu Hình Ghi Nhật Ký (`DebugLogger.kt` & `UserConfig.kt`)**:
+  - Bổ sung hàm `DebugLogger.init(context)` đồng bộ biến `isDebugEnabled` theo cấu hình `UserConfig.isDebugLoggingEnabled(context)` ngay khi khởi chạy `MainActivity` và `ReadingService`.
+  - Kết nối trực tiếp công tắc *"Bật ghi nhật ký đo đạc (Debug Logs)"* trong màn hình Cài đặt với `DebugLogger.isDebugEnabled`, cho phép bật/tắt ghi log tức thì ở cả bản debug lẫn release.
+- **Trải Nghiệm Màn Hình Nhật Ký Trống & Định Tuyến Bộ Lọc (`DebugLogActivity.kt` & `SettingsActivity.kt`)**:
+  - Xử lý intent extra `EXTRA_FILTER` từ `SettingsActivity`: bấm *"⏱️ Xem Nhật Ký Đo Thời Gian Đọc"* tự động chọn bộ lọc `TTS_TIMING`, bấm *"Xem Nhật Ký Lỗi (Debug)"* tự động chọn bộ lọc `ERROR`.
+  - Cung cấp thông báo trạng thái trống (Empty State) theo ngữ cảnh rõ ràng, hướng dẫn người dùng bật tính năng ghi log hoặc thông báo hệ thống không có lỗi nào phát sinh thay vì để màn hình trắng xóa.
+  - Chặn sao chép hoặc chia sẻ khi chưa có dữ liệu nhật ký, kèm thông báo Toast thân thiện.
+- **Kiểm Thử Tích Hợp (`DebugLogIntegrationTest.kt`)**:
+  - Xác thực đồng bộ hóa trạng thái hai chiều giữa `UserConfig` và `DebugLogger`, lọc theo loại log và định tuyến intent filter. Toàn bộ 315+ unit test pass 100%.
+
 ## [2026-11-20] Tối Ưu Hóa Hiệu Năng Phase 04: Vòng Đời UI, Bộ Nhớ Đệm G2P Hạt Mịn & Vệ Sinh Đóng Gói ABI (PERF-006, PERF-008, PERF-009, PERF-010)
 ### Added & Improved
 - **Trì Hoãn & Quản Lý Vòng Đời Cho Background Pre-warming (`StoryDetailActivity.kt` & `UserConfig.kt`)**:
