@@ -8,7 +8,7 @@
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Production Release v1.18 Shipped (Full Performance Remediation Phases 01-04, PERF-001 to PERF-010 Remediated, 100% CI/CD Pass, Release v1.18 Live on GitHub)",
+    "status": "Production Release v1.21 Shipped (Natural Sentence Flow & Prosody Cadence Optimization Live, 100% CI/CD Pass, Release v1.21 Live on GitHub)",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
