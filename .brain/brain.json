@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-11-20T18:38:00+07:00"
+    "updated_at": "2026-11-20T19:59:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Comprehensive Performance & Memory Optimization - All 4 Phases Completed",
+    "status": "Comprehensive R8 Minification, Retrofit & Network Architecture Fix - All 4 Phases Completed",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -40,7 +40,8 @@
       "features": "Truthful active quantization telemetry (logEngineReload with loaded engine precision), AI Diagnostic Engine (7 bottleneck flags & actionable recommendations), multi-stage latency breakdown (G2P/Backbone/Codec/Audio), babble retry telemetry, observer-guarded logging"
     },
     "network": {
-      "library": "Retrofit 2 + OkHttp 4",
+      "library": "Retrofit 2 + OkHttp 4 + Gson 2.9.0",
+      "serialization": "Hardened DTOs with @androidx.annotation.Keep, 100% @SerializedName coverage, and no-arg constructor generation for safe Gson initialization",
       "logging": "HttpLoggingInterceptor.Level.BODY for debug builds, HttpLoggingInterceptor.Level.NONE for release builds (zero header leakage)"
     },
     "ci_cd": {
@@ -70,6 +71,43 @@
     ]
   },
   "features": [
+    {
+      "name": "Release Build Verification & CI/CD Pipeline Assurance (Phase 04)",
+      "status": "Fully Implemented & Verified (Phase 04)",
+      "components": [
+        "app/build.gradle.kts (isMinifyEnabled = true, ABI splits, universal APK verified)",
+        "proguard-rules.pro (absence of dangerous wildcards, surgical rules strictly enforced)",
+        "AssetCleansingAndBuildOptimizationTest.kt (expanded Retrofit & Continuation ProGuard assertions)",
+        "ReleaseBuildValidationTest.kt (3/3 unit tests passed)"
+      ]
+    },
+    {
+      "name": "Defensive Network Error Architecture & Translation (Phase 03)",
+      "status": "Fully Implemented & Verified (Phase 03)",
+      "components": [
+        "NetworkErrorResolver.kt (translates technical network & reflection exceptions into polite Vietnamese messages, shields internal ClassCastException / ParameterizedType details)",
+        "MainActivity.kt & StoryDetailActivity.kt (automated cookie recovery via HostingVerifier and resilient error routing)",
+        "NetworkErrorResolverTest.kt (5/5 unit tests passed)"
+      ]
+    },
+    {
+      "name": "Data Model Serialization Hardening (Phase 02)",
+      "status": "Fully Implemented & Verified (Phase 02)",
+      "components": [
+        "ApiService.kt (Story, StoryListResponse, StoryDetailResponse, RandomStoryResponse annotated with @Keep and explicit @SerializedName on all fields)",
+        "Safe default initializers generating synthetic no-arg constructors for Gson, preventing Unsafe allocation null-pointer hazards",
+        "DataModelSerializationIntegrityTest.kt (5/5 unit tests passed)"
+      ]
+    },
+    {
+      "name": "R8 & ProGuard Rules Hardening for Retrofit & Kotlin Coroutines (Phase 01)",
+      "status": "Fully Implemented & Verified (Phase 01)",
+      "components": [
+        "proguard-rules.pro (kotlin.coroutines.Continuation, Call, Response, TypeToken, AnnotationDefault, and conditional interface rules)",
+        "gradle.properties (android.enableR8.fullMode=false)",
+        "RetrofitR8ProGuardRulesTest.kt (7/7 unit tests passed)"
+      ]
+    },
     {
       "name": "Runtime Threading, Execution Providers & Engine Tuning (Phase 04)",
       "status": "Fully Implemented & Verified (Phase 04)",
@@ -193,6 +231,18 @@
   ],
   "decisions_made": [
     {
+      "decision": "Explicit @SerializedName on all fields of network DTOs",
+      "reason": "Prevents R8/ProGuard field renaming from desynchronizing JSON key mapping during Gson deserialization."
+    },
+    {
+      "decision": "Annotate Story, StoryListResponse, StoryDetailResponse, RandomStoryResponse with @androidx.annotation.Keep",
+      "reason": "Protects classes and constructors from dead-code stripping, member optimization, and synthetic constructor removal under R8 optimization."
+    },
+    {
+      "decision": "Provide default values for DTO properties to generate synthetic no-arg constructors",
+      "reason": "Allows Gson to instantiate objects using standard constructor initialization with default values rather than bypassing constructors with sun.misc.Unsafe when keys are omitted."
+    },
+    {
       "decision": "Configure sessionOptions.setIntraOpNumThreads before XNNPACK registration",
       "reason": "Prevents ONNX Runtime from defaulting CPU fallback execution provider to a single thread when XNNPACK cannot handle certain graph subgraphs, ensuring big-core parallelism across all operations."
     },
@@ -231,6 +281,10 @@
     {
       "decision": "Direct Native ONNX Tensor Handover via Retained OrtSession.Result",
       "reason": "Eliminates 24 native OnnxTensor creations and 24 large FloatArray JVM heap allocations per frame in synthesizePass and across 16 channels in acousticFrame, preventing +314MB native heap bloat and removing explicit System.gc() stalls."
+    },
+    {
+      "decision": "Explicit R8 Keep Rules for kotlin.coroutines.Continuation and Retrofit Signatures",
+      "reason": "Prevents R8 minification from stripping generic signature metadata on suspend functions, resolving the java.lang.ClassCastException: java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType runtime crash."
     },
     {
       "decision": "Natural prosody clause accumulation up to 75 chars within 200 chars safe limit",

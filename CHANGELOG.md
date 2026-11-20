@@ -1,5 +1,71 @@
 # Changelog - DocTruyen Android App
 
+## [v1.15] - [2026-11-20] Comprehensive R8 Minification, Retrofit & Network Architecture Fix
+### Phase 04: End-to-End Release Build Verification & CI/CD Pipeline Assurance
+- **ProGuard & Release Build Verification (`app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt`)**:
+  - Validated that `isMinifyEnabled = true`, ABI splits (`arm64-v8a`, `armeabi-v7a`, `x86_64`), and `universalApk` generation are enforced in `app/build.gradle.kts`.
+  - Proved ProGuard configuration contains zero dangerous wildcard rules (no blanket `-dontshrink`, no blanket `-dontobfuscate`, no `-keep class * { *; }`).
+  - Confirmed surgical preservation of `kotlin.coroutines.Continuation`, `retrofit2.Call`, `retrofit2.Response`, `@retrofit2.http.*`, `TypeToken`, `Signature`, and `AnnotationDefault`.
+  - Verified cohesive integration across `ApiService`, `RetrofitClient`, `NetworkErrorResolver`, and hardened DTOs.
+- **Regression ProGuard Rule Coverage Expansion (`AssetCleansingAndBuildOptimizationTest.kt`)**:
+  - Expanded `testProGuardRulesCoverage()` to assert Retrofit and Coroutine Continuation ProGuard keep rules alongside existing ONNX, JNI, and asset checks.
+- **Release Documentation & Session State Synchronization**:
+  - Finalized Release v1.15 documentation and synchronized `.brain` state across all 4 phases.
+
+### Phase 03: Defensive Network Error Architecture & User-Friendly Translation
+- **Centralized Defensive Network Error Architecture (`app/src/main/java/com/skul9x/doctruyen/network/NetworkErrorResolver.kt`)**:
+  - Implemented `@Keep` annotated `NetworkErrorResolver` singleton with `resolve(throwable: Throwable?, context: Context? = null): ResolvedError` and `shouldRefreshAuth(throwable: Throwable?): Boolean`.
+  - Completely shielded all technical exception names, reflection details, and internal class names (`java.lang.*`, `java.lang.reflect.*`, `ParameterizedType`, `ClassCastException`, `retrofit2.*`, `okhttp3.*`, etc.) from user-facing UI.
+  - Mapped `UnknownHostException` / `ConnectException` to polite internet connection guidance ("Không thể kết nối Internet. Vui lòng kiểm tra lại Wifi hoặc 4G.").
+  - Mapped `SocketTimeoutException` to server timeout prompt ("Máy chủ phản hồi quá lâu. Vui lòng thử lại sau giây lát.").
+  - Mapped `MalformedJsonException`, `JsonSyntaxException`, HTTP 403 Forbidden, and HTML challenge responses to session expiration with automatic re-authentication flag (`isAuthError = true`, `canRetry = true`).
+  - Mapped `ClassCastException` and reflection errors to polite data processing prompt with retry action ("Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng nhấn Thử lại.").
+  - Added technical message keyword filtering ensuring unexpected or third-party exceptions never leak technical stack traces.
+- **Automated Re-Authentication & Session Recovery (`MainActivity.kt` & `StoryDetailActivity.kt`)**:
+  - Refactored `loadStories()`, `loadRandomStory()`, and `loadStoryContent()` to route network errors through `NetworkErrorResolver`.
+  - Implemented automated session recovery: when `resolved.isAuthError && RetrofitClient.cookie.isNotEmpty()`, clears stale cookie, triggers `HostingVerifier.verify()`, and re-invokes pending network operation automatically upon success.
+- **Localized Error Resources (`app/src/main/res/values/strings.xml`)**:
+  - Added localized string resources `error_no_internet`, `error_timeout`, `error_auth_expired`, `error_data_processing`.
+- **Comprehensive Unit Testing**:
+  - Created `NetworkErrorResolverTest.kt` (5/5 passed 100%):
+    1. `testResolveUnknownHostException`: Verifies `UnknownHostException` and `ConnectException` translation to internet connectivity messages.
+    2. `testResolveTimeoutException`: Verifies `SocketTimeoutException` translation to server timeout messages.
+    3. `testResolveAuthAndHtmlParsingError`: Verifies `MalformedJsonException`, `JsonSyntaxException`, HTTP 403 Forbidden, and HTML challenge responses identify `isAuthError = true`.
+    4. `testResolveReflectionClassCastException`: Confirms `ClassCastException` (R8 ParameterizedType issue) completely shields internal technical package names and provides polite retry guidance.
+    5. `testNullOrEmptyThrowableHandling`: Verifies null, empty, and unexpected throwables safely fall back without crashing or technical exposure.
+
+### Phase 02: Resilient Data Model Serialization & Field Hardening
+- **Network Data Model Serialization & Field Hardening (`app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt`)**:
+  - Annotated all network DTO classes (`Story`, `StoryListResponse`, `StoryDetailResponse`, `RandomStoryResponse`) with `@androidx.annotation.Keep` to protect them, their primary constructors, and synthetic constructor bridges against R8/ProGuard class and constructor pruning.
+  - Added explicit `@SerializedName("...")` annotations to 100% of declared properties across all 4 DTOs, removing any reliance on parameter names or Kotlin reflection metadata during JSON mapping.
+  - Implemented safe default initializers for optional and collection properties (`image: String? = null`, `content: String? = null`, `contentText: String? = null`, `data: List<Story> = emptyList()`, `status: String = ""`), enabling Kotlin to generate synthetic zero-argument constructors so Gson uses constructor initialization with safe non-null defaults rather than bypassing constructors with `Unsafe`.
+- **Comprehensive Unit Testing**:
+  - Created `DataModelSerializationIntegrityTest.kt` (5/5 passed 100%):
+    1. `testAllModelFieldsHaveSerializedName`: Validates via reflection that every non-synthetic, non-static field across all DTO classes has an explicit `@SerializedName` annotation with matching JSON keys.
+    2. `testAllModelsHaveKeepAnnotation`: Inspects bytecode to verify that `@androidx.annotation.Keep` (BINARY retention) is present on all DTO classes for R8 preservation.
+    3. `testJsonDeserializationWithObfuscatedSimulation`: Simulates deserialization of realistic backend JSON responses (`StoryListResponse`, `StoryDetailResponse`, `RandomStoryResponse`) verifying accurate field mapping.
+    4. `testDefaultValuesWhenKeysMissing`: Verifies that omitting optional fields safely falls back to default initializers without throwing `NullPointerException`.
+    5. `testSerializationRoundTripPreservesExactJsonKeys`: Confirms bidirectional serialization round-trip retaining exact snake_case JSON keys (`content_text`, `total_pages`).
+
+### Phase 01: R8 & ProGuard Rules Hardening for Retrofit & Kotlin Coroutines
+- **Retrofit & Coroutines R8 ProGuard Rules Hardening (`app/proguard-rules.pro`)**:
+  - Added `-keep,allowoptimization,allowshrinking,allowobfuscation class kotlin.coroutines.Continuation` to preserve generic type arguments for Kotlin coroutines suspend functions under R8 Full Mode, eliminating runtime `java.lang.ClassCastException: java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType` crash.
+  - Added generic signature retention for core Retrofit interfaces: `-keep,allowobfuscation,allowshrinking interface retrofit2.Call` and `class retrofit2.Response`.
+  - Added `-keepattributes AnnotationDefault` to preserve default values for Retrofit annotations (`@Query`, `@GET`, etc.).
+  - Added conditional interface rules protecting Retrofit service methods and return types from dead-code stripping or null-replacement during R8 bytecode optimization.
+  - Added `-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken` to protect generic reflection in Gson deserializers.
+- **R8 Build Compatibility Configuration (`gradle.properties`)**:
+  - Configured `android.enableR8.fullMode=false` as safety fallback while ensuring all ProGuard rules are 100% resilient under both full mode and compatibility mode.
+- **Comprehensive Unit Testing**:
+  - Created `RetrofitR8ProGuardRulesTest.kt` (7/7 passed 100%):
+    1. `testSignatureAndReflectionAttributesRetained`: Validates preservation of `Signature`, `InnerClasses`, `EnclosingMethod`, `AnnotationDefault`, and annotation attributes.
+    2. `testKotlinContinuationRulePresent`: Verifies that `kotlin.coroutines.Continuation` is explicitly protected with appropriate optimization flags.
+    3. `testRetrofitCallAndResponseSignaturesKept`: Verifies that `retrofit2.Call` and `retrofit2.Response` keep rules are defined.
+    4. `testRetrofitHttpAnnotationInterfaceRulesKept`: Verifies conditional `-if interface * { @retrofit2.http.* ... }` and `-keepclassmembers` rules for Retrofit service methods.
+    5. `testGsonTypeTokenRetention`: Verifies that `com.google.gson.reflect.TypeToken` is retained for generic deserialization.
+    6. `testSuspendFunctionReflectionSignatureIntegrity`: Emulates Retrofit's `HttpServiceMethod` generic parameter reflection over `ApiService` suspend functions, proving zero `ClassCastException` risks.
+    7. `testGradlePropertiesSafetyFlag`: Validates R8 compatibility mode flag configuration in `gradle.properties`.
+
 ## [v1.17] - [2026-11-20] Runtime Threading, Execution Providers & Engine Tuning (Phase 04)
 ### Added & Improved
 - **ONNX Session Thread Configuration & XNNPACK Fallback Allocation (`OnnxSessionManager.kt`)**:

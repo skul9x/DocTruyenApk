@@ -1,144 +1,109 @@
 {
-  "updated_at": "2026-11-20T19:02:00+07:00",
+  "updated_at": "2026-11-20T19:59:00+07:00",
   "working_on": {
-    "feature": "Comprehensive Performance & Memory Optimization",
-    "task": "Completed Phase 04 & Successfully Deployed Release v1.14 via GitHub Actions CI/CD.",
+    "feature": "Comprehensive R8 Minification, Retrofit & Network Architecture Fix",
+    "task": "Completed Phase 04: End-to-End Release Build Verification & CI/CD Pipeline Assurance. All 4 phases completed.",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
-      "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
-      "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-      "app/proguard-rules.pro",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/RuntimeOptimizationAndPrecisionVerificationTest.kt",
-      "plans/261120-1745-comprehensive-performance-fix/phase-04-runtime-threading-and-engine-optimizations.md",
-      "plans/261120-1745-comprehensive-performance-fix/plan.md",
+      "app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AssetCleansingAndBuildOptimizationTest.kt",
       "CHANGELOG.md",
+      "plans/261120-1915-r8-retrofit-network-fix/phase-04-release-build-verification-and-ci.md",
+      "plans/261120-1915-r8-retrofit-network-fix/plan.md",
       ".brain/session_log.txt",
       ".brain/session.json",
       ".brain/brain.json",
       ".brain/handover.md"
     ],
     "blockers": [],
-    "notes": "All 4 phases of Comprehensive Performance & Memory Optimization have been implemented, verified, committed, pushed, and built via CI/CD into Release v1.14 (doctruyenapk-v1.14.apk)."
+    "notes": "All 4 phases completed and verified with passing unit tests. Release v1.15 ready."
   },
   "pending_tasks": [],
   "recent_changes": [
     {
-      "timestamp": "2026-11-20T18:58:00+07:00",
-      "type": "deployment",
-      "description": "Fixed R8 syntax issue in proguard-rules.pro, committed and pushed to origin main, and completed GitHub Actions CI/CD pipeline. Released v1.14 with signed APK doctruyenapk-v1.14.apk.",
-      "files": [
-        "app/proguard-rules.pro",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-20T18:38:00+07:00",
+      "timestamp": "2026-11-20T19:59:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 04: Runtime Threading, Execution Providers & Engine Tuning. Fixed XNNPACK CPU fallback thread starvation by setting intraOpNumThreads on SessionOptions before EP registration. Implemented truthful precision availability detection, disabled INT8 toggle when absent, and updated TtsMetricsLogger to log actual engine quantization. Accelerated acoustic frame projection via 8-way unrolled SIMD loop (computeAcousticProjectionLogits). Added isCacheable filtering in SeaG2P to bypass multi-sentence paragraphs. Set HttpLoggingInterceptor to NONE in release builds. Verified via RuntimeOptimizationAndPrecisionVerificationTest.kt (4/4 passed).",
+      "description": "Implemented Phase 04: End-to-End Release Build Verification & CI/CD Pipeline Assurance. Created ReleaseBuildValidationTest verifying build configuration, absence of reckless ProGuard wildcards, and network component cohesion. Expanded AssetCleansingAndBuildOptimizationTest with Retrofit/Continuation ProGuard assertions. Updated CHANGELOG.md for Release v1.15. Verified via ReleaseBuildValidationTest.kt (3/3 passed).",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SeaG2P.kt",
-        "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
-        "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/RuntimeOptimizationAndPrecisionVerificationTest.kt",
-        "plans/261120-1745-comprehensive-performance-fix/phase-04-runtime-threading-and-engine-optimizations.md",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-20T18:26:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 03: Asset Cleansing, Memory-Efficient NPZ & Build Optimization. Deleted 84.8MB dead assets (denoiser, encoder), implemented zero-BAOS streaming in NpzReader, flattened 3D audio embeddings to 16 flat channel arrays (eliminating 16,384 array allocations), enabled R8 isMinifyEnabled = true with complete ProGuard rules for ONNX/JNI/Retrofit, and configured ABI splits. Verified via AssetCleansingAndBuildOptimizationTest.kt (4/4 passed).",
-      "files": [
-        "app/src/main/assets/vieneu/denoiser",
-        "app/src/main/assets/vieneu/codec/moss_audio_tokenizer_encode.onnx",
-        "app/src/main/assets/vieneu/codec/moss_audio_tokenizer_encode.data",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuConfig.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/build.gradle.kts",
-        "app/proguard-rules.pro",
+        "app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt",
         "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AssetCleansingAndBuildOptimizationTest.kt",
-        "plans/261120-1745-comprehensive-performance-fix/phase-03-asset-cleansing-npz-and-build-optimization.md",
+        "CHANGELOG.md",
+        "plans/261120-1915-r8-retrofit-network-fix/phase-04-release-build-verification-and-ci.md",
+        "plans/261120-1915-r8-retrofit-network-fix/plan.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-20T19:53:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 03: Defensive Network Error Architecture & User-Friendly Translation. Created NetworkErrorResolver mapping technical exceptions to polite Vietnamese messages, shielding internal reflection details (ParameterizedType ClassCastException), automating session cookie recovery via HostingVerifier, and integrating across MainActivity and StoryDetailActivity. Verified via NetworkErrorResolverTest.kt (5/5 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/network/NetworkErrorResolver.kt",
+        "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/main/res/values/strings.xml",
+        "app/src/test/java/com/skul9x/doctruyen/network/NetworkErrorResolverTest.kt",
+        "plans/261120-1915-r8-retrofit-network-fix/phase-03-defensive-network-error-architecture.md",
+        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
         "CHANGELOG.md"
       ]
     },
     {
-      "timestamp": "2026-11-20T18:12:00+07:00",
+      "timestamp": "2026-11-20T19:45:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 02: Bounded Audio Channel & Playback Concurrency. Replaced ConcurrentLinkedQueue with bounded Coroutine Channel (capacity: 4), guaranteeing producer suspension when buffer limit is reached and memory cap <15MB. Created AudioDispatchers.AudioTrackDispatcher with MAX_PRIORITY thread to isolate blocking AudioTrack.write calls off Dispatchers.Default. Eliminated delay(20) polling with reactive channel reception. Clean cancellation and drain on pause/stop. Verified via BoundedAudioChannelPipelineTest.kt (4/4 passed).",
+      "description": "Implemented Phase 02: Resilient Data Model Serialization & Field Hardening. Added @androidx.annotation.Keep and explicit @SerializedName on all declared properties of Story, StoryListResponse, StoryDetailResponse, and RandomStoryResponse. Provided safe default initializers (emptyList, nulls, default primitives) to generate no-arg constructors for safe Gson instantiation. Verified via DataModelSerializationIntegrityTest.kt (5/5 passed).",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/AudioPlayer.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
-        "plans/261120-1745-comprehensive-performance-fix/phase-02-bounded-audio-channel-and-concurrency.md",
+        "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
+        "app/src/test/java/com/skul9x/doctruyen/network/DataModelSerializationIntegrityTest.kt",
+        "plans/261120-1915-r8-retrofit-network-fix/phase-02-data-model-serialization-hardening.md",
+        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
         "CHANGELOG.md"
       ]
     },
     {
-      "timestamp": "2026-11-20T17:58:00+07:00",
+      "timestamp": "2026-11-20T19:35:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 01: Native Tensor Lifecycle & Zero-Copy KV Cache Reuse. Replaced FloatArray heap roundtrips in synthesizePass with direct native tensor handover using OrtSession.Result across 12 layers. Refactored acousticFrame to retain and pass native tensors across channels 0..15. Removed synchronous System.gc() calls from autoregressive loops. Extended CacheTensor to support native tensor wrapping and safe recycling. Verified via NativeTensorReuseAndZeroGcTest.kt (4/4 passed).",
+      "description": "Implemented Phase 01: R8 & ProGuard Rules Hardening for Retrofit & Kotlin Coroutines. Added official Square rules for kotlin.coroutines.Continuation, retrofit2.Call, retrofit2.Response, Gson TypeToken, AnnotationDefault, and conditional rules for @retrofit2.http.* interface methods. Configured android.enableR8.fullMode=false in gradle.properties. Verified via RetrofitR8ProGuardRulesTest.kt (7/7 passed).",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NativeTensorReuseAndZeroGcTest.kt",
-        "plans/261120-1745-comprehensive-performance-fix/phase-01-native-tensor-lifecycle-and-kv-cache-reuse.md",
+        "app/proguard-rules.pro",
+        "gradle.properties",
+        "app/src/test/java/com/skul9x/doctruyen/network/RetrofitR8ProGuardRulesTest.kt",
+        "plans/261120-1915-r8-retrofit-network-fix/phase-01-r8-proguard-rules-hardening.md",
+        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
         "CHANGELOG.md"
       ]
     }
   ],
-  "errors_encountered": [],
+  "errors_encountered": [
+    {
+      "error": "androidx.annotation.Keep has RetentionPolicy.CLASS (BINARY), causing clazz.getAnnotation(Keep::class.java) to return null at runtime reflection",
+      "solution": "Updated test verification to inspect the compiled class bytecode resource for the presence of the Keep descriptor (Landroidx/annotation/Keep;) in RuntimeInvisibleAnnotations",
+      "resolved": true
+    }
+  ],
   "decisions_made": [
     {
-      "decision": "Configure sessionOptions.setIntraOpNumThreads before XNNPACK registration",
-      "reason": "Prevents ONNX Runtime from defaulting CPU fallback execution provider to a single thread when XNNPACK cannot handle certain graph subgraphs, ensuring big-core parallelism across all operations."
+      "decision": "Add comprehensive ReleaseBuildValidationTest to verify minified release configuration and network cohesion",
+      "reason": "Prevents regression in release builds where R8 is active, ensuring keep rules are strictly enforced and no dangerous wildcards are added."
     },
     {
-      "decision": "Truthful precision availability detection (hasInt8Assets, resolveEffectivePrecision) and UI alignment",
-      "reason": "Eliminates deceptive warnings about missing INT8 model assets on FP32-only builds, disables INT8 selection in SettingsActivity when unavailable, and records true engine quantization in TtsMetricsLogger."
+      "decision": "Add explicit @SerializedName on 100% of fields in all network DTOs",
+      "reason": "Prevents R8/ProGuard field renaming from desynchronizing JSON key mapping during Gson deserialization."
     },
     {
-      "decision": "8-way unrolled accumulator loop for computeAcousticProjectionLogits (1024x768 matrix-vector multiply)",
-      "reason": "Breaks serial floating-point addition dependency stalls on CPU FMA pipelines and exposes ILP and auto-vectorization, reducing acoustic frame sampling time by >25%."
+      "decision": "Annotate Story, StoryListResponse, StoryDetailResponse, RandomStoryResponse with @androidx.annotation.Keep",
+      "reason": "Protects classes and constructors from dead-code stripping, member optimization, and synthetic constructor removal under R8 optimization."
     },
     {
-      "decision": "Filter multi-sentence paragraphs in SeaG2P (isCacheable with MAX_CACHEABLE_LENGTH = 100)",
-      "reason": "Avoids wasteful synchronized hash code calculation and LRU cache thrashing on unique novel paragraphs, reserving the 512-entry cache for high-frequency lexical words and phrases."
+      "decision": "Provide default values for DTO properties (e.g. status: String = '', data = emptyList()) to generate synthetic no-arg constructors",
+      "reason": "Allows Gson to instantiate objects using standard constructor initialization with default values rather than bypassing constructors with sun.misc.Unsafe when keys are omitted."
     },
     {
-      "decision": "Enforce HttpLoggingInterceptor.Level.NONE for release builds in ApiService",
-      "reason": "Prevents sensitive network header leaks into system logcat and eliminates string allocations in production."
+      "decision": "Add explicit -keep,allowoptimization,allowshrinking,allowobfuscation class kotlin.coroutines.Continuation to proguard-rules.pro",
+      "reason": "Prevents R8 from stripping the generic Signature attribute on Continuation parameters in Retrofit suspend functions, resolving the java.lang.ClassCastException: java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType runtime crash."
     },
     {
-      "decision": "Purging 84.8MB dead AI assets (denoiser and encoder models)",
-      "reason": "TTS synthesis relies strictly on decode and autoregressive backbone models; denoiser and encoder were never invoked at runtime, wasting 84.8MB download and storage."
-    },
-    {
-      "decision": "Zero-BAOS streaming NPY parsing with 64KB fixed transfer buffer in NpzReader",
-      "reason": "Eliminates ByteArrayOutputStream continuous buffer doubling and 50MB intermediate byte arrays, reducing cold start memory spike by >150MB."
-    },
-    {
-      "decision": "Flat 16-channel array representation for 3D audio embeddings (getChannelFlatArrays)",
-      "reason": "Eliminates 16,384 distinct FloatArray heap object allocations, enabling zero-copy FloatBuffer.wrap slicing during acoustic synthesis and reducing GC pressure."
-    },
-    {
-      "decision": "Enabling R8 minification (isMinifyEnabled = true) with explicit keep rules",
-      "reason": "Reduces DEX size by >25% while safeguarding ONNX Runtime native JNI bindings, SeaG2P phonemizer, and Retrofit/Gson network data models."
-    },
-    {
-      "decision": "Bounded Coroutine Channel with capacity = 4 for audio pipeline backpressure",
-      "reason": "Prevents unbounded accumulation of 48kHz PCM audio in memory during long reading sessions, guaranteeing heap footprint <15MB regardless of story length."
-    },
-    {
-      "decision": "Dedicated single-thread AudioTrackDispatcher with MAX_PRIORITY thread for AudioPlayer writes",
-      "reason": "Completely isolates blocking AudioTrack.write(..., WRITE_BLOCKING) operations off Dispatchers.Default, preventing compute thread pool starvation and audio underrun glitches."
+      "decision": "Retain generic signatures of retrofit2.Call, retrofit2.Response, and Gson TypeToken",
+      "reason": "Ensures runtime reflection and generic deserializers can determine the parameterized return types under R8 optimization."
     }
   ]
 }

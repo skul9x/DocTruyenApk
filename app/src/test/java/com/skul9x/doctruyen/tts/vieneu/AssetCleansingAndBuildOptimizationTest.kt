@@ -207,6 +207,10 @@ class AssetCleansingAndBuildOptimizationTest {
         assertTrue("ProGuard rules must preserve Retrofit classes", proguardContent.contains("class retrofit2.**"))
         assertTrue("ProGuard rules must preserve network models", proguardContent.contains("class com.skul9x.doctruyen.network.**"))
         assertTrue("ProGuard rules must preserve SerializedName annotations", proguardContent.contains("@com.google.gson.annotations.SerializedName"))
+        assertTrue("ProGuard must keep kotlin.coroutines.Continuation", proguardContent.contains("class kotlin.coroutines.Continuation"))
+        assertTrue("ProGuard must keep retrofit2.Call", proguardContent.contains("interface retrofit2.Call"))
+        assertTrue("ProGuard must keep retrofit2.Response", proguardContent.contains("class retrofit2.Response"))
+        assertTrue("ProGuard must keep AnnotationDefault", proguardContent.contains("-keepattributes AnnotationDefault"))
 
         // 4. Verify build.gradle.kts configuration
         val gradleFile = resolveFile("build.gradle.kts")

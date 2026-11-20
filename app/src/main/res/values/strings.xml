@@ -43,6 +43,10 @@
     <string name="error_network">Không thể kết nối mạng</string>
     <string name="error_server">Lỗi máy chủ</string>
     <string name="error_unknown">Đã xảy ra lỗi</string>
+    <string name="error_no_internet">Không thể kết nối Internet. Vui lòng kiểm tra lại Wifi hoặc 4G.</string>
+    <string name="error_timeout">Máy chủ phản hồi quá lâu. Vui lòng thử lại sau giây lát.</string>
+    <string name="error_auth_expired">Phiên kết nối hết hạn, đang xác thực lại...</string>
+    <string name="error_data_processing">Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng nhấn Thử lại.</string>
     
     <!-- Content Descriptions for Accessibility -->
     <string name="cd_story_image">Hình ảnh truyện</string>

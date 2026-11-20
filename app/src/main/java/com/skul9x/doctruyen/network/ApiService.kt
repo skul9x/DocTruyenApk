@@ -1,5 +1,6 @@
 package com.skul9x.doctruyen.network
 
+import androidx.annotation.Keep
 import com.skul9x.doctruyen.BuildConfig
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
@@ -13,31 +14,37 @@ import java.util.concurrent.TimeUnit
 
 // ============ Data Models ============
 
+@Keep
 data class Story(
-    val id: Int,
-    val title: String,
-    val image: String?,
-    val content: String? = null,
+    @SerializedName("id") val id: Int,
+    @SerializedName("title") val title: String,
+    @SerializedName("image") val image: String? = null,
+    @SerializedName("content") val content: String? = null,
     @SerializedName("content_text") val contentText: String? = null
 )
 
+@Keep
 data class StoryListResponse(
-    val status: String,
-    val data: List<Story> = emptyList(),
-    val total: Int = 0,
-    val page: Int = 1,
+    @SerializedName("status") val status: String = "",
+    @SerializedName("data") val data: List<Story> = emptyList(),
+    @SerializedName("total") val total: Int = 0,
+    @SerializedName("page") val page: Int = 1,
     @SerializedName("total_pages") val totalPages: Int = 1,
-    val message: String? = null
+    @SerializedName("message") val message: String? = null
 )
 
+@Keep
 data class StoryDetailResponse(
-    val status: String,
-    val data: Story
+    @SerializedName("status") val status: String,
+    @SerializedName("data") val data: Story,
+    @SerializedName("message") val message: String? = null
 )
 
+@Keep
 data class RandomStoryResponse(
-    val status: String,
-    val data: Story
+    @SerializedName("status") val status: String,
+    @SerializedName("data") val data: Story,
+    @SerializedName("message") val message: String? = null
 )
 
 // ============ API Interface ============

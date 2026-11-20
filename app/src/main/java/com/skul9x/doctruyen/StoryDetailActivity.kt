@@ -17,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.skul9x.doctruyen.network.HostingVerifier
+import com.skul9x.doctruyen.network.NetworkErrorResolver
 import com.skul9x.doctruyen.network.RetrofitClient
 import com.skul9x.doctruyen.tts.vieneu.VieNeuTTSManager
 import kotlinx.coroutines.Dispatchers
@@ -349,10 +351,30 @@ class StoryDetailActivity : AppCompatActivity() {
                         triggerPrewarmIfReady()
                     }
                 } else {
-                    showErrorState("Không thể tải nội dung truyện")
+                    showErrorState(response.message ?: "Không thể tải nội dung truyện")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                return@launch
             } catch (e: Exception) {
-                showErrorState(getString(R.string.error_loading))
+                val resolved = NetworkErrorResolver.resolve(e, this@StoryDetailActivity)
+                if (resolved.isAuthError && RetrofitClient.cookie.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@StoryDetailActivity, resolved.userMessage, Toast.LENGTH_SHORT).show()
+                        RetrofitClient.clearCookie(this@StoryDetailActivity)
+                        val url = com.skul9x.doctruyen.utils.UserConfig.getBaseUrl(this@StoryDetailActivity)
+                        HostingVerifier.verify(this@StoryDetailActivity, url) { success ->
+                            runOnUiThread {
+                                if (success) {
+                                    loadStoryContent()
+                                } else {
+                                    showErrorState(resolved.userMessage)
+                                }
+                            }
+                        }
+                    }
+                    return@launch
+                }
+                showErrorState(resolved.userMessage)
             } finally {
                 isLoadingContent = false
             }

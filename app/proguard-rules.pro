@@ -22,10 +22,35 @@
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations
 -keepattributes RuntimeVisibleParameterAnnotations, RuntimeInvisibleParameterAnnotations
+-keepattributes AnnotationDefault
+
+# Preserve Kotlin Coroutines Continuation generic signatures for Retrofit suspend functions
+-keep,allowoptimization,allowshrinking,allowobfuscation class kotlin.coroutines.Continuation
+
+# Core Retrofit Call & Response generic signatures
+-keep,allowobfuscation,allowshrinking interface retrofit2.Call
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+
+# Protect Retrofit service methods and return types from R8 stripping / optimization
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+-if interface * {
+    @retrofit2.http.* <methods>;
+}
+-keep,allowobfuscation interface <1>
+-if interface * {
+    @retrofit2.http.* public *** *(...);
+}
+-keep,allowoptimization,allowshrinking,allowobfuscation class <3>
 
 -keepattributes *Annotation*
 -keepclassmembers class com.google.gson.** { *; }
 -dontwarn com.google.gson.**
+
+# Preserve Gson TypeToken generic reflection
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 
 -keep class com.skul9x.doctruyen.network.** { *; }
 -keepclassmembers class com.skul9x.doctruyen.network.** {

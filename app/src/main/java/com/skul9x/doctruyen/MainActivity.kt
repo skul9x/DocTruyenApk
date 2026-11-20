@@ -22,6 +22,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
 import com.skul9x.doctruyen.adapter.StoryAdapter
 import com.skul9x.doctruyen.network.HostingVerifier
+import com.skul9x.doctruyen.network.NetworkErrorResolver
 import com.skul9x.doctruyen.network.RetrofitClient
 import com.skul9x.doctruyen.network.Story
 import kotlinx.coroutines.Dispatchers
@@ -321,26 +322,22 @@ class MainActivity : AppCompatActivity() {
                 // Coroutine was cancelled (e.g., new search started), ignore silently
                 return@launch
             } catch (e: Exception) {
-                // Check for Auth/Parsing error (Cookie expired -> Server returns HTML -> GSON fails)
-                val isAuthError = e is com.google.gson.stream.MalformedJsonException || 
-                                  e.message?.contains("Forbidden") == true ||
-                                  e.message?.contains("403") == true ||
-                                  e.message?.contains("html") == true
+                val resolved = NetworkErrorResolver.resolve(e, this@MainActivity)
 
-                if (isAuthError && RetrofitClient.cookie.isNotEmpty()) {
+                if (resolved.isAuthError && RetrofitClient.cookie.isNotEmpty()) {
                     withContext(Dispatchers.Main) {
-                         Toast.makeText(this@MainActivity, "Phiên hết hạn, đang xác thực lại...", Toast.LENGTH_SHORT).show()
-                         RetrofitClient.clearCookie(this@MainActivity)
-                         verifyHosting()
+                        Toast.makeText(this@MainActivity, resolved.userMessage, Toast.LENGTH_SHORT).show()
+                        RetrofitClient.clearCookie(this@MainActivity)
+                        verifyHosting()
                     }
                     return@launch
                 }
 
                 if (currentPage == 1) {
-                    showError(e.message ?: getString(R.string.error_unknown))
+                    showError(resolved.userMessage)
                 } else {
                     Toast.makeText(this@MainActivity, 
-                        getString(R.string.error_loading), 
+                        resolved.userMessage, 
                         Toast.LENGTH_SHORT).show()
                 }
             } finally {
@@ -369,9 +366,12 @@ class MainActivity : AppCompatActivity() {
                 if (response.status == "success") {
                     openStoryDetail(response.data)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                return@launch
             } catch (e: Exception) {
+                val resolved = NetworkErrorResolver.resolve(e, this@MainActivity)
                 Toast.makeText(this@MainActivity, 
-                    getString(R.string.error_loading), 
+                    resolved.userMessage, 
                     Toast.LENGTH_SHORT).show()
             } finally {
                 btnRandomStory.isEnabled = true
