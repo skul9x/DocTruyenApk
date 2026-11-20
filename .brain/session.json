@@ -1,23 +1,29 @@
 {
-  "updated_at": "2026-11-20T14:48:30+07:00",
+  "updated_at": "2026-11-20T15:42:00+07:00",
   "working_on": {
-    "feature": "Debug Log Viewer & Dynamic Logger Sync Fix",
-    "task": "Fixed empty debug log viewer ('Nhật ký lỗi' blank screen) caused by hardcoded BuildConfig.DEBUG guard, desynced UserConfig preference, and missing empty-state UX.",
+    "feature": "Natural Sentence Flow & Prosody Cadence Fix",
+    "task": "Remediated choppy speech ('nhả chữ', false pauses mid-sentence, broken ':.' punctuation and split compound words like 'sẵn sàng') by increasing SmartTextSegmenter.DEFAULT_MAX_CHARS from 75 to 180, preserving colons/clause delimiters in puncNorm, and collapsing HTML whitespace.",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/DebugLogActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/SettingsActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
-      "app/src/main/java/com/skul9x/doctruyen/utils/DebugLogger.kt",
-      "app/src/main/java/com/skul9x/doctruyen/utils/UserConfig.kt",
-      "app/src/test/java/com/skul9x/doctruyen/DebugLogIntegrationTest.kt"
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NaturalSentenceFlowAndCadenceTest.kt"
     ],
     "blockers": [],
-    "notes": "DebugLogger.init(context) synchronizes isDebugEnabled with UserConfig at app & service launch. Settings switch dynamically updates DebugLogger. DebugLogActivity now includes contextual empty states and filter presets for timing and error views."
+    "notes": "Story 118 restored from 26 fragmented chunks to 19 natural unbroken sentences. All 316+ unit tests passing 100%."
   },
   "pending_tasks": [],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-20T15:42:00+07:00",
+      "type": "bug_fix",
+      "description": "Resolved choppy speech / 'nhả chữ' defect caused by overly aggressive 75-character chunk limit and colon mutilation in SmartTextSegmenter. Raised DEFAULT_MAX_CHARS to natural sentence bound 180, preserved clause markers (':', ';', '—', '–') in puncNorm without appending '.', collapsed redundant HTML whitespace. Added comprehensive NaturalSentenceFlowAndCadenceTest suite.",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/OptimizedTextChunkingAndStateTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/NaturalSentenceFlowAndCadenceTest.kt"
+      ]
+    },
     {
       "timestamp": "2026-11-20T10:46:00+07:00",
       "type": "release",
@@ -277,6 +283,12 @@
     }
   ],
   "errors_encountered": [
+    {
+      "error": "Choppy speech / 'nhả chữ' and mid-sentence pauses caused by overly aggressive 75-character chunk limit and colon mutation into ':.' in SmartTextSegmenter",
+      "solution": "Increased SmartTextSegmenter.DEFAULT_MAX_CHARS to natural sentence bound 180, preserved clause markers (':', ';', '—', '–') in puncNorm without appending '.', and collapsed redundant HTML whitespace so prose reads in continuous, fluent sentences",
+      "resolved": true,
+      "file": "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt"
+    },
     {
       "error": "Pause cadence configuration saved in Settings was ignored and overridden by hardcoded defaults during story playback",
       "solution": "Defined PauseConfig.UNSPECIFIED (-1) as interface default in ITTSManager, allowing VieNeuTTSManager and GoogleTTSManager to dynamically resolve and apply user-configured cadence from UserConfig/SharedPreferences; updated Settings UI text to clarify auto-save behavior",

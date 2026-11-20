@@ -262,7 +262,7 @@ object SmartTextSegmenter {
         return EmotionTagParser.phonemizeWithBypass(text, phonemizer)
     }
 
-    const val DEFAULT_MAX_CHARS: Int = 75
+    const val DEFAULT_MAX_CHARS: Int = 180
 
     // Common Vietnamese abbreviations, honorifics, titles, and acronyms
     private val PROTECTED_ABBREVIATIONS = listOf(
@@ -421,6 +421,7 @@ object SmartTextSegmenter {
     private val CLOSERS: Set<Char> = OPEN_TO_CLOSE.values.toSet()
     private const val SYMMETRIC_QUOTE: Char = '"'
     private val SENT_END_CHARS: Set<Char> = setOf('.', '!', '?', '…')
+    private val CLAUSE_END_CHARS: Set<Char> = setOf(':', ';', '—', '–')
     private val TRAILING_CLOSE: Set<Char> = CLOSERS + setOf('"', '\'', '’', '”')
 
     /**
@@ -497,6 +498,7 @@ object SmartTextSegmenter {
 
     /**
      * Normalize chunk terminal punctuation according to VieNeu rules:
+     * - Preserves clause delimiters (:, ;, —, –) without appending '.' to prevent broken punctuation (e.g. :. or ;.).
      * - Short chunks (< 5 words) are guaranteed to end with a terminal period '.'.
      * - Chunks missing terminal punctuation (., !, ?, …, ,) automatically append '.'.
      * - Attached closing quotes or brackets (e.g. bao giờ?", thế à!)) stay bound with the preceding sentence.
@@ -507,6 +509,11 @@ object SmartTextSegmenter {
 
         val words = trimmed.split(WHITESPACE_REGEX).filter { it.isNotEmpty() }
         val lastChar = trimmed.last()
+
+        // 1. Preserve clause delimiters (:, ;, —, –) as-is
+        if (lastChar in CLAUSE_END_CHARS) {
+            return EmotionTagParser.normalizePunctuationAttachment(trimmed)
+        }
 
         val normalized = if (words.size < 5) {
             if (lastChar in SENT_END_CHARS || lastChar == ',') {
@@ -521,7 +528,7 @@ object SmartTextSegmenter {
                 trimmed + "."
             }
         } else {
-            if (lastChar in SENT_END_CHARS || lastChar == ',') {
+            if (lastChar in SENT_END_CHARS || lastChar == ',' || lastChar in CLAUSE_END_CHARS) {
                 trimmed
             } else {
                 trimmed + "."
@@ -539,6 +546,7 @@ object SmartTextSegmenter {
     private val NEWLINES_REGEX = Regex("\n+")
     private val CLAUSE_SPLIT_REGEX = Regex("(?<=[,;:—–-])\\s+|(?<=[—–])(?=[^\\s])")
     private val WHITESPACE_REGEX = Regex("\\s+")
+    private val HORIZONTAL_WHITESPACE_REGEX = Regex("[ \\t]+")
 
     private val NUM_DOT_REGEX = Regex("(\\b\\d+)\\.(\\d+\\b)")
     private val TIME_REGEX = Regex("(\\b\\d{1,2}):(\\d{2}\\b)")
@@ -557,7 +565,7 @@ object SmartTextSegmenter {
             return html
         }
 
-        return html
+        val stripped = html
             .replace(BR_REGEX, "\n")
             .replace(P_CLOSE_REGEX, "\n\n")
             .replace(DIV_CLOSE_REGEX, "\n\n")
@@ -570,6 +578,8 @@ object SmartTextSegmenter {
             .replace("&apos;", "'")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
+
+        return HORIZONTAL_WHITESPACE_REGEX.replace(stripped, " ")
     }
 
     /**

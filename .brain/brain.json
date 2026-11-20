@@ -252,9 +252,22 @@
         "strings.xml (auto-save notification text & btnSave renamed to 'Lưu & Kiểm tra máy chủ truyện')",
         "UserConfigPauseTest.kt (regression unit test suite)"
       ]
+    },
+    {
+      "name": "Natural Sentence Flow & Prosody Cadence Optimization",
+      "status": "Implemented & Verified (100% Tests Pass)",
+      "components": [
+        "SmartTextSegmenter.kt (DEFAULT_MAX_CHARS=180, clause delimiter preservation in puncNorm, horizontal whitespace collapsing)",
+        "OptimizedTextChunkingAndStateTest.kt (updated bounds assertions)",
+        "NaturalSentenceFlowAndCadenceTest.kt (5 comprehensive unit tests)"
+      ]
     }
   ],
   "decisions_made": [
+    {
+      "decision": "Raise SmartTextSegmenter.DEFAULT_MAX_CHARS from 75 to 180 and preserve clause punctuation in puncNorm",
+      "reason": "Prevents artificial chopping of normal Vietnamese prose into tiny fragments, eliminates mid-word splitting on compound words like 'sẵn sàng', prevents mutating colons into ':.', and preserves natural intonation and prosodic cadence without false pauses."
+    },
     {
       "decision": "3-second debounced pre-warming with lifecycle cancellation and UserConfig toggle in StoryDetailActivity",
       "reason": "Prevents premature heavy on-device neural synthesis on Dispatchers.Default when users only browse story summaries, saving battery and CPU thermal capacity while providing 0ms TTFT for users who stay."

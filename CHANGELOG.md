@@ -1,5 +1,17 @@
 # Changelog - DocTruyen Android App
 
+## [2026-11-20] Khắc Phục Lỗi Đọc "Nhả Chữ" & Tối Ưu Độ Liền Mạch Giọng Đọc (Natural Sentence Flow & Prosody Cadence)
+### Fixed & Improved
+- **Khôi Phục Độ Dài Câu Chuẩn Tự Nhiên (`SmartTextSegmenter.kt`)**:
+  - Tăng giới hạn `DEFAULT_MAX_CHARS` từ 75 lên 180 ký tự, chấm dứt tình trạng băm nhỏ câu văn xuôi tiếng Việt (trước đó 1 câu bình thường bị chém làm 2-3 khúc gây cảm giác ngắt cụt, đọc nhả từng từ).
+  - Khắc phục triệt để lỗi chém ngang từ ghép tiếng Việt (như *"sẵn sàng"* bị tách thành *"sẵn"* rồi mới sang *"sàng"*).
+  - Câu chuyện 1249 ký tự mẫu ("Một trí khôn hơn trăm trí khôn") trở về đúng 19 chunks câu tự nhiên hoàn chỉnh thay vì 26 chunks bị chia vụn.
+- **Bảo Toàn Dấu Câu Vế Câu & Câu Dẫn Thoại (`puncNorm`)**:
+  - Không tự tiện thêm dấu chấm `.` vào sau dấu hai chấm `:`, chấm phẩy `;`, gạch ngang `—`, loại bỏ hoàn toàn các lỗi dấu câu lai kỳ quặc như `: .` hay `; .` làm mô hình neural hạ giọng gượng gạo.
+  - Chuẩn hóa khoảng trắng ngang HTML thừa (`HORIZONTAL_WHITESPACE_REGEX`), loại bỏ lỗi ngắt nhịp do thẻ HTML để lại khoảng trống kép.
+- **Kiểm Thử Toàn Diện (`NaturalSentenceFlowAndCadenceTest.kt`)**:
+  - Tạo mới bộ kiểm thử chuyên biệt 5 bài test xác thực 19 chunks hoàn chỉnh, kiểm tra bảo tồn dấu câu, không băm nhỏ từ ngữ, và đồng bộ cấu hình ngắt nghỉ nhịp điệu (Pause Cadence). Toàn bộ 316+ unit test pass 100%.
+
 ## [2026-11-20] Sửa Lỗi Hiển Thị Nhật Ký (Debug Log Viewer Dynamic Sync & Empty State UX)
 ### Fixed & Improved
 - **Đồng Bộ Động Cấu Hình Ghi Nhật Ký (`DebugLogger.kt` & `UserConfig.kt`)**:
