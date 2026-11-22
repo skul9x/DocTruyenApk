@@ -3,12 +3,12 @@
     "schema_version": "1.1.0",
     "awf_version": "4.0.2",
     "created_at": "2026-08-18T20:04:00+07:00",
-    "updated_at": "2026-11-20T19:59:00+07:00"
+    "updated_at": "2026-11-22T19:42:00+07:00"
   },
   "project": {
     "name": "VieNeu-TTS & DocTruyenApk Integration",
     "type": "Offline AI Text-to-Speech Mobile App",
-    "status": "Comprehensive R8 Minification, Retrofit & Network Architecture Fix - All 4 Phases Completed",
+    "status": "TTS Latency Optimization, Prewarm Preservation & ANR Prevention - All 4 Phases Completed",
     "repository": "https://github.com/skul9x/DocTruyenApk.git"
   },
   "tech_stack": {
@@ -313,6 +313,18 @@
     {
       "decision": "CPU Thread Clamping to coerceIn(2, 4) on Big Cores",
       "reason": "Prevents ONNX Runtime from scheduling threads on slow LITTLE cores or causing CPU thermal throttling and UI freezes."
+    },
+    {
+      "decision": "Prewarm Preservation with In-Flight CompletableDeferred Request Coalescing",
+      "reason": "Eliminates the critical prewarm cancellation bug (P2 in fix.md) by wrapping inference and cache put in NonCancellable, cooperatively stopping prewarm after chunk 0, and allowing TTSAudioPipeline to attach to in-flight prewarm without duplicate inference or lock contention, dropping TTFT to <100ms."
+    },
+    {
+      "decision": "Cooperative PauseGate & Sub-Chunk Audio Slicing with Buffer Retention",
+      "reason": "Resolves destructive pause/resume behavior (P1 in fix.md) by replacing synthesis/playback job cancellation and channel draining with a thread-safe PauseGate using CompletableJob. Retains up to 4 buffered audio chunks in audioChannel, eliminating CPU re-synthesis waste, and slices AudioPlayer writes into ~100ms frames to prevent phrase repetition upon resume."
+    },
+    {
+      "decision": "Asynchronous Engine Teardown & Cooperative Lifecycle Cancellation",
+      "reason": "Eliminates Main-Thread blocking and ANR risks (P3 in fix.md) by introducing @Volatile var cancelRequested flags across decode frames and session runs, refactoring engine.close() with tryLock and background Dispatchers.IO teardown, decoupling ReadingService and VieNeuTTSManager teardown from UI threads, and removing forced synchronous System.gc() pauses."
     }
   ]
 }

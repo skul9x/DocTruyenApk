@@ -157,6 +157,16 @@ object TtsMetricsLogger {
         DebugLogger.log(TAG, "🔄 [TtsMetrics] Active session quantization updated to $quantization", LogType.TTS_TIMING)
     }
 
+    /**
+     * Records or updates the effective precision of the active TTS engine session.
+     */
+    @Synchronized
+    fun logEffectivePrecision(effectivePrecision: String) {
+        updateActiveQuantization(effectivePrecision)
+        val msg = "📊 [Telemetry] Effective precision logged as: $effectivePrecision"
+        DebugLogger.log(TAG, msg, LogType.TTS_TIMING)
+    }
+
     @Synchronized
     fun logEngineReload(newPrecision: String) {
         updateActiveQuantization(newPrecision)
@@ -506,7 +516,7 @@ object TtsMetricsLogger {
         return recommendations
     }
 
-    fun formatAiDiagnosticReport(session: TtsSessionMetrics): String {
+    fun formatAiDiagnosticReport(session: TtsSessionMetrics = currentSession): String {
         val sb = StringBuilder()
         sb.append("========================== 📊 AI PERFORMANCE DIAGNOSTIC ==========================\n")
 

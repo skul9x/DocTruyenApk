@@ -178,7 +178,7 @@ class GoogleTTSManagerTest {
         assertEquals(ITTSManager.TTSState.PLAYING, manager.currentState)
         assertTrue(manager.isPlaying())
         assertFalse(manager.isPaused())
-        assertEquals("Xin chào mọi người", fakeTts.lastSpokenText)
+        assertEquals("Xin chào mọi người.", fakeTts.lastSpokenText)
 
         // Test pause
         manager.pause()
@@ -255,7 +255,7 @@ class GoogleTTSManagerTest {
         )
 
         assertEquals(ITTSManager.TTSState.PLAYING, manager.currentState)
-        assertEquals("Tiêu đề truyện", fakeTts.lastSpokenText)
+        assertEquals("Tiêu đề truyện.", fakeTts.lastSpokenText)
 
         manager.shutdown()
         assertEquals(ITTSManager.TTSState.IDLE, manager.currentState)

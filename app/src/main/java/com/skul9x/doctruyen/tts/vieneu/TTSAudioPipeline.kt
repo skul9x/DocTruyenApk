@@ -7,6 +7,7 @@ import androidx.media.AudioAttributesCompat
 import androidx.media.AudioFocusRequestCompat
 import androidx.media.AudioManagerCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +77,42 @@ class TTSAudioPipeline(
 
     private val scope = CoroutineScope(dispatcher + SupervisorJob())
 
+    private class PauseGate {
+        private val lock = Any()
+        private var gateJob: CompletableJob = Job().apply { complete() }
+
+        @Volatile
+        var isPaused: Boolean = false
+            private set
+
+        fun pause() {
+            synchronized(lock) {
+                if (!isPaused) {
+                    isPaused = true
+                    gateJob = Job()
+                }
+            }
+        }
+
+        fun resume() {
+            synchronized(lock) {
+                if (isPaused) {
+                    isPaused = false
+                    gateJob.complete()
+                }
+            }
+        }
+
+        suspend fun awaitActive() {
+            val jobToJoin = synchronized(lock) {
+                if (isPaused) gateJob else null
+            }
+            jobToJoin?.join()
+        }
+    }
+
+    private val pauseGate = PauseGate()
+
     private var synthesisJob: Job? = null
     private var playbackJob: Job? = null
 
@@ -140,6 +177,10 @@ class TTSAudioPipeline(
         totalChunks = chunks.size
         currentChunkIndex = 0
         currentStoryId = storyId
+
+        if (storyId != 0 && PrewarmedChunkCache.activeStoryId != null && PrewarmedChunkCache.activeStoryId != storyId) {
+            PrewarmedChunkCache.clearPreviousStory(storyId)
+        }
 
         if (chunks.isEmpty()) {
             setState(PipelineState.Idle)
@@ -234,29 +275,31 @@ class TTSAudioPipeline(
     }
 
     /**
-     * Pause reading. Preserves current reading progress.
+     * Pause reading cooperatively.
+     * Preserves current reading progress, coroutine jobs, and queued chunks in audioChannel.
      */
     fun pause() {
-        synthesisJob?.cancel()
-        playbackJob?.cancel()
-        synthesisJob = null
-        playbackJob = null
-        audioChannel?.cancel()
-        drainChannel()
-        audioChannel = null
-        prebufferSignal?.cancel()
-        prebufferSignal = null
+        if (currentState is PipelineState.Paused || currentState is PipelineState.Idle) {
+            return
+        }
+        pauseGate.pause()
         audioPlayer.pause()
         setState(PipelineState.Paused)
     }
 
     /**
-     * Resume reading from current chunk index.
+     * Resume reading from current chunk index cooperatively.
      */
     fun resume() {
         if (currentState is PipelineState.Paused && currentChunkIndex < totalChunks) {
             requestAudioFocus()
-            startPipeline(startIndex = currentChunkIndex, storyId = currentStoryId)
+            if (synthesisJob?.isActive == true || playbackJob?.isActive == true) {
+                audioPlayer.play()
+                pauseGate.resume()
+                setState(PipelineState.Playing)
+            } else {
+                startPipeline(startIndex = currentChunkIndex, storyId = currentStoryId)
+            }
         }
     }
 
@@ -276,7 +319,9 @@ class TTSAudioPipeline(
      */
     fun seekToChunk(index: Int) {
         val target = index.coerceIn(0, totalChunks)
-        val wasActive = currentState is PipelineState.Playing || currentState is PipelineState.Synthesizing
+        val wasActive = currentState is PipelineState.Playing ||
+                currentState is PipelineState.Synthesizing ||
+                currentState is PipelineState.Buffering
         stopInternal(resetIndex = false)
         currentChunkIndex = target
 
@@ -329,6 +374,7 @@ class TTSAudioPipeline(
     }
 
     private fun stopInternal(resetIndex: Boolean) {
+        pauseGate.resume()
         synthesisJob?.cancel()
         playbackJob?.cancel()
         synthesisJob = null
@@ -386,10 +432,32 @@ class TTSAudioPipeline(
                 for (i in startIndex until chunks.size) {
                     if (!isActive) break
 
+                    pauseGate.awaitActive()
+                    if (!isActive) break
+
                     // Skip synthesis if chunk was already loaded from pre-warmed cache
                     if (cachedIndices.contains(i)) {
                         Log.d(TAG, "⚡ Skipping synthesis for pre-warmed chunk $i")
                         continue
+                    }
+
+                    // Check if chunk is available in PrewarmedChunkCache or is actively in-flight from prewarm
+                    if (storyId != 0) {
+                        var prewarmedPcm = PrewarmedChunkCache.get(storyId, voiceName, i)
+                        if (prewarmedPcm == null && PrewarmedChunkCache.isInFlight(storyId, voiceName, i)) {
+                            Log.d(TAG, "⏳ Awaiting in-flight prewarm for chunk $i (story $storyId)...")
+                            prewarmedPcm = PrewarmedChunkCache.awaitInFlightChunk(storyId, voiceName, i, timeoutMs = 8000L)
+                        }
+
+                        if (prewarmedPcm != null) {
+                            Log.d(TAG, "⚡ Retrieved pre-warmed chunk $i from cache/in-flight without re-synthesizing")
+                            cachedIndices.add(i)
+                            channel.send(Pair(i, prewarmedPcm))
+                            bufferedChunks.incrementAndGet()
+                            bufferedSamples.addAndGet(prewarmedPcm.size.toLong())
+                            prebufferSignal?.trySend(Unit)
+                            continue
+                        }
                     }
 
                     val chunk = chunks[i]
@@ -485,6 +553,9 @@ class TTSAudioPipeline(
                 prebufferSignal?.trySend(Unit)
             } catch (e: CancellationException) {
                 // Expected when paused or stopped
+            } catch (e: InterruptedException) {
+                // Expected when engine or pipeline is cancelled/stopped
+                Log.d(TAG, "Synthesis interrupted: ${e.message}")
             } catch (e: Throwable) {
                 Log.e(TAG, "Synthesis failed", e)
                 setState(PipelineState.Error(e.message ?: "Synthesis failed"))
@@ -510,6 +581,9 @@ class TTSAudioPipeline(
 
                 // 1. Reactive Pre-buffering phase (zero busy-wait polling)
                 while (isActive && isPreBuffering) {
+                    pauseGate.awaitActive()
+                    if (!isActive) break
+
                     val currentQueueSize = bufferedChunks.get()
                     val totalBufferedSamples = bufferedSamples.get()
                     val bufferedDurationMs = (totalBufferedSamples * 1000L) / VieNeuConfig.SAMPLE_RATE
@@ -519,7 +593,7 @@ class TTSAudioPipeline(
                     val minDurationMs = when (preBufferChunkCount) {
                         1 -> 1500L
                         3 -> 7000L
-                        else -> 3500L // 2 chunks
+                        else -> if (quantizationType == OnnxSessionManager.QuantizationType.INT8) 2000L else 3500L // 2 chunks
                     }
 
                     val isFastMode = (quantizationType == OnnxSessionManager.QuantizationType.INT8 && cpuCores >= 4) ||
@@ -528,7 +602,8 @@ class TTSAudioPipeline(
                             (bufferedDurationMs >= minDurationMs || (preBufferChunkCount == 1 && isFastMode && bufferedDurationMs >= 1500L))
                     val hasEnoughDuration = bufferedDurationMs >= targetDurationMs || hasQualifiedChunks
                     val isQueueFull = currentQueueSize >= maxQueueCapacity
-                    val canStartPlayback = isSynthDone || allChunksBuffered || hasEnoughDuration || isQueueFull ||
+                    val hasPrewarmedPlayback = cachedIndices.contains(startIndex) && currentQueueSize > 0
+                    val canStartPlayback = isSynthDone || allChunksBuffered || hasEnoughDuration || isQueueFull || hasPrewarmedPlayback ||
                             (customSynthesizer != null && currentQueueSize >= minOf(preBufferChunkCount, remainingChunks))
 
                     if (canStartPlayback && currentQueueSize > 0) {
@@ -551,6 +626,9 @@ class TTSAudioPipeline(
 
                 // 2. Continuous playback loop via suspending channel reception (0ms jitter)
                 while (isActive && playIndex < totalChunks) {
+                    pauseGate.awaitActive()
+                    if (!isActive) break
+
                     if (bufferedChunks.get() == 0 && starvationStartTime == 0L && synthesisJob?.isActive == true) {
                         starvationStartTime = System.currentTimeMillis()
                     }
@@ -700,8 +778,10 @@ class TTSAudioPipeline(
             }
             return when (targetPreBufferChunks) {
                 1 -> {
-                    if (cpuCores < 4 || quantizationType == OnnxSessionManager.QuantizationType.FP32) {
+                    if (quantizationType == OnnxSessionManager.QuantizationType.FP32) {
                         safeFallbackDurationMs
+                    } else if (cpuCores < 4) {
+                        2500L
                     } else {
                         2000L
                     }

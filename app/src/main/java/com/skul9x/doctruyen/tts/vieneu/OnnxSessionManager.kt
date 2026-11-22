@@ -66,10 +66,32 @@ class OnnxSessionManager(
     companion object {
         private const val TAG = "OnnxSessionManager"
 
+        private val QUANTIZATION_KEY = "quantization".toByteArray(Charsets.UTF_8)
+        private val OP_MATMUL_INTEGER = "MatMulInteger".toByteArray(Charsets.UTF_8)
+        private val OP_DYNAMIC_QUANTIZE = "DynamicQuantizeLinear".toByteArray(Charsets.UTF_8)
+        private val OP_QLINEAR_MATMUL = "QLinearMatMul".toByteArray(Charsets.UTF_8)
+
+        private fun containsPattern(bytes: ByteArray, pattern: ByteArray): Boolean {
+            if (bytes.size < pattern.size) return false
+            val maxScan = bytes.size - pattern.size
+            for (i in 0..maxScan) {
+                var matched = true
+                for (j in pattern.indices) {
+                    if (bytes[i + j] != pattern[j]) {
+                        matched = false
+                        break
+                    }
+                }
+                if (matched) return true
+            }
+            return false
+        }
+
         /**
          * Detect quantization type of an ONNX model.
          * Primary: Read ONNX metadata_props for key "quantization" ("int8", "fp16", "fp32").
-         * Fallback: Parse filename convention (*_int8.onnx, *_fp16.onnx, default = FP32).
+         * Deep scan: Search for quantized ONNX operators (MatMulInteger, DynamicQuantizeLinear, QLinearMatMul).
+         * Fallback: Parse filename convention (*_int8.onnx, *_fp16.onnx, directory conventions, default = FP32).
          */
         fun detectQuantizationType(modelPath: String): QuantizationType {
             try {
@@ -78,7 +100,12 @@ class OnnxSessionManager(
                     val scanSize = minOf(file.length(), 2 * 1024 * 1024L).toInt()
                     val buffer = ByteArray(scanSize)
                     file.inputStream().use { input ->
-                        input.read(buffer)
+                        var totalRead = 0
+                        while (totalRead < scanSize) {
+                            val r = input.read(buffer, totalRead, scanSize - totalRead)
+                            if (r <= 0) break
+                            totalRead += r
+                        }
                     }
                     val detected = extractQuantizationFromBytes(buffer)
                     if (detected != null) {
@@ -90,32 +117,63 @@ class OnnxSessionManager(
             }
 
             val lowerPath = modelPath.lowercase()
-            return when {
-                lowerPath.contains("int8") -> QuantizationType.INT8
-                lowerPath.contains("fp16") -> QuantizationType.FP16
-                else -> QuantizationType.FP32
+            if (lowerPath.contains("int8") || lowerPath.contains("backbone_int8")) {
+                return QuantizationType.INT8
             }
+            if (lowerPath.contains("fp16")) {
+                return QuantizationType.FP16
+            }
+
+            // Support directory convention check: if parent directory contains backbone with quantized weights, default to INT8
+            try {
+                val file = File(modelPath)
+                val parent = file.parentFile
+                if (parent != null && parent.exists() && parent.name.contains("backbone")) {
+                    val sharedData = File(parent, "vieneu_backbone_shared.data")
+                    if (sharedData.exists()) {
+                        return QuantizationType.INT8
+                    }
+                    val companionPrefill = File(parent, "vieneu_prefill.onnx")
+                    if (companionPrefill.exists() && companionPrefill.absolutePath != file.absolutePath) {
+                        val companionQuant = detectQuantizationType(companionPrefill.absolutePath)
+                        if (companionQuant == QuantizationType.INT8) {
+                            return QuantizationType.INT8
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            return QuantizationType.FP32
         }
 
         private fun extractQuantizationFromBytes(bytes: ByteArray): QuantizationType? {
-            val searchKey = "quantization".toByteArray(Charsets.UTF_8)
-            val maxScan = bytes.size - searchKey.size
+            // 1. Primary: Scan for metadata key "quantization"
+            val maxScan = bytes.size - QUANTIZATION_KEY.size
             for (i in 0 until maxScan) {
                 var matched = true
-                for (j in searchKey.indices) {
-                    if (bytes[i + j] != searchKey[j]) {
+                for (j in QUANTIZATION_KEY.indices) {
+                    if (bytes[i + j] != QUANTIZATION_KEY[j]) {
                         matched = false
                         break
                     }
                 }
                 if (matched) {
-                    val endIdx = minOf(bytes.size, i + searchKey.size + 64)
-                    val slice = String(bytes, i + searchKey.size, endIdx - (i + searchKey.size), Charsets.UTF_8).lowercase()
+                    val endIdx = minOf(bytes.size, i + QUANTIZATION_KEY.size + 64)
+                    val slice = String(bytes, i + QUANTIZATION_KEY.size, endIdx - (i + QUANTIZATION_KEY.size), Charsets.UTF_8).lowercase()
                     if (slice.contains("int8")) return QuantizationType.INT8
                     if (slice.contains("fp16")) return QuantizationType.FP16
                     if (slice.contains("fp32")) return QuantizationType.FP32
                 }
             }
+
+            // 2. Secondary: Deep byte pattern detection for quantized ONNX operators
+            if (containsPattern(bytes, OP_MATMUL_INTEGER) ||
+                containsPattern(bytes, OP_DYNAMIC_QUANTIZE) ||
+                containsPattern(bytes, OP_QLINEAR_MATMUL)
+            ) {
+                return QuantizationType.INT8
+            }
+
             return null
         }
 

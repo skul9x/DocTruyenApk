@@ -17,6 +17,11 @@ import kotlin.math.ln
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /**
  * Port of VieNeu-TTS v3 Turbo ONNX Inference Engine to Kotlin.
@@ -71,6 +76,27 @@ class VieNeuOnnxEngine(
     private val lock = ReentrantLock()
     private val env: OrtEnvironment get() = sessionManager.env
 
+    @Volatile
+    var cancelRequested: Boolean = false
+        private set
+
+    fun cancel() {
+        cancelRequested = true
+    }
+
+    fun requestCancel() {
+        cancelRequested = true
+    }
+
+    private val teardownScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    @Volatile
+    internal var teardownJob: kotlinx.coroutines.Job? = null
+    @Volatile
+    private var nativeResourcesReleased = false
+    val isResourcesReleased: Boolean
+        get() = nativeResourcesReleased
+
+    @Volatile
     private var closed = false
     val isClosed: Boolean
         get() = closed || sessionManager.isClosed
@@ -310,6 +336,11 @@ class VieNeuOnnxEngine(
 
         var promptTensorClosed = false
         try {
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                promptTensor.close()
+                promptTensorClosed = true
+                throw InterruptedException("Synthesis cancelled")
+            }
             val preResult = sessionManager.prefillSession.run(prefillInputs)
             promptTensor.close()
             promptTensorClosed = true
@@ -322,7 +353,7 @@ class VieNeuOnnxEngine(
             prevResult = preResult
 
             for (t in 0 until effectiveMaxFrames) {
-                if (Thread.currentThread().isInterrupted) {
+                if (cancelRequested || Thread.currentThread().isInterrupted) {
                     throw InterruptedException("Synthesis cancelled")
                 }
 
@@ -420,6 +451,9 @@ class VieNeuOnnxEngine(
         maxNewFrames: Int = 600,
         repetitionPenalty: Float = 1.2f
     ): EngineInferenceResult = lock.withLock {
+        if (cancelRequested) {
+            throw InterruptedException("Synthesis cancelled")
+        }
         if (isClosed) {
             throw IllegalStateException("VieNeuOnnxEngine is closed")
         }
@@ -467,6 +501,9 @@ class VieNeuOnnxEngine(
         var totalCodecMs = pass0.codecDurationMs
 
         for (retry in 1..BabbleGuard.MAX_RETRIES) {
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Synthesis cancelled")
+            }
             TtsMetricsLogger.recordBabbleRetry(
                 phonemes = phonemes,
                 retryAttempt = retry,
@@ -581,7 +618,7 @@ class VieNeuOnnxEngine(
             // Subsequent channels 1..15
             val feed = HashMap<String, OnnxTensor>(8)
             for (ch in 1 until config.nVq) {
-                if (Thread.currentThread().isInterrupted) {
+                if (cancelRequested || Thread.currentThread().isInterrupted) {
                     throw InterruptedException("Acoustic frame synthesis cancelled")
                 }
 
@@ -859,6 +896,10 @@ class VieNeuOnnxEngine(
     }
 
     private fun decodeCodes(frames: List<IntArray>): FloatArray {
+        if (cancelRequested || Thread.currentThread().isInterrupted) {
+            throw InterruptedException("Synthesis cancelled")
+        }
+
         val tGen = frames.size
         val nVq = config.nVq // 16
         val flatCodes = IntArray(tGen * nVq)
@@ -882,31 +923,41 @@ class VieNeuOnnxEngine(
         feed["audio_codes"] = codesTensor
         feed["audio_code_lengths"] = lensTensor
 
-        sessionManager.codecSession.run(feed).use { result ->
-            codesTensor.close()
-            lensTensor.close()
-
-            val audioTensor = result.get(0) as OnnxTensor
-            val shape = audioTensor.info.shape // e.g. [1, 2, numSamples] or [1, 1, numSamples]
-            val fb = audioTensor.floatBuffer
-            val totalElements = fb.remaining()
-
-            if (shape.size == 3 && shape[1] == 2L) {
-                val numSamples = shape[2].toInt()
-                val ch0 = FloatArray(numSamples)
-                val ch1 = FloatArray(numSamples)
-                fb.get(ch0)
-                fb.get(ch1)
-                val mono = FloatArray(numSamples)
-                for (i in 0 until numSamples) {
-                    mono[i] = (ch0[i] + ch1[i]) / 2.0f
-                }
-                return mono
-            } else {
-                val out = FloatArray(totalElements)
-                fb.get(out)
-                return out
+        try {
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                throw InterruptedException("Synthesis cancelled")
             }
+
+            sessionManager.codecSession.run(feed).use { result ->
+                val audioTensor = result.get(0) as OnnxTensor
+                val shape = audioTensor.info.shape // e.g. [1, 2, numSamples] or [1, 1, numSamples]
+                val fb = audioTensor.floatBuffer
+                val totalElements = fb.remaining()
+
+                if (shape.size == 3 && shape[1] == 2L) {
+                    val numSamples = shape[2].toInt()
+                    val ch0 = FloatArray(numSamples)
+                    val ch1 = FloatArray(numSamples)
+                    fb.get(ch0)
+                    fb.get(ch1)
+                    val mono = FloatArray(numSamples)
+                    for (i in 0 until numSamples) {
+                        mono[i] = (ch0[i] + ch1[i]) / 2.0f
+                    }
+                    return mono
+                } else {
+                    val out = FloatArray(totalElements)
+                    fb.get(out)
+                    return out
+                }
+            }
+        } finally {
+            try {
+                codesTensor.close()
+            } catch (_: Throwable) {}
+            try {
+                lensTensor.close()
+            } catch (_: Throwable) {}
         }
     }
 
@@ -1024,27 +1075,60 @@ class VieNeuOnnxEngine(
         return result
     }
 
+    private fun performResourceTeardown() {
+        if (nativeResourcesReleased) return
+        nativeResourcesReleased = true
+        try {
+            cachedEmptyPastK?.close()
+            cachedEmptyPastK = null
+        } catch (_: Exception) {}
+        try {
+            cachedEmptyPastV?.close()
+            cachedEmptyPastV = null
+        } catch (_: Exception) {}
+        try {
+            sessionManager.close()
+        } catch (_: Exception) {}
+        CacheTensor.Pool.clear()
+        workingLogitsBuffer = FloatArray(0)
+        allIndicesBuffer = IntArray(0)
+        topKIndicesBuffer = IntArray(0)
+        topKLogitsBuffer = FloatArray(0)
+        probsBuffer = DoubleArray(0)
+    }
+
     override fun close() {
-        lock.withLock {
-            if (closed) return
-            closed = true
+        cancelRequested = true
+        closed = true
+
+        if (lock.tryLock()) {
             try {
-                cachedEmptyPastK?.close()
-                cachedEmptyPastK = null
-            } catch (_: Exception) {}
+                performResourceTeardown()
+            } finally {
+                lock.unlock()
+            }
+        } else {
+            // Lock is held by active inference pass. Offload waiting and resource cleanup
+            // to a background coroutine so the calling thread (e.g. Android UI/Main thread) returns immediately.
+            teardownJob = teardownScope.launch {
+                lock.withLock {
+                    performResourceTeardown()
+                }
+            }
+        }
+    }
+
+    fun awaitClosed(timeoutMs: Long = 5000): Boolean {
+        val job = teardownJob ?: return true
+        return kotlinx.coroutines.runBlocking {
             try {
-                cachedEmptyPastV?.close()
-                cachedEmptyPastV = null
-            } catch (_: Exception) {}
-            try {
-                sessionManager.close()
-            } catch (_: Exception) {}
-            CacheTensor.Pool.clear()
-            workingLogitsBuffer = FloatArray(0)
-            allIndicesBuffer = IntArray(0)
-            topKIndicesBuffer = IntArray(0)
-            topKLogitsBuffer = FloatArray(0)
-            probsBuffer = DoubleArray(0)
+                withTimeout(timeoutMs) {
+                    job.join()
+                    true
+                }
+            } catch (_: Throwable) {
+                false
+            }
         }
     }
 

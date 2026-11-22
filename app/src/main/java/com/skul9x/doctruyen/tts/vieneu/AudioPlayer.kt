@@ -4,8 +4,11 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
@@ -39,9 +42,13 @@ open class AudioPlayer(
 ) {
 
     private val lock = Any()
+    private val pauseLock = Any()
+    private var pauseGateJob: CompletableJob = Job().apply { complete() }
     private var audioTrack: AudioTrack? = null
 
     private var needsReinit = false
+    @Volatile
+    private var _isPaused: Boolean = false
 
     val isInitialized: Boolean
         get() = synchronized(lock) {
@@ -59,6 +66,11 @@ open class AudioPlayer(
             } catch (e: Throwable) {
                 false
             }
+        }
+
+    open val isPaused: Boolean
+        get() = synchronized(lock) {
+            _isPaused || (audioTrack?.playState == AudioTrack.PLAYSTATE_PAUSED)
         }
 
     /**
@@ -119,11 +131,31 @@ open class AudioPlayer(
 
     /**
      * Writes 16-bit PCM audio samples to the AudioTrack asynchronously on dedicated audioDispatcher.
-     * Prevents blocking calls on Dispatchers.Default.
+     * Breaks writes into small frames (100ms–200ms slices) with cooperative cancellation checks so pause responds
+     * with sub-second precision and resume does not replay already heard audio.
      */
     open suspend fun writeSuspended(pcm16: ShortArray, offset: Int = 0, size: Int = pcm16.size): Int =
         withContext(audioDispatcher) {
-            write(pcm16, offset, size)
+            val sliceSize = (sampleRate * 0.1).toInt().coerceAtLeast(1024)
+            var totalWritten = 0
+            while (totalWritten < size && isActive) {
+                // If player is paused, cooperatively suspend slice writing until play() or stop()
+                if (isPaused) {
+                    val gateToJoin = synchronized(pauseLock) {
+                        if (!pauseGateJob.isCompleted) pauseGateJob else null
+                    }
+                    gateToJoin?.join()
+                    if (!isActive) break
+                }
+
+                val toWrite = minOf(sliceSize, size - totalWritten)
+                val written = write(pcm16, offset + totalWritten, toWrite)
+                if (written <= 0) {
+                    break
+                }
+                totalWritten += written
+            }
+            totalWritten
         }
 
     /**
@@ -170,6 +202,12 @@ open class AudioPlayer(
      */
     open fun play() {
         synchronized(lock) {
+            _isPaused = false
+            synchronized(pauseLock) {
+                if (!pauseGateJob.isCompleted) {
+                    pauseGateJob.complete()
+                }
+            }
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                     if (audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
@@ -187,6 +225,12 @@ open class AudioPlayer(
      */
     open fun pause() {
         synchronized(lock) {
+            _isPaused = true
+            synchronized(pauseLock) {
+                if (pauseGateJob.isCompleted) {
+                    pauseGateJob = Job()
+                }
+            }
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                     if (audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
@@ -204,6 +248,12 @@ open class AudioPlayer(
      */
     open fun stop() {
         synchronized(lock) {
+            _isPaused = false
+            synchronized(pauseLock) {
+                if (!pauseGateJob.isCompleted) {
+                    pauseGateJob.complete()
+                }
+            }
             try {
                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED) {
                     if (audioTrack?.playState != AudioTrack.PLAYSTATE_STOPPED) {

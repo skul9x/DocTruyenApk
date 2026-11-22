@@ -1,6 +1,8 @@
 package com.skul9x.doctruyen.tts.vieneu
 
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -14,7 +16,8 @@ data class PrewarmedKey(
 
 /**
  * In-memory thread-safe cache for pre-synthesized PCM audio chunks.
- * Holds pre-warmed chunks for instant playback, with LRU eviction and memory bounds.
+ * Holds pre-warmed chunks for instant playback, with LRU eviction, memory bounds,
+ * and cooperative coordination for in-flight prewarm synthesis passes.
  */
 object PrewarmedChunkCache {
 
@@ -26,9 +29,68 @@ object PrewarmedChunkCache {
     // Linked list or queue to track order of insertion for LRU / bounded capacity
     private val accessOrder = java.util.concurrent.ConcurrentLinkedDeque<PrewarmedKey>()
 
+    // Map tracking in-flight prewarming requests to allow pipeline consumers to coordinate/await without duplicate inference
+    private val inFlight = ConcurrentHashMap<PrewarmedKey, CompletableDeferred<ShortArray?>>()
+
     @Volatile
     var activeStoryId: Int? = null
         private set
+
+    /**
+     * Register an in-flight synthesis pass for a given chunk.
+     */
+    fun registerInFlight(storyId: Int, voiceName: String, chunkIndex: Int): CompletableDeferred<ShortArray?> {
+        val key = PrewarmedKey(storyId, voiceName, chunkIndex)
+        return inFlight.computeIfAbsent(key) { CompletableDeferred() }
+    }
+
+    /**
+     * Check if a chunk is actively being synthesized in background prewarm.
+     */
+    fun isInFlight(storyId: Int, voiceName: String, chunkIndex: Int): Boolean {
+        val deferred = inFlight[PrewarmedKey(storyId, voiceName, chunkIndex)]
+        return deferred != null && deferred.isActive
+    }
+
+    /**
+     * Retrieve the in-flight deferred for a chunk if currently synthesizing.
+     */
+    fun getInFlight(storyId: Int, voiceName: String, chunkIndex: Int): CompletableDeferred<ShortArray?>? {
+        return inFlight[PrewarmedKey(storyId, voiceName, chunkIndex)]
+    }
+
+    /**
+     * Notify that an in-flight prewarm chunk failed or was cancelled before completion.
+     */
+    fun notifyInFlightFailed(storyId: Int, voiceName: String, chunkIndex: Int, error: Throwable? = null) {
+        val key = PrewarmedKey(storyId, voiceName, chunkIndex)
+        val deferred = inFlight.remove(key)
+        if (deferred != null && deferred.isActive) {
+            if (error != null && error !is kotlinx.coroutines.CancellationException) {
+                deferred.completeExceptionally(error)
+            } else {
+                deferred.complete(null)
+            }
+        }
+    }
+
+    /**
+     * Await an in-flight chunk completion, returning the cached PCM or awaiting with a defensive timeout.
+     */
+    suspend fun awaitInFlightChunk(storyId: Int, voiceName: String, chunkIndex: Int, timeoutMs: Long = 8000L): ShortArray? {
+        // Fast path: already completed in cache
+        get(storyId, voiceName, chunkIndex)?.let { return it }
+
+        val deferred = getInFlight(storyId, voiceName, chunkIndex) ?: return get(storyId, voiceName, chunkIndex)
+        return try {
+            withTimeoutOrNull(timeoutMs) {
+                deferred.await()
+            } ?: get(storyId, voiceName, chunkIndex)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Error or timeout awaiting in-flight chunk $chunkIndex for story $storyId: ${e.message}")
+            get(storyId, voiceName, chunkIndex)
+        }
+    }
 
     /**
      * Put a pre-warmed PCM buffer into the cache.
@@ -57,6 +119,11 @@ object PrewarmedChunkCache {
 
             cache[key] = pcm
             accessOrder.addLast(key)
+
+            // Complete and resolve any awaiting consumer
+            val deferred = inFlight.remove(key)
+            deferred?.complete(pcm)
+
             Log.d(TAG, "Cached prewarmed chunk $chunkIndex for story $storyId (voice: $voiceName, size: ${pcm.size})")
         }
     }
@@ -106,18 +173,27 @@ object PrewarmedChunkCache {
                 cache.remove(key)
                 accessOrder.remove(key)
             }
+            val inFlightToRemove = inFlight.keys.filter { it.storyId != newStoryId }
+            for (key in inFlightToRemove) {
+                val deferred = inFlight.remove(key)
+                deferred?.complete(null)
+            }
             activeStoryId = newStoryId
             Log.d(TAG, "Cleared previous stories from cache. Current active story: $newStoryId")
         }
     }
 
     /**
-     * Clear all cached chunks.
+     * Clear all cached chunks and cancel in-flight deferreds.
      */
     fun clear() {
         synchronized(this) {
             cache.clear()
             accessOrder.clear()
+            inFlight.forEach { (_, deferred) ->
+                deferred.complete(null)
+            }
+            inFlight.clear()
             activeStoryId = null
             Log.d(TAG, "PrewarmedChunkCache cleared.")
         }

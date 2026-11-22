@@ -1,109 +1,136 @@
 {
-  "updated_at": "2026-11-20T19:59:00+07:00",
+  "updated_at": "2026-11-22T19:50:00+07:00",
   "working_on": {
-    "feature": "Comprehensive R8 Minification, Retrofit & Network Architecture Fix",
-    "task": "Completed Phase 04: End-to-End Release Build Verification & CI/CD Pipeline Assurance. All 4 phases completed.",
+    "feature": "TTS Latency Optimization, Prewarm Preservation & ANR Prevention (P2, P1, P3, P7)",
+    "task": "All 4 phases completed: Phase 01 (P2), Phase 02 (P1), Phase 03 (P3), and Phase 04 (P7).",
     "status": "completed",
     "files": [
-      "app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AssetCleansingAndBuildOptimizationTest.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
       "CHANGELOG.md",
-      "plans/261120-1915-r8-retrofit-network-fix/phase-04-release-build-verification-and-ci.md",
-      "plans/261120-1915-r8-retrofit-network-fix/plan.md",
-      ".brain/session_log.txt",
-      ".brain/session.json",
-      ".brain/brain.json",
-      ".brain/handover.md"
+      "plans/261122-1857-tts-latency-anr-fix/phase-04-quantization-detection-optimization.md",
+      "plans/261122-1857-tts-latency-anr-fix/plan.md"
     ],
     "blockers": [],
-    "notes": "All 4 phases completed and verified with passing unit tests. Release v1.15 ready."
+    "notes": "Phase 04 completed and verified with 100% passing tests (7/7 passed in QuantizationDetectionAndPrebufferTest in 54ms). Packaged assets are now recognized as INT8, target pre-buffering duration drops from 7500ms to 2000ms-2500ms, and telemetry displays true INT8 precision."
   },
   "pending_tasks": [],
   "recent_changes": [
     {
-      "timestamp": "2026-11-20T19:59:00+07:00",
+      "timestamp": "2026-11-22T19:50:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 04: End-to-End Release Build Verification & CI/CD Pipeline Assurance. Created ReleaseBuildValidationTest verifying build configuration, absence of reckless ProGuard wildcards, and network component cohesion. Expanded AssetCleansingAndBuildOptimizationTest with Retrofit/Continuation ProGuard assertions. Updated CHANGELOG.md for Release v1.15. Verified via ReleaseBuildValidationTest.kt (3/3 passed).",
+      "description": "Implemented Phase 04: Robust INT8 Model Quantization Detection & Adaptive Prebuffer Optimization (P7). Enhanced detectQuantizationType with deep byte pattern detection for MatMulInteger, DynamicQuantizeLinear, and QLinearMatMul operators and directory convention checks, synchronized computeAdaptiveTargetDurationMs to select 2000ms-2500ms for INT8 rather than 7500ms FP32 fallback, and added truthful telemetry logging in TtsMetricsLogger. Verified via QuantizationDetectionAndPrebufferTest.kt (7/7 passed in 54ms).",
       "files": [
-        "app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AssetCleansingAndBuildOptimizationTest.kt",
-        "CHANGELOG.md",
-        "plans/261120-1915-r8-retrofit-network-fix/phase-04-release-build-verification-and-ci.md",
-        "plans/261120-1915-r8-retrofit-network-fix/plan.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-20T19:53:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 03: Defensive Network Error Architecture & User-Friendly Translation. Created NetworkErrorResolver mapping technical exceptions to polite Vietnamese messages, shielding internal reflection details (ParameterizedType ClassCastException), automating session cookie recovery via HostingVerifier, and integrating across MainActivity and StoryDetailActivity. Verified via NetworkErrorResolverTest.kt (5/5 passed).",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/network/NetworkErrorResolver.kt",
-        "app/src/main/java/com/skul9x/doctruyen/MainActivity.kt",
-        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-        "app/src/main/res/values/strings.xml",
-        "app/src/test/java/com/skul9x/doctruyen/network/NetworkErrorResolverTest.kt",
-        "plans/261120-1915-r8-retrofit-network-fix/phase-03-defensive-network-error-architecture.md",
-        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
+        "plans/261122-1857-tts-latency-anr-fix/phase-04-quantization-detection-optimization.md",
+        "plans/261122-1857-tts-latency-anr-fix/plan.md",
         "CHANGELOG.md"
       ]
     },
     {
-      "timestamp": "2026-11-20T19:45:00+07:00",
+      "timestamp": "2026-11-22T19:42:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 02: Resilient Data Model Serialization & Field Hardening. Added @androidx.annotation.Keep and explicit @SerializedName on all declared properties of Story, StoryListResponse, StoryDetailResponse, and RandomStoryResponse. Provided safe default initializers (emptyList, nulls, default primitives) to generate no-arg constructors for safe Gson instantiation. Verified via DataModelSerializationIntegrityTest.kt (5/5 passed).",
+      "description": "Implemented Phase 03: Asynchronous Engine Teardown & Lifecycle ANR Elimination (P3). Added cooperative cancellation flags across decode frames and session runs in VieNeuOnnxEngine, non-blocking lock.tryLock() with background Dispatchers.IO resource teardown on engine.close(), decoupled shutdown() and reloadEngine() in VieNeuTTSManager off the Main thread, asynchronous service destruction in ReadingService, and eliminated all forced System.gc() pauses. Verified via AsynchronousEngineTeardownTest.kt (5/5 passed).",
       "files": [
-        "app/src/main/java/com/skul9x/doctruyen/network/ApiService.kt",
-        "app/src/test/java/com/skul9x/doctruyen/network/DataModelSerializationIntegrityTest.kt",
-        "plans/261120-1915-r8-retrofit-network-fix/phase-02-data-model-serialization-hardening.md",
-        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AsynchronousEngineTeardownTest.kt",
+        "plans/261122-1857-tts-latency-anr-fix/phase-03-asynchronous-engine-teardown.md",
+        "plans/261122-1857-tts-latency-anr-fix/plan.md",
         "CHANGELOG.md"
       ]
     },
     {
-      "timestamp": "2026-11-20T19:35:00+07:00",
+      "timestamp": "2026-11-22T19:30:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 01: R8 & ProGuard Rules Hardening for Retrofit & Kotlin Coroutines. Added official Square rules for kotlin.coroutines.Continuation, retrofit2.Call, retrofit2.Response, Gson TypeToken, AnnotationDefault, and conditional rules for @retrofit2.http.* interface methods. Configured android.enableR8.fullMode=false in gradle.properties. Verified via RetrofitR8ProGuardRulesTest.kt (7/7 passed).",
+      "description": "Implemented Phase 02: Cooperative Audio Pipeline Pause/Resume with Buffer Retention (P1). Introduced thread-safe PauseGate in TTSAudioPipeline, replacing destructive job cancellation and drainChannel() with cooperative suspension checkpoints, retaining up to 4 buffered chunks in audioChannel. Enhanced AudioPlayer with 100ms frame slicing and cooperative pause gate to eliminate audio repetition artifacts upon resume. Verified via CooperativePipelinePauseResumeTest.kt (6/6 passed).",
       "files": [
-        "app/proguard-rules.pro",
-        "gradle.properties",
-        "app/src/test/java/com/skul9x/doctruyen/network/RetrofitR8ProGuardRulesTest.kt",
-        "plans/261120-1915-r8-retrofit-network-fix/phase-01-r8-proguard-rules-hardening.md",
-        "plans/261120-1915-r8-retrofit-network-fix/plan.md",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/AudioPlayer.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CooperativePipelinePauseResumeTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
+        "plans/261122-1857-tts-latency-anr-fix/phase-02-cooperative-pause-resume.md",
+        "plans/261122-1857-tts-latency-anr-fix/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-22T19:16:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: Prewarm Preservation & Instant First-Chunk Playback (P2). Added thread-safe in-flight single-flight request coalescing (CompletableDeferred) in PrewarmedChunkCache, wrapped inference and cache deposit in withContext(NonCancellable) in VieNeuTTSManager, replaced blind cancelPrewarm with cooperative stopPrewarmAfterChunk0 coordination, added fast-path prewarmed playback (<100ms TTFT) and in-flight prewarm await in TTSAudioPipeline. Verified via PrewarmPreservationIntegrityTest.kt (5/5 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/PrewarmedChunkCache.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PrewarmPreservationIntegrityTest.kt",
+        "plans/261122-1857-tts-latency-anr-fix/phase-01-prewarm-preservation.md",
+        "plans/261122-1857-tts-latency-anr-fix/plan.md",
         "CHANGELOG.md"
       ]
     }
   ],
   "errors_encountered": [
     {
-      "error": "androidx.annotation.Keep has RetentionPolicy.CLASS (BINARY), causing clazz.getAnnotation(Keep::class.java) to return null at runtime reflection",
-      "solution": "Updated test verification to inspect the compiled class bytecode resource for the presence of the Keep descriptor (Landroidx/annotation/Keep;) in RuntimeInvisibleAnnotations",
+      "error": "Cross-story prewarm cache retention when user initiates playback on a new story without prior prewarm",
+      "solution": "Added cross-story invalidation in TTSAudioPipeline.startReadingChunks, VieNeuTTSManager.speakContent, and speakWithTitlePauseInternal to evict stale story chunks when playing a different story.",
       "resolved": true
     }
   ],
   "decisions_made": [
     {
-      "decision": "Add comprehensive ReleaseBuildValidationTest to verify minified release configuration and network cohesion",
-      "reason": "Prevents regression in release builds where R8 is active, ensuring keep rules are strictly enforced and no dangerous wildcards are added."
+      "decision": "Deep byte pattern detection of quantized ONNX operators (MatMulInteger, DynamicQuantizeLinear, QLinearMatMul) in OnnxSessionManager.detectQuantizationType()",
+      "reason": "Allows accurate recognition of dynamically quantized INT8 models even when export tools omitted metadata_props strings or path naming suffixes."
     },
     {
-      "decision": "Add explicit @SerializedName on 100% of fields in all network DTOs",
-      "reason": "Prevents R8/ProGuard field renaming from desynchronizing JSON key mapping during Gson deserialization."
+      "decision": "Synchronized INT8 pre-buffer target duration of 2000ms–2500ms in TTSAudioPipeline.computeAdaptiveTargetDurationMs()",
+      "reason": "Eliminates the 5.0s unnecessary latency caused by fallback to the 7500ms FP32 defensive buffering threshold on INT8 packaged models."
     },
     {
-      "decision": "Annotate Story, StoryListResponse, StoryDetailResponse, RandomStoryResponse with @androidx.annotation.Keep",
-      "reason": "Protects classes and constructors from dead-code stripping, member optimization, and synthetic constructor removal under R8 optimization."
+      "decision": "Truthful telemetry logging in TtsMetricsLogger and formatAiDiagnosticReport",
+      "reason": "Ensures runtime reports and metrics display the true INT8 quantization status matching actual model execution."
     },
     {
-      "decision": "Provide default values for DTO properties (e.g. status: String = '', data = emptyList()) to generate synthetic no-arg constructors",
-      "reason": "Allows Gson to instantiate objects using standard constructor initialization with default values rather than bypassing constructors with sun.misc.Unsafe when keys are omitted."
+      "decision": "Cooperative cancellation flags across decode frames and session runs in VieNeuOnnxEngine",
+      "reason": "Allows active 3–7s inference loops to terminate within milliseconds upon cancelRequested or thread interrupt, cleanly unwinding local tensors without SIGSEGV or native crashes."
     },
     {
-      "decision": "Add explicit -keep,allowoptimization,allowshrinking,allowobfuscation class kotlin.coroutines.Continuation to proguard-rules.pro",
-      "reason": "Prevents R8 from stripping the generic Signature attribute on Continuation parameters in Retrofit suspend functions, resolving the java.lang.ClassCastException: java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType runtime crash."
+      "decision": "Non-blocking tryLock and background CoroutineScope(Dispatchers.IO) teardown in VieNeuOnnxEngine.close()",
+      "reason": "Eliminates Main-Thread blocking and ANR during engine destruction or precision switching. Caller returns immediately while heavy OrtSession release completes safely in background."
     },
     {
-      "decision": "Retain generic signatures of retrofit2.Call, retrofit2.Response, and Gson TypeToken",
-      "reason": "Ensures runtime reflection and generic deserializers can determine the parameterized return types under R8 optimization."
+      "decision": "Decoupled VieNeuTTSManager.shutdown() and removal of synchronous System.gc() calls",
+      "reason": "Service onDestroy() and onTaskRemoved() complete in < 10ms, eliminating UI freezing and Android OS ANR watchdog kills."
+    },
+    {
+      "decision": "Cooperative PauseGate using CompletableJob in TTSAudioPipeline",
+      "reason": "Replaced destructive pause() job cancellation and channel draining with a cooperative suspension gate checkpoint inside synthesis and playback loops, retaining up to 4 buffered audio chunks, preventing CPU waste on pause/resume."
+    },
+    {
+      "decision": "Sub-chunk frame slicing and cooperative pause gate in AudioPlayer",
+      "reason": "Partitioned writeSuspended into ~100ms slices with cooperative pause checks so pause responds with sub-second precision and resume does not replay already heard audio."
+    },
+    {
+      "decision": "In-flight single-flight request coalescing using CompletableDeferred in PrewarmedChunkCache",
+      "reason": "Allows playback pipeline to attach to and await an actively computing chunk 0 from prewarm without competing for the engine lock or triggering redundant duplicate inference passes."
+    },
+    {
+      "decision": "NonCancellable wrapping around prewarm inference, PCM processing, and PrewarmedChunkCache.put",
+      "reason": "Guarantees that once chunk 0 inference has started, it will always finish and be deposited into cache even if the parent prewarm job receives a cancellation signal."
+    },
+    {
+      "decision": "Cooperative stopPrewarmAfterChunk0 flag in VieNeuTTSManager",
+      "reason": "Replaced destructive cancelPrewarm() on play initiation with cooperative flag that lets chunk 0 complete and stops background prewarm before chunk 1, yielding engine to playback pipeline."
+    },
+    {
+      "decision": "Immediate playback start (hasPrewarmedPlayback) in TTSAudioPipeline",
+      "reason": "When chunk 0 is available in cache/in-flight, eliminates 3.5s/7.5s multi-chunk buffering wait, dropping Time-to-First-Token (TTFT) to < 100ms while synthesizing chunk 1 concurrently."
     }
   ]
 }

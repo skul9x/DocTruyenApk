@@ -346,8 +346,8 @@ class BoundedAudioChannelPipelineTest {
     }
 
     /**
-     * Test 4: Verifies that calling stop() or pause() cleanly drains the channel and terminates
-     * active playback jobs without leaks.
+     * Test 4: Verifies that calling stop() cleanly drains the channel and terminates
+     * active playback jobs without leaks, while pause() preserves buffers cooperatively.
      */
     @Test
     fun testImmediateCancellationAndChannelDrain() = runBlocking {
@@ -380,9 +380,9 @@ class BoundedAudioChannelPipelineTest {
             pipeline.pause()
             assertEquals("State must be Paused", TTSAudioPipeline.PipelineState.Paused, pipeline.currentState)
 
-            // Assert channel is cleanly drained and memory is zeroed
-            assertEquals("Queued chunks must be 0 after pause", 0, pipeline.queuedChunkCount)
-            assertEquals("Queued memory bytes must be 0 after pause", 0L, pipeline.queuedMemoryBytes)
+            // Assert channel retains queued chunks and memory (cooperative buffer retention)
+            assertTrue("Queued chunks must be retained after pause", pipeline.queuedChunkCount > 0)
+            assertTrue("Queued memory bytes must be retained after pause", pipeline.queuedMemoryBytes > 0L)
 
             // 3. Resume pipeline
             val pausedIndex = pipeline.currentChunkIndex

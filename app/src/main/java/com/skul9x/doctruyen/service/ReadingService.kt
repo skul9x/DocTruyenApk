@@ -21,6 +21,12 @@ import com.skul9x.doctruyen.tts.TTSManagerFactory
 import com.skul9x.doctruyen.utils.DebugLogger
 import com.skul9x.doctruyen.utils.LogType
 import com.skul9x.doctruyen.utils.UserConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 interface IWakeLock {
     fun acquire(timeout: Long? = null)
@@ -115,6 +121,7 @@ class ReadingService : Service() {
     var ttsManager: ITTSManager? = null
         internal set
     private val binder = ReadingBinder()
+    val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     // State callbacks for UI
     private var stateCallback: ((ITTSManager.TTSState) -> Unit)? = null
@@ -317,9 +324,11 @@ class ReadingService : Service() {
     fun initTTS(forceEngineType: ITTSManager.EngineType? = null) {
         val current = ttsManager
         if (current != null) {
-            current.stop()
-            current.shutdown()
             ttsManager = null
+            current.stop()
+            serviceScope.launch(Dispatchers.IO) {
+                current.shutdown()
+            }
         }
 
         DebugLogger.log("ReadingService", "🔧 initTTS: Creating TTSManager via TTSManagerFactory", LogType.INFO)
@@ -613,7 +622,6 @@ class ReadingService : Service() {
                     DebugLogger.log("ReadingService", "🧹 Pruning idle prewarm caches and G2P cache on memory pressure", LogType.INFO)
                     com.skul9x.doctruyen.tts.vieneu.PrewarmedChunkCache.clear()
                     com.skul9x.doctruyen.tts.vieneu.SeaG2P.clearCache()
-                    System.gc()
                 }
             }
         }
@@ -629,14 +637,16 @@ class ReadingService : Service() {
         cancelPrewarm()
         com.skul9x.doctruyen.tts.vieneu.PrewarmedChunkCache.clear()
         com.skul9x.doctruyen.tts.vieneu.SeaG2P.clearCache()
-        ttsManager?.stop()
-        ttsManager?.shutdown()
+        val mgr = ttsManager
         ttsManager = null
+        mgr?.stop()
+        serviceScope.launch(NonCancellable) {
+            mgr?.shutdown()
+        }
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        System.gc()
         stopSelf()
     }
 
@@ -648,10 +658,13 @@ class ReadingService : Service() {
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null
-        ttsManager?.stop()
-        ttsManager?.shutdown()
+        val mgr = ttsManager
         ttsManager = null
-        System.gc()
+        mgr?.stop()
+        serviceScope.launch(NonCancellable) {
+            mgr?.shutdown()
+        }
+        serviceScope.cancel()
         super.onDestroy()
     }
 }

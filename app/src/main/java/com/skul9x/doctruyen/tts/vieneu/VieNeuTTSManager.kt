@@ -95,6 +95,10 @@ class VieNeuTTSManager(
     private var pendingStoryId: Int = 0
 
     private var prewarmJob: kotlinx.coroutines.Job? = null
+    @Volatile
+    private var prewarmingStoryId: Int = 0
+    @Volatile
+    private var stopPrewarmAfterChunk0: Boolean = false
 
     init {
         initManager()
@@ -301,6 +305,9 @@ class VieNeuTTSManager(
 
         val eng = engine ?: return
 
+        prewarmingStoryId = storyId
+        stopPrewarmAfterChunk0 = false
+
         prewarmJob = scope.launch(Dispatchers.Default) {
             try {
                 Log.d(TAG, "🔥 Starting pre-warming for story $storyId (voice: $effectiveVoice)")
@@ -309,47 +316,74 @@ class VieNeuTTSManager(
 
                 for (i in 0 until prewarmCount) {
                     if (!isActive) break
+                    if (stopPrewarmAfterChunk0 && i > 0) break
                     if (PrewarmedChunkCache.contains(storyId, effectiveVoice, i)) continue
 
                     val chunk = chunks[i]
-                    val g2pStart = System.currentTimeMillis()
-                    val phonemes = phonemizeWithEmotionBypass(chunk.text)
-                    val g2pDuration = System.currentTimeMillis() - g2pStart
-                    if (!isActive) break
+                    PrewarmedChunkCache.registerInFlight(storyId, effectiveVoice, i)
 
-                    val inferStart = System.currentTimeMillis()
-                    val pcmFloat = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                        eng.infer(phonemes = phonemes, voiceName = effectiveVoice, temperature = profile.temperature)
-                    }
-                    val inferDuration = System.currentTimeMillis() - inferStart
-                    if (!isActive) break
-
-                    val rawPcm16 = PcmUtils.floatToShort(pcmFloat)
-                    val speechPcm = PcmUtils.applyMicroFade(rawPcm16)
-                    val pauseMs = chunk.pauseDurationMs.toLong()
-
-                    val combinedPcm = if (pauseMs > 0L) {
-                        val silencePcm = PcmUtils.generateSilence(chunk.pauseDurationMs)
-                        if (silencePcm.isNotEmpty()) {
-                            val combined = ShortArray(speechPcm.size + silencePcm.size)
-                            System.arraycopy(speechPcm, 0, combined, 0, speechPcm.size)
-                            System.arraycopy(silencePcm, 0, combined, speechPcm.size, silencePcm.size)
-                            combined
-                        } else {
-                            speechPcm
+                    try {
+                        val g2pStart = System.currentTimeMillis()
+                        val phonemes = phonemizeWithEmotionBypass(chunk.text)
+                        val g2pDuration = System.currentTimeMillis() - g2pStart
+                        if (!isActive || (stopPrewarmAfterChunk0 && i > 0)) {
+                            PrewarmedChunkCache.notifyInFlightFailed(storyId, effectiveVoice, i)
+                            break
                         }
-                    } else {
-                        speechPcm
+
+                        // NonCancellable guarantees inference, PCM conversion, post-processing and cache deposit
+                        // run to completion without being severed if a cancellation signal arrives
+                        val combinedPcm = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                            val inferStart = System.currentTimeMillis()
+                            val pcmFloat = eng.infer(phonemes = phonemes, voiceName = effectiveVoice, temperature = profile.temperature)
+                            val inferDuration = System.currentTimeMillis() - inferStart
+
+                            val rawPcm16 = PcmUtils.floatToShort(pcmFloat)
+                            val speechPcm = PcmUtils.applyMicroFade(rawPcm16)
+                            val pauseMs = chunk.pauseDurationMs.toLong()
+
+                            val combined = if (pauseMs > 0L) {
+                                val silencePcm = PcmUtils.generateSilence(chunk.pauseDurationMs)
+                                if (silencePcm.isNotEmpty()) {
+                                    val arr = ShortArray(speechPcm.size + silencePcm.size)
+                                    System.arraycopy(speechPcm, 0, arr, 0, speechPcm.size)
+                                    System.arraycopy(silencePcm, 0, arr, speechPcm.size, silencePcm.size)
+                                    arr
+                                } else {
+                                    speechPcm
+                                }
+                            } else {
+                                speechPcm
+                            }
+
+                            PrewarmedChunkCache.put(storyId, effectiveVoice, i, combined)
+                            Log.d(TAG, "⚡ Pre-warmed chunk $i/$prewarmCount for story $storyId (G2P: ${g2pDuration}ms, Infer: ${inferDuration}ms)")
+                            combined
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        PrewarmedChunkCache.notifyInFlightFailed(storyId, effectiveVoice, i)
+                        throw e
+                    } catch (t: Throwable) {
+                        PrewarmedChunkCache.notifyInFlightFailed(storyId, effectiveVoice, i, t)
+                        throw t
                     }
 
-                    PrewarmedChunkCache.put(storyId, effectiveVoice, i, combinedPcm)
-                    Log.d(TAG, "⚡ Pre-warmed chunk $i/$prewarmCount for story $storyId (G2P: ${g2pDuration}ms, Infer: ${inferDuration}ms)")
+                    if (stopPrewarmAfterChunk0 && i == 0) {
+                        Log.d(TAG, "🛑 Prewarm stopping after chunk 0 as playback started for story $storyId")
+                        break
+                    }
                 }
                 Log.d(TAG, "✅ Finished pre-warming story $storyId")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 Log.d(TAG, "⏹️ Pre-warming cancelled for story $storyId")
+            } catch (e: InterruptedException) {
+                Log.d(TAG, "⏹️ Pre-warming cancelled for story $storyId")
             } catch (e: Throwable) {
                 Log.w(TAG, "⚠️ Pre-warming failed for story $storyId: ${e.message}")
+            } finally {
+                if (prewarmingStoryId == storyId) {
+                    prewarmingStoryId = 0
+                }
             }
         }
     }
@@ -358,7 +392,16 @@ class VieNeuTTSManager(
      * Start speaking text content.
      */
     fun speakContent(content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
-        cancelPrewarm()
+        if (storyId != 0 && PrewarmedChunkCache.activeStoryId != null && PrewarmedChunkCache.activeStoryId != storyId) {
+            PrewarmedChunkCache.clearPreviousStory(storyId)
+        }
+
+        if (prewarmJob?.isActive == true && storyId != 0 && prewarmingStoryId == storyId) {
+            Log.d(TAG, "🤝 Coordinating active prewarm for story $storyId instead of canceling")
+            stopPrewarmAfterChunk0 = true
+        } else {
+            cancelPrewarm()
+        }
 
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speak(content)
@@ -407,7 +450,16 @@ class VieNeuTTSManager(
      * Speak story title, pause 1 second, then speak content.
      */
     private fun speakWithTitlePauseInternal(title: String, content: String, storyId: Int = 0, pauseConfig: PauseConfig = getLoadedPauseConfig()) {
-        cancelPrewarm()
+        if (storyId != 0 && PrewarmedChunkCache.activeStoryId != null && PrewarmedChunkCache.activeStoryId != storyId) {
+            PrewarmedChunkCache.clearPreviousStory(storyId)
+        }
+
+        if (prewarmJob?.isActive == true && storyId != 0 && prewarmingStoryId == storyId) {
+            Log.d(TAG, "🤝 Coordinating active prewarm for story $storyId instead of canceling")
+            stopPrewarmAfterChunk0 = true
+        } else {
+            cancelPrewarm()
+        }
 
         if (isUsingFallback && fallbackManager != null) {
             fallbackManager?.speakWithTitlePause(title, content)
@@ -582,6 +634,7 @@ class VieNeuTTSManager(
             fallbackManager?.stop()
             return
         }
+        cancelPrewarm()
         pipeline?.stop()
         notifyStateChange(TTSState.READY)
         onProgressChange?.invoke(0)
@@ -600,6 +653,8 @@ class VieNeuTTSManager(
     override fun cancelPrewarm() {
         prewarmJob?.cancel()
         prewarmJob = null
+        prewarmingStoryId = 0
+        stopPrewarmAfterChunk0 = false
     }
 
     fun setPrebufferChunks(chunks: Int) {
@@ -646,16 +701,21 @@ class VieNeuTTSManager(
         // 3. Clear prewarmed cache across model architectures
         PrewarmedChunkCache.clear()
 
-        // 4. Release old pipeline and ONNX sessions cleanly
-        pipeline?.release()
+        // 4. Release old pipeline and ONNX sessions cleanly on Dispatchers.IO
+        val oldPipeline = pipeline
+        val oldEngine = engine
         pipeline = null
-        engine?.close()
         engine = null
-        System.gc()
 
         val ctx = appContext
         scope.launch {
             try {
+                // Teardown previous engine and pipeline off the caller thread
+                withContext(Dispatchers.IO) {
+                    oldPipeline?.release()
+                    oldEngine?.close()
+                }
+
                 val newEngine = withContext(Dispatchers.IO) {
                     if (ctx != null) {
                         VieNeuOnnxEngine.create(ctx, precision = normPrecision)
@@ -732,19 +792,29 @@ class VieNeuTTSManager(
     override fun shutdown() {
         cancelPrewarm()
         scope.cancel()
-        pipeline?.stop()
-        pipeline?.release()
+        val pipe = pipeline
+        val eng = engine
+        val fallback = fallbackManager
         pipeline = null
-        engine?.close()
         engine = null
-        PrewarmedChunkCache.clear()
-        fallbackManager?.shutdown()
         fallbackManager = null
-        System.gc()
+        PrewarmedChunkCache.clear()
         notifyStateChange(TTSState.IDLE)
+
+        pipe?.stop()
+        fallback?.shutdown()
+
+        // Asynchronously teardown engine and pipeline resources on Dispatchers.IO without blocking Main thread
+        CoroutineScope(Dispatchers.IO).launch {
+            pipe?.release()
+            eng?.close()
+        }
     }
 
     internal fun getEngineForTesting(): VieNeuOnnxEngine? = engine
+    internal fun getPrewarmJobForTesting(): kotlinx.coroutines.Job? = prewarmJob
+    internal fun getPrewarmingStoryIdForTesting(): Int = prewarmingStoryId
+    internal fun getPipelineForTesting(): TTSAudioPipeline? = pipeline
 
     companion object {
         private const val TAG = "VieNeuTTSManager"
