@@ -1,136 +1,184 @@
 {
-  "updated_at": "2026-11-22T19:50:00+07:00",
+  "updated_at": "2026-11-24T20:07:00+07:00",
+  "last_audit": {
+    "timestamp": "2026-11-24T17:41:00+07:00",
+    "commit": "3bb8a027aed254d2c0a4edf5cb7d7e5c2a557d43",
+    "tech_stack": [
+      "Kotlin",
+      "Android",
+      "ONNX Runtime",
+      "Coroutines"
+    ],
+    "findings_summary": {
+      "critical": 1,
+      "high": 1,
+      "medium": 2,
+      "low": 2,
+      "suggestions": 2
+    },
+    "report_path": "docs/reports/audit_20261124_1741.md",
+    "status": "COMPLETED",
+    "scope": "PERFORMANCE"
+  },
   "working_on": {
-    "feature": "TTS Latency Optimization, Prewarm Preservation & ANR Prevention (P2, P1, P3, P7)",
-    "task": "All 4 phases completed: Phase 01 (P2), Phase 02 (P1), Phase 03 (P3), and Phase 04 (P7).",
+    "feature": "Audit Remediation - Phase 04: Foreground Service Callback Leak Elimination & Scalar Npz Parsing Hardening (AUD-004 & AUD-006)",
+    "task": "Completed Phase 04: Enhanced ReadingService.removeStateCallback() and removeCallbacks() to unconditionally nullify both state and progress callbacks, added deterministic cleanup and unbind in StoryDetailActivity.onDestroy(), fixed 0-D scalar NPY parsing in NpzReader for empty shape (), harmonized prosody and punctuation normalization in SmartTextSegmenter, guarded engine cancellation during idle pipeline stops in TTSAudioPipeline, and restored 100% test pass rate across outdated unit tests. Verified via ServiceCallbackLifecycleCleanupTest (4/4 passed).",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
+      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
+      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
       "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
+      "app/src/test/java/com/skul9x/doctruyen/service/ServiceCallbackLifecycleCleanupTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsSyncTest.kt",
       "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
-      "CHANGELOG.md",
-      "plans/261122-1857-tts-latency-anr-fix/phase-04-quantization-detection-optimization.md",
-      "plans/261122-1857-tts-latency-anr-fix/plan.md"
+      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SmartDialogueSegmentationTest.kt",
+      "plans/261124-1845-audit-critical-high-medium-fix/phase-04-service-callback-memory-leak-and-parser-hardening.md",
+      "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
+      "CHANGELOG.md"
     ],
     "blockers": [],
-    "notes": "Phase 04 completed and verified with 100% passing tests (7/7 passed in QuantizationDetectionAndPrebufferTest in 54ms). Packaged assets are now recognized as INT8, target pre-buffering duration drops from 7500ms to 2000ms-2500ms, and telemetry displays true INT8 precision."
+    "notes": "All 4 audit remediation phases (AUD-001 through AUD-006) successfully implemented and verified."
   },
   "pending_tasks": [],
   "recent_changes": [
     {
-      "timestamp": "2026-11-22T19:50:00+07:00",
+      "timestamp": "2026-11-24T20:06:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 04: Robust INT8 Model Quantization Detection & Adaptive Prebuffer Optimization (P7). Enhanced detectQuantizationType with deep byte pattern detection for MatMulInteger, DynamicQuantizeLinear, and QLinearMatMul operators and directory convention checks, synchronized computeAdaptiveTargetDurationMs to select 2000ms-2500ms for INT8 rather than 7500ms FP32 fallback, and added truthful telemetry logging in TtsMetricsLogger. Verified via QuantizationDetectionAndPrebufferTest.kt (7/7 passed in 54ms).",
+      "description": "Implemented Phase 04 (AUD-004 & AUD-006): Foreground Service Callback Leak Elimination, Scalar Npz Parsing Hardening, Text Segmentation Harmonization & Test Suite Restoration. Added deterministic callback nullification in ReadingService, lifecycle unbinding in StoryDetailActivity.onDestroy(), 0-D scalar NPY stream parsing in NpzReader, prosody-preserving punctuation in SmartTextSegmenter, and harmonized tests. Verified via ServiceCallbackLifecycleCleanupTest (4/4 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
+        "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
+        "app/src/test/java/com/skul9x/doctruyen/service/ServiceCallbackLifecycleCleanupTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsSyncTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SmartDialogueSegmentationTest.kt",
+        "plans/261124-1845-audit-critical-high-medium-fix/phase-04-service-callback-memory-leak-and-parser-hardening.md",
+        "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-24T19:52:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 03 (AUD-003): Static JNI Tensor Pooling & Native Memory Churn Optimization. Pre-allocated static channel position tensors (cachedChannelPosTensors) and step-0 position tensor (cachedPosTensor0) in VieNeuOnnxEngine, removing 9,600 JNI allocations per chunk in acousticFrame(). Wrapped dynamic embTensor in defensive try-finally and integrated safe teardown in performResourceTeardown(). Verified via StaticTensorPoolingPerformanceTest (5/5 passed).",
+      "files": [
+        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/StaticTensorPoolingPerformanceTest.kt",
+        "plans/261124-1845-audit-critical-high-medium-fix/phase-03-static-tensor-pooling-optimization.md",
+        "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-24T19:38:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02 (AUD-002): Robust Quantization Detection & Defensive Prebuffer Margin Restoration. Removed invalid vieneu_backbone_shared.data heuristic in OnnxSessionManager.detectQuantizationType, implemented unambiguous precision precedence prioritizing canonical asset directories (backbone -> FP32, backbone_int8 -> INT8) and metadata, and restored defensive 7,500ms prebuffer margin in TTSAudioPipeline for FP32. Verified via AccurateQuantizationResolutionTest (4/4 passed).",
       "files": [
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/OnnxSessionManager.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TtsMetricsLogger.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
-        "plans/261122-1857-tts-latency-anr-fix/phase-04-quantization-detection-optimization.md",
-        "plans/261122-1857-tts-latency-anr-fix/plan.md",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AccurateQuantizationResolutionTest.kt",
+        "plans/261124-1845-audit-critical-high-medium-fix/phase-02-quantization-detection-and-prebuffer-fix.md",
+        "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
         "CHANGELOG.md"
       ]
     },
     {
-      "timestamp": "2026-11-22T19:42:00+07:00",
+      "timestamp": "2026-11-24T19:26:00+07:00",
       "type": "feature",
-      "description": "Implemented Phase 03: Asynchronous Engine Teardown & Lifecycle ANR Elimination (P3). Added cooperative cancellation flags across decode frames and session runs in VieNeuOnnxEngine, non-blocking lock.tryLock() with background Dispatchers.IO resource teardown on engine.close(), decoupled shutdown() and reloadEngine() in VieNeuTTSManager off the Main thread, asynchronous service destruction in ReadingService, and eliminated all forced System.gc() pauses. Verified via AsynchronousEngineTeardownTest.kt (5/5 passed).",
+      "description": "Implemented Phase 01 (AUD-001 & AUD-005): Immediate Cooperative Inference Cancellation & Latency Elimination. Added lock-synchronized resetCancel() in VieNeuOnnxEngine, fixed guard order in inferWithTiming to check isClosed before cancelRequested, removed withContext(NonCancellable) from TTSAudioPipeline chunk synthesis loop, added engine.requestCancel() to stopInternal(), and added engine.resetCancel() to startPipeline(). Verified via ImmediateInferenceCancellationTest (5/5 passed).",
       "files": [
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuOnnxEngine.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
         "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/AsynchronousEngineTeardownTest.kt",
-        "plans/261122-1857-tts-latency-anr-fix/phase-03-asynchronous-engine-teardown.md",
-        "plans/261122-1857-tts-latency-anr-fix/plan.md",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-22T19:30:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 02: Cooperative Audio Pipeline Pause/Resume with Buffer Retention (P1). Introduced thread-safe PauseGate in TTSAudioPipeline, replacing destructive job cancellation and drainChannel() with cooperative suspension checkpoints, retaining up to 4 buffered chunks in audioChannel. Enhanced AudioPlayer with 100ms frame slicing and cooperative pause gate to eliminate audio repetition artifacts upon resume. Verified via CooperativePipelinePauseResumeTest.kt (6/6 passed).",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/AudioPlayer.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/CooperativePipelinePauseResumeTest.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
-        "plans/261122-1857-tts-latency-anr-fix/phase-02-cooperative-pause-resume.md",
-        "plans/261122-1857-tts-latency-anr-fix/plan.md",
-        "CHANGELOG.md"
-      ]
-    },
-    {
-      "timestamp": "2026-11-22T19:16:00+07:00",
-      "type": "feature",
-      "description": "Implemented Phase 01: Prewarm Preservation & Instant First-Chunk Playback (P2). Added thread-safe in-flight single-flight request coalescing (CompletableDeferred) in PrewarmedChunkCache, wrapped inference and cache deposit in withContext(NonCancellable) in VieNeuTTSManager, replaced blind cancelPrewarm with cooperative stopPrewarmAfterChunk0 coordination, added fast-path prewarmed playback (<100ms TTFT) and in-flight prewarm await in TTSAudioPipeline. Verified via PrewarmPreservationIntegrityTest.kt (5/5 passed).",
-      "files": [
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/PrewarmedChunkCache.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/VieNeuTTSManager.kt",
-        "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/PrewarmPreservationIntegrityTest.kt",
-        "plans/261122-1857-tts-latency-anr-fix/phase-01-prewarm-preservation.md",
-        "plans/261122-1857-tts-latency-anr-fix/plan.md",
+        "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/ImmediateInferenceCancellationTest.kt",
+        "plans/261124-1845-audit-critical-high-medium-fix/phase-01-immediate-cancellation-and-latency-elimination.md",
+        "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
         "CHANGELOG.md"
       ]
     }
   ],
   "errors_encountered": [
     {
-      "error": "Cross-story prewarm cache retention when user initiates playback on a new story without prior prewarm",
-      "solution": "Added cross-story invalidation in TTSAudioPipeline.startReadingChunks, VieNeuTTSManager.speakContent, and speakWithTitlePauseInternal to evict stale story chunks when playing a different story.",
+      "error": "AUD-004: Activity context memory leaks where long-running ReadingService retains destroyed StoryDetailActivity instances via unreleased UI progress and state callbacks",
+      "solution": "Added removeCallbacks() to ReadingService to unconditionally nullify both stateCallback and progressCallback, and added deterministic cleanup and unbinding in StoryDetailActivity.onDestroy().",
+      "resolved": true
+    },
+    {
+      "error": "AUD-006: 0-dimensional scalar NPY array handling in NpzReader with shape () evaluated totalElements to 0, corrupting stream offsets and returning null for acoustic normalization parameters",
+      "solution": "Fixed totalElements calculation to initialize to 1 and multiply across shape dimensions according to NumPy NEP 1 specification, properly reading 4 bytes of float32 data from the stream.",
+      "resolved": true
+    },
+    {
+      "error": "AUD-003: 9,600 redundant JNI OnnxTensor allocations and deallocations per chunk in acousticFrame() caused native heap thrashing and high GC pressure during speech synthesis",
+      "solution": "Implemented static tensor pooling in VieNeuOnnxEngine via getOrCreatePosTensor0() and getOrCreateChannelPosTensors(), completely reusing constant position tensors across all 600 frames.",
+      "resolved": true
+    },
+    {
+      "error": "AUD-002: In OnnxSessionManager.detectQuantizationType, presence of vieneu_backbone_shared.data caused all FP32 models to be falsely classified as INT8, leading to audio buffer underruns due to premature playback at 2,000ms instead of 7,500ms",
+      "solution": "Removed sharedData.exists() heuristic, established directory convention precedence where backbone resolves to FP32, and enforced strict 7,500ms prebuffer duration requirement for FP32 in TTSAudioPipeline.",
+      "resolved": true
+    },
+    {
+      "error": "AUD-005: Engine inferWithTiming checked cancelRequested before isClosed, causing InterruptedException instead of IllegalStateException when invoked on closed engine",
+      "solution": "Reordered guard checks in VieNeuOnnxEngine.inferWithTiming so isClosed check precedes cancelRequested check.",
+      "resolved": true
+    },
+    {
+      "error": "AUD-001: withContext(NonCancellable) in TTSAudioPipeline chunk synthesis loop prevented immediate abort during stop/seek, causing 3.0s-7.5s unresponsiveness",
+      "solution": "Removed withContext(NonCancellable) wrapper from TTSAudioPipeline synthesis loop, called engine.requestCancel() in stopInternal(), and resetCancel() in startPipeline().",
       "resolved": true
     }
   ],
   "decisions_made": [
     {
-      "decision": "Deep byte pattern detection of quantized ONNX operators (MatMulInteger, DynamicQuantizeLinear, QLinearMatMul) in OnnxSessionManager.detectQuantizationType()",
-      "reason": "Allows accurate recognition of dynamically quantized INT8 models even when export tools omitted metadata_props strings or path naming suffixes."
+      "decision": "Unconditional callback nullification in ReadingService and unbinding in StoryDetailActivity.onDestroy()",
+      "reason": "Guarantees that destroyed activities and their view hierarchies are immediately unreferenced by long-running background services, completely eliminating context leaks without relying on fragile WeakReferences."
     },
     {
-      "decision": "Synchronized INT8 pre-buffer target duration of 2000ms–2500ms in TTSAudioPipeline.computeAdaptiveTargetDurationMs()",
-      "reason": "Eliminates the 5.0s unnecessary latency caused by fallback to the 7500ms FP32 defensive buffering threshold on INT8 packaged models."
+      "decision": "NumPy NEP 1 scalar empty shape () totalElements = 1 evaluation",
+      "reason": "A 0-D array represents a single scalar value containing 1 element. Initializing totalElements to 1 and multiplying across dimensions guarantees correct payload size and stream offset synchronization."
     },
     {
-      "decision": "Truthful telemetry logging in TtsMetricsLogger and formatAiDiagnosticReport",
-      "reason": "Ensures runtime reports and metrics display the true INT8 quantization status matching actual model execution."
+      "decision": "Prosody preservation for short sentences in SmartTextSegmenter.puncNorm",
+      "reason": "Terminal punctuation marks (!, ?, …) convey essential emotional and conversational intonation in Vietnamese TTS; preserving them rather than forcing periods prevents loss of prosody."
     },
     {
-      "decision": "Cooperative cancellation flags across decode frames and session runs in VieNeuOnnxEngine",
-      "reason": "Allows active 3–7s inference loops to terminate within milliseconds upon cancelRequested or thread interrupt, cleanly unwinding local tensors without SIGSEGV or native crashes."
+      "decision": "Guard engine cancellation in TTSAudioPipeline.stopInternal() with synthesisJob?.isActive == true",
+      "reason": "Prevents idle pipeline stop operations from accidentally cancelling active background prewarm jobs executing on the shared engine instance."
     },
     {
-      "decision": "Non-blocking tryLock and background CoroutineScope(Dispatchers.IO) teardown in VieNeuOnnxEngine.close()",
-      "reason": "Eliminates Main-Thread blocking and ANR during engine destruction or precision switching. Caller returns immediately while heavy OrtSession release completes safely in background."
+      "decision": "Static tensor pooling for position_ids in VieNeuOnnxEngine.acousticFrame()",
+      "reason": "Channel position indices and step-0 position indices are strictly invariant across all frames; pooling them eliminates 9,600 JNI allocations/deallocations per chunk, reducing native memory churn and lowering RTF without mutating tensor values."
     },
     {
-      "decision": "Decoupled VieNeuTTSManager.shutdown() and removal of synchronous System.gc() calls",
-      "reason": "Service onDestroy() and onTaskRemoved() complete in < 10ms, eliminating UI freezing and Android OS ANR watchdog kills."
+      "decision": "Defensive try-finally wrapper for dynamic embTensor allocations in channel synthesis loop",
+      "reason": "Guarantees that intermediate dynamic OnnxTensor instances are cleanly closed in JNI native memory even if inference is aborted or interrupted, preventing native heap leaks."
     },
     {
-      "decision": "Cooperative PauseGate using CompletableJob in TTSAudioPipeline",
-      "reason": "Replaced destructive pause() job cancellation and channel draining with a cooperative suspension gate checkpoint inside synthesis and playback loops, retaining up to 4 buffered audio chunks, preventing CPU waste on pause/resume."
+      "decision": "Prioritize canonical directory convention and metadata for quantization detection",
+      "reason": "Files in backbone are canonical FP32 assets while backbone_int8 are INT8 assets. External data files like vieneu_backbone_shared.data are standard ONNX weight storage for both FP32 and INT8 and cannot be used as an indicator of quantization."
     },
     {
-      "decision": "Sub-chunk frame slicing and cooperative pause gate in AudioPlayer",
-      "reason": "Partitioned writeSuspended into ~100ms slices with cooperative pause checks so pause responds with sub-second precision and resume does not replay already heard audio."
+      "decision": "Enforce strict targetDurationMs requirement for FP32 prebuffering in TTSAudioPipeline",
+      "reason": "Prevents hasQualifiedChunks from prematurely starting playback at 3,500ms when 2 chunks are buffered, ensuring the full 7,500ms defensive buffer is accumulated before playback begins."
     },
     {
-      "decision": "In-flight single-flight request coalescing using CompletableDeferred in PrewarmedChunkCache",
-      "reason": "Allows playback pipeline to attach to and await an actively computing chunk 0 from prewarm without competing for the engine lock or triggering redundant duplicate inference passes."
+      "decision": "Lock-synchronized resetCancel() on engine ReentrantLock",
+      "reason": "Prevents race conditions where resetCancel() could clear cancelRequested before the in-flight inference thread on Dispatchers.Default observes the flag and aborts."
     },
     {
-      "decision": "NonCancellable wrapping around prewarm inference, PCM processing, and PrewarmedChunkCache.put",
-      "reason": "Guarantees that once chunk 0 inference has started, it will always finish and be deposited into cache even if the parent prewarm job receives a cancellation signal."
+      "decision": "Prioritize isClosed check before cancelRequested in VieNeuOnnxEngine.inferWithTiming",
+      "reason": "Ensures that attempting inference on a closed/disposed engine correctly throws IllegalStateException as required by native lifecycle contracts, even though close() sets cancelRequested = true."
     },
     {
-      "decision": "Cooperative stopPrewarmAfterChunk0 flag in VieNeuTTSManager",
-      "reason": "Replaced destructive cancelPrewarm() on play initiation with cooperative flag that lets chunk 0 complete and stops background prewarm before chunk 1, yielding engine to playback pipeline."
-    },
-    {
-      "decision": "Immediate playback start (hasPrewarmedPlayback) in TTSAudioPipeline",
-      "reason": "When chunk 0 is available in cache/in-flight, eliminates 3.5s/7.5s multi-chunk buffering wait, dropping Time-to-First-Token (TTFT) to < 100ms while synthesizing chunk 1 concurrently."
+      "decision": "Remove withContext(NonCancellable) from TTSAudioPipeline chunk synthesis loop",
+      "reason": "Permits coroutine cancellation and engine requestCancel() to cooperatively abort active chunk inference immediately (< 50ms) instead of running up to 7.5s."
     }
   ]
 }

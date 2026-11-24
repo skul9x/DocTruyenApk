@@ -165,7 +165,7 @@ class NpzReader private constructor(
             val headerStr = String(headerBytes, Charsets.US_ASCII)
             val shape = parseShape(headerStr)
 
-            var totalElements = if (shape.isEmpty()) 0 else 1
+            var totalElements = 1
             for (dim in shape) {
                 totalElements *= dim
             }

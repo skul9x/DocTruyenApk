@@ -90,12 +90,31 @@ class OnnxSessionManager(
         /**
          * Detect quantization type of an ONNX model.
          * Primary: Read ONNX metadata_props for key "quantization" ("int8", "fp16", "fp32").
-         * Deep scan: Search for quantized ONNX operators (MatMulInteger, DynamicQuantizeLinear, QLinearMatMul).
+         * Directory convention:
+         *   - Folder `backbone_int8` or containing `int8` -> QuantizationType.INT8.
+         *   - Folder `backbone_fp16` or containing `fp16` -> QuantizationType.FP16.
+         *   - Folder `backbone` (canonical unquantized FP32 asset directory) -> QuantizationType.FP32.
+         * Deep scan: Search for quantized ONNX operators (MatMulInteger, DynamicQuantizeLinear, QLinearMatMul) on standalone models.
          * Fallback: Parse filename convention (*_int8.onnx, *_fp16.onnx, directory conventions, default = FP32).
          */
         fun detectQuantizationType(modelPath: String): QuantizationType {
+            val file = File(modelPath)
+            val lowerPath = modelPath.lowercase().replace('\\', '/')
+            val fileName = file.name.lowercase()
+
+            // 1. Explicit filename naming conventions take highest priority
+            if (fileName.contains("_int8.") || fileName.contains(".int8.") || fileName.endsWith("_int8.onnx")) {
+                return QuantizationType.INT8
+            }
+            if (fileName.contains("_fp16.") || fileName.contains(".fp16.") || fileName.endsWith("_fp16.onnx")) {
+                return QuantizationType.FP16
+            }
+            if (fileName.contains("_fp32.") || fileName.contains(".fp32.") || fileName.endsWith("_fp32.onnx")) {
+                return QuantizationType.FP32
+            }
+
+            // 2. Scan for explicit metadata key "quantization"
             try {
-                val file = File(modelPath)
                 if (file.exists() && file.length() > 0) {
                     val scanSize = minOf(file.length(), 2 * 1024 * 1024L).toInt()
                     val buffer = ByteArray(scanSize)
@@ -107,32 +126,76 @@ class OnnxSessionManager(
                             totalRead += r
                         }
                     }
-                    val detected = extractQuantizationFromBytes(buffer)
-                    if (detected != null) {
-                        return detected
+                    val metaDetected = extractMetadataQuantization(buffer)
+                    if (metaDetected != null) {
+                        return metaDetected
                     }
                 }
             } catch (e: Throwable) {
                 Log.w(TAG, "Failed scanning ONNX metadata in $modelPath: ${e.message}")
             }
 
-            val lowerPath = modelPath.lowercase()
-            if (lowerPath.contains("int8") || lowerPath.contains("backbone_int8")) {
+            // 3. Parent directory convention check
+            val parent = file.parentFile
+            if (parent != null) {
+                val parentName = parent.name.lowercase()
+                if (parentName.contains("backbone_int8") || parentName.endsWith("_int8")) {
+                    return QuantizationType.INT8
+                }
+                if (parentName.contains("backbone_fp16") || parentName.endsWith("_fp16")) {
+                    return QuantizationType.FP16
+                }
+                if (parentName == "backbone" || parentName == "backbone_fp32") {
+                    return QuantizationType.FP32
+                }
+            }
+
+            // Path segment directory convention checks (for relative or mocked paths)
+            if (lowerPath.contains("/backbone_int8/") || lowerPath.contains("backbone_int8")) {
+                return QuantizationType.INT8
+            }
+            if (lowerPath.contains("/backbone_fp16/") || lowerPath.contains("backbone_fp16")) {
+                return QuantizationType.FP16
+            }
+            if (lowerPath.contains("/backbone/") && !lowerPath.contains("int8") && !lowerPath.contains("fp16")) {
+                return QuantizationType.FP32
+            }
+
+            // 4. Secondary: Deep byte pattern detection for quantized ONNX operators on standalone models
+            try {
+                if (file.exists() && file.length() > 0) {
+                    val scanSize = minOf(file.length(), 2 * 1024 * 1024L).toInt()
+                    val buffer = ByteArray(scanSize)
+                    file.inputStream().use { input ->
+                        var totalRead = 0
+                        while (totalRead < scanSize) {
+                            val r = input.read(buffer, totalRead, scanSize - totalRead)
+                            if (r <= 0) break
+                            totalRead += r
+                        }
+                    }
+                    if (containsPattern(buffer, OP_MATMUL_INTEGER) ||
+                        containsPattern(buffer, OP_DYNAMIC_QUANTIZE) ||
+                        containsPattern(buffer, OP_QLINEAR_MATMUL)
+                    ) {
+                        return QuantizationType.INT8
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed scanning ONNX operators in $modelPath: ${e.message}")
+            }
+
+            // 5. Fallback path tokens
+            if (lowerPath.contains("int8")) {
                 return QuantizationType.INT8
             }
             if (lowerPath.contains("fp16")) {
                 return QuantizationType.FP16
             }
 
-            // Support directory convention check: if parent directory contains backbone with quantized weights, default to INT8
+            // 6. Companion model check within directory if companion prefill exists
             try {
-                val file = File(modelPath)
-                val parent = file.parentFile
-                if (parent != null && parent.exists() && parent.name.contains("backbone")) {
-                    val sharedData = File(parent, "vieneu_backbone_shared.data")
-                    if (sharedData.exists()) {
-                        return QuantizationType.INT8
-                    }
+                if (parent != null && parent.exists()) {
                     val companionPrefill = File(parent, "vieneu_prefill.onnx")
                     if (companionPrefill.exists() && companionPrefill.absolutePath != file.absolutePath) {
                         val companionQuant = detectQuantizationType(companionPrefill.absolutePath)
@@ -146,8 +209,7 @@ class OnnxSessionManager(
             return QuantizationType.FP32
         }
 
-        private fun extractQuantizationFromBytes(bytes: ByteArray): QuantizationType? {
-            // 1. Primary: Scan for metadata key "quantization"
+        private fun extractMetadataQuantization(bytes: ByteArray): QuantizationType? {
             val maxScan = bytes.size - QUANTIZATION_KEY.size
             for (i in 0 until maxScan) {
                 var matched = true
@@ -165,8 +227,13 @@ class OnnxSessionManager(
                     if (slice.contains("fp32")) return QuantizationType.FP32
                 }
             }
+            return null
+        }
 
-            // 2. Secondary: Deep byte pattern detection for quantized ONNX operators
+        private fun extractQuantizationFromBytes(bytes: ByteArray): QuantizationType? {
+            val meta = extractMetadataQuantization(bytes)
+            if (meta != null) return meta
+
             if (containsPattern(bytes, OP_MATMUL_INTEGER) ||
                 containsPattern(bytes, OP_DYNAMIC_QUANTIZE) ||
                 containsPattern(bytes, OP_QLINEAR_MATMUL)
@@ -367,7 +434,16 @@ class OnnxSessionManager(
             val acousticPath = File(effectiveBackboneDir, "vieneu_acoustic_cached.onnx").absolutePath
             val codecPath = File(codecDir, "moss_audio_tokenizer_decode_full.onnx").absolutePath
 
-            val detectedQuant = quantizationTypeOverride ?: detectQuantizationType(prefillPath)
+            val detectedQuant = quantizationTypeOverride ?: run {
+                val detected = detectQuantizationType(prefillPath)
+                if (precision.trim().equals("FP32", ignoreCase = true) && (effectiveBackboneDir.name == "backbone" || effectiveBackboneDir.name == "backbone_fp32")) {
+                    QuantizationType.FP32
+                } else if (precision.trim().equals("INT8", ignoreCase = true) && effectiveBackboneDir.name == "backbone_int8") {
+                    QuantizationType.INT8
+                } else {
+                    detected
+                }
+            }
             val (sessionOptions, epUsed) = configureSessionOptions(detectedQuant, threads)
 
             val prefillSession = env.createSession(prefillPath, sessionOptions)

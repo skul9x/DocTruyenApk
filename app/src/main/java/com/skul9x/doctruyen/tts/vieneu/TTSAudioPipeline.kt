@@ -373,7 +373,8 @@ class TTSAudioPipeline(
         bufferedSamples.set(0L)
     }
 
-    private fun stopInternal(resetIndex: Boolean) {
+    internal fun stopInternal(resetIndex: Boolean) {
+        engine.requestCancel()
         pauseGate.resume()
         synthesisJob?.cancel()
         playbackJob?.cancel()
@@ -394,6 +395,7 @@ class TTSAudioPipeline(
     }
 
     private fun startPipeline(startIndex: Int, storyId: Int = 0) {
+        engine.resetCancel()
         audioChannel?.cancel()
         drainChannel()
         val channel = Channel<Pair<Int, ShortArray>>(capacity = maxQueueCapacity)
@@ -489,10 +491,8 @@ class TTSAudioPipeline(
 
                         // 2. Probe ONNX neural inference time (backbone + codec)
                         val inferStart = System.currentTimeMillis()
-                        val inferResult = withContext(NonCancellable) {
-                            val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
-                            engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
-                        }
+                        val effectiveTemp = if (voiceName == "Thiền Tâm Đức") 0.25f else temperature
+                        val inferResult = engine.inferWithTiming(phonemes = phonemes, voiceName = voiceName, temperature = effectiveTemp)
                         val inferDuration = System.currentTimeMillis() - inferStart
                         val pcmFloat = inferResult.pcm
                         val backboneDuration = inferResult.timing.backboneDurationMs
@@ -591,15 +591,15 @@ class TTSAudioPipeline(
                     val allChunksBuffered = currentQueueSize >= remainingChunks
 
                     val minDurationMs = when (preBufferChunkCount) {
-                        1 -> 1500L
-                        3 -> 7000L
-                        else -> if (quantizationType == OnnxSessionManager.QuantizationType.INT8) 2000L else 3500L // 2 chunks
+                        1 -> if (quantizationType == OnnxSessionManager.QuantizationType.FP32) targetDurationMs else 1500L
+                        3 -> if (quantizationType == OnnxSessionManager.QuantizationType.FP32) maxOf(7500L, targetDurationMs) else 7000L
+                        else -> if (quantizationType == OnnxSessionManager.QuantizationType.INT8) 2000L else if (quantizationType == OnnxSessionManager.QuantizationType.FP32) targetDurationMs else 3500L
                     }
 
                     val isFastMode = (quantizationType == OnnxSessionManager.QuantizationType.INT8 && cpuCores >= 4) ||
                             (cpuCores >= 6 && quantizationType != OnnxSessionManager.QuantizationType.FP32)
-                    val hasQualifiedChunks = currentQueueSize >= preBufferChunkCount &&
-                            (bufferedDurationMs >= minDurationMs || (preBufferChunkCount == 1 && isFastMode && bufferedDurationMs >= 1500L))
+                    val hasQualifiedChunks = (quantizationType != OnnxSessionManager.QuantizationType.FP32 && currentQueueSize >= preBufferChunkCount &&
+                            (bufferedDurationMs >= minDurationMs || (preBufferChunkCount == 1 && isFastMode && bufferedDurationMs >= 1500L)))
                     val hasEnoughDuration = bufferedDurationMs >= targetDurationMs || hasQualifiedChunks
                     val isQueueFull = currentQueueSize >= maxQueueCapacity
                     val hasPrewarmedPlayback = cachedIndices.contains(startIndex) && currentQueueSize > 0

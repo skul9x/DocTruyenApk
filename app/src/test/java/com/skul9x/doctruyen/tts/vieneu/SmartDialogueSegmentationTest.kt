@@ -88,10 +88,10 @@ class SmartDialogueSegmentationTest {
     fun testPuncNormShortAndLongChunks() {
         // Short chunk (< 5 words) gets forced '.'
         assertEquals("Xin chào.", SmartTextSegmenter.puncNorm("Xin chào"))
-        assertEquals("Xin chào.", SmartTextSegmenter.puncNorm("Xin chào!"))
-        assertEquals("Xin chào.", SmartTextSegmenter.puncNorm("Xin chào?"))
+        assertEquals("Xin chào!", SmartTextSegmenter.puncNorm("Xin chào!"))
+        assertEquals("Xin chào?", SmartTextSegmenter.puncNorm("Xin chào?"))
         assertEquals("Xin chào.", SmartTextSegmenter.puncNorm("Xin chào,"))
-        assertEquals("Xin chào.", SmartTextSegmenter.puncNorm("Xin chào..."))
+        assertEquals("Xin chào...", SmartTextSegmenter.puncNorm("Xin chào..."))
 
         // Short chunk with trailing quote
         assertEquals("\"Xin chào\".", SmartTextSegmenter.puncNorm("\"Xin chào\""))

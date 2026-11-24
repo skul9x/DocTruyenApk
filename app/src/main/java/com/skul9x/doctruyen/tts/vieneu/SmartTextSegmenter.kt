@@ -372,20 +372,29 @@ object SmartTextSegmenter {
         val result = mutableListOf<TextChunk>()
         var chunkIndex = 0
 
-        val titleChunks = segment(title, maxCharsPerChunk, pauseConfig)
-        if (titleChunks.isNotEmpty()) {
-            for ((i, chunk) in titleChunks.withIndex()) {
-                val isLastTitleChunk = (i == titleChunks.size - 1)
-                val pauseType = if (isLastTitleChunk) PauseType.TITLE_BREAK else chunk.pauseType
-                val duration = if (isLastTitleChunk) pauseConfig.titlePauseMs else pauseConfig.getDurationFor(pauseType)
-                result.add(
-                    chunk.copy(
-                        index = chunkIndex++,
-                        pauseType = pauseType,
-                        pauseDurationMs = duration,
-                        isParagraphEnd = true
+        val cleanTitle = title.trim()
+        if (cleanTitle.isNotEmpty()) {
+            val titleChunks = segment(cleanTitle, maxCharsPerChunk, pauseConfig)
+            if (titleChunks.isNotEmpty()) {
+                for ((i, chunk) in titleChunks.withIndex()) {
+                    val isLastTitleChunk = (i == titleChunks.size - 1)
+                    val pauseType = if (isLastTitleChunk) PauseType.TITLE_BREAK else chunk.pauseType
+                    val duration = if (isLastTitleChunk) pauseConfig.titlePauseMs else pauseConfig.getDurationFor(pauseType)
+                    val titleText = if (titleChunks.size == 1 && !cleanTitle.endsWith(".") && chunk.text.endsWith(".")) {
+                        chunk.text.removeSuffix(".")
+                    } else {
+                        chunk.text
+                    }
+                    result.add(
+                        chunk.copy(
+                            index = chunkIndex++,
+                            text = titleText,
+                            pauseType = pauseType,
+                            pauseDurationMs = duration,
+                            isParagraphEnd = true
+                        )
                     )
-                )
+                }
             }
         }
 
@@ -500,7 +509,9 @@ object SmartTextSegmenter {
         val lastChar = trimmed.last()
 
         val normalized = if (words.size < 5) {
-            if (lastChar in SENT_END_CHARS || lastChar == ',') {
+            if (lastChar in SENT_END_CHARS) {
+                trimmed
+            } else if (lastChar == ',') {
                 var i = trimmed.length - 1
                 while (i >= 0 && (trimmed[i] in SENT_END_CHARS || trimmed[i] == ',')) {
                     i--
@@ -647,11 +658,11 @@ object SmartTextSegmenter {
             val clauseLen = getRestoredLength(trimmedClause, placeholders)
             val currentBufLen = if (currentBuf.isEmpty()) 0 else getRestoredLength(currentBuf.toString(), placeholders)
 
-            // Accumulate clauses if current buffer and next clause together fit within natural prosody limit (75 chars).
-            // Do not combine if current buffer ends with a colon ':', as colons mark structural pauses/headers.
+            // Accumulate clauses if current buffer and next clause together fit within natural prosody limit (minOf(75, maxChars)).
+            // Do not combine if current buffer ends with a colon ':', unless followed by dialogue quotation (" or “).
             val canCombine = currentBuf.isNotEmpty() &&
-                    !currentBuf.endsWith(":") &&
-                    (currentBufLen + 1 + clauseLen <= 75)
+                    (!currentBuf.endsWith(":") || trimmedClause.startsWith("\"") || trimmedClause.startsWith("“")) &&
+                    (currentBufLen + 1 + clauseLen <= minOf(75, maxChars))
 
             if (canCombine) {
                 currentBuf.append(" ").append(trimmedClause)

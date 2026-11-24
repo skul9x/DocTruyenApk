@@ -1,84 +1,91 @@
-# 💡 BRIEF: Đợt 1 — Khắc Phục Lỗi Logic Độ Trễ Cao, Lãng Phí Prewarm & Nguy Cơ ANR (P2, P1, P3, P7)
+# 💡 TECHNICAL BRIEF: KHẮC PHỤC TRIỆT ĐỂ LỖI CRITICAL, HIGH & MEDIUM (TTS PERFORMANCE & STABILITY)
 
-**Ngày tạo:** 2026-11-22  
-**Dự án:** DocTruyen & VieNeu-TTS Engine Integration (Android Native / Kotlin)  
-**Tài liệu tham chiếu:** [fix.md](file:///home/skul9x/Desktop/Code/DocTruyenApk-1.12/fix.md)  
-
----
-
-## 1. VẤN ĐỀ CẦN GIẢI QUYẾT
-
-Trong quá trình trải nghiệm đọc truyện bằng giọng đọc AI cục bộ (VieNeu-TTS on-device), người dùng đang gặp phải các vấn đề nghiêm trọng:
-
-1. **TTFT (Time To First Audio) bị kéo dài bất thường (5–7 giây):**
-   - **Vấn đề P2:** Người dùng mở truyện, hệ thống prewarm bắt đầu tính toán ngầm chunk 0. Khi người dùng bấm nút **Play**, hàm `cancelPrewarm()` lập tức hủy job. Do prewarm đang bị bọc trong `NonCancellable`, nó vẫn tính ngầm tiếp 3–7 giây và chiếm chặt engine lock. Nhưng khi tính xong, lệnh `if (!isActive) break` chạy TRƯỚC khi đưa kết quả vào Cache! Kết quả đã tính bị vứt bỏ hoàn toàn. Sau đó, Audio Pipeline chính khởi động lại phải xếp hàng chờ lock rồi tính toán lại đúng chunk 0 từ đầu.
-   - **Vấn đề P7:** Các mô hình ONNX đóng gói sẵn trong APK (`vieneu_prefill.onnx`, `vieneu_decode_step.onnx`) thực chất đã được lượng tử hóa INT8 (chứa hàng chục `MatMulInteger`), nhưng không mang chuỗi metadata `"quantization": "int8"`. Runtime quét file thất bại nên nhận định nhầm là mô hình FP32 nặng nề, tự động tăng cấu hình pre-buffer từ 2000ms lên tới **7500ms** (7,5 giây). Người dùng phải chờ đợi rất lâu âm thanh mới bắt đầu phát ra.
-
-2. **Tạm dừng và tiếp tục (Pause / Resume) gây giật, lặp câu và tốn pin:**
-   - **Vấn đề P1:** Khi bấm Pause hoặc khi mất Audio Focus tạm thời (chuông điện thoại, thông báo), hàm `pause()` hủy bỏ toàn bộ coroutine job và gọi `drainChannel()`, vứt bỏ toàn bộ các chunk âm thanh đã tổng hợp trước đó trong hàng đợi (mất từ 1–4 chunk, tương đương hàng chục giây CPU tính toán).
-   - Khi Resume, pipeline lại kích hoạt tổng hợp lại từ đầu chunk đang phát. Nếu chunk trước đó đang phát dở, driver `AudioTrack` vẫn còn tồn đọng một phần buffer phần cứng, dẫn đến tình trạng phát lặp lại âm thanh của câu cũ.
-
-3. **Nguy cơ đóng băng ứng dụng và crash ANR (Application Not Responding):**
-   - **Vấn đề P3:** Các thao tác đóng, hủy hoặc chuyển đổi chế độ engine (`initTTS`, `switchPrecision`, `onDestroy`, `onTaskRemoved`, `close()`) đều diễn ra trên Main Thread (UI thread). Hàm `close()` phải tranh chấp và chờ `lock.withLock` với hàm tổng hợp `infer` đang chạy (mất từ 3–7 giây). Quá 5 giây trên Main thread sẽ dẫn đến hộp thoại ANR và bị Android OS kill ứng dụng.
+**Ngày lập:** 2026-11-24  
+**Chủ đề:** Tối ưu hóa hiệu năng suy luận ONNX, triệt tiêu độ trễ chuyển truyện (7.5s -> <50ms), sửa lỗi lượng tử hóa và dọn rò rỉ bộ nhớ.  
+**Tham chiếu bệnh án:** `docs/reports/audit_20261124_1741.md`  
 
 ---
 
-## 2. GIẢI PHÁP ĐỀ XUẤT (BEST PRACTICES)
+## 1. VẤN ĐỀ CẦN GIẢI QUYẾT & MỤC TIÊU CỐT LÕI
 
-Nghiên cứu và áp dụng các Best Practices chuẩn của Android AudioTrack, Kotlin Coroutines Channel Backpressure và ONNX Runtime Mobile:
-
-1. **Sửa Logic Prewarm (P2 - Tránh lãng phí chu kỳ tính toán):**
-   - Không hủy bỏ mù quáng `cancelPrewarm()` khi bấm Play.
-   - Di chuyển lệnh lưu cache `PrewarmedChunkCache.put(...)` lên TRƯỚC bước kiểm tra `if (!isActive) break`. Dù prewarm job có nhận tín hiệu hủy, kết quả đã hoàn thành suy luận vẫn phải được cất vào cache an toàn.
-   - Pipeline phát âm thanh khi khởi chạy sẽ kiểm tra Cache trước; nếu Chunk 0 đã có sẵn hoặc đang tính, nó sẽ tái sử dụng ngay lập tức thay vì bắt engine tính lại.
-
-2. **Tối ưu Cơ chế Pause / Resume Pipeline (P1 - Giữ nguyên Buffer & Tránh Lặp Audio):**
-   - Áp dụng cơ chế **Cooperative Suspension (Tạm dừng phối hợp)** qua cờ hoặc trạng thái thay vì hủy bỏ phá hủy (`cancel()`) toàn bộ `synthesisJob` và xóa sạch `audioChannel`.
-   - Khi Pause: Chỉ cần gọi `audioPlayer.pause()`. Giữ nguyên các chunk đã được tổng hợp trong Channel (cơ chế backpressure giới hạn dung lượng của Channel sẽ tự động làm Producer tạm dừng khi đầy buffer).
-   - Khi Resume: Chỉ cần gọi `audioPlayer.play()`, âm thanh lập tức phát tiếp từ vị trí tạm dừng mà không mất dù chỉ 1ms CPU để tính lại chunk cũ.
-
-3. **Chuyển toàn bộ Lifecycle & Teardown của Engine ra Background Thread (P3 - Triệt tiêu nguy cơ ANR):**
-   - Tuyệt đối không gọi `close()`, `shutdown()`, `initTTS()` hoặc `switchPrecision()` trực tiếp trên Main Thread.
-   - Bọc toàn bộ các thao tác giải phóng tài nguyên ONNX vào `Dispatchers.IO` hoặc một dedicated single-thread worker.
-   - Thêm cơ chế cooperative cancellation flag (`@Volatile var isInterrupted = false`) để ngắt vòng lặp suy luận an toàn khi có yêu cầu teardown.
-   - Loại bỏ các lệnh gọi cưỡng bức `System.gc()` trên Main Thread.
-
-4. **Sửa Nhận Diện Lượng Tử Hóa INT8 (P7 - Chuẩn hóa Pre-buffer & Telemetry):**
-   - Tinh chỉnh hàm `detectQuantizationType()` trong `OnnxSessionManager.kt`:
-     - Kiểm tra nếu tên file hoặc thư mục cha chứa `int8` HOẶC mô hình chứa các toán tử lượng tử hóa đặc trưng (`MatMulInteger`, `DynamicQuantizeLinear`), nhận diện chính xác là `QuantizationType.INT8`.
-   - Đảm bảo nhánh `computeAdaptiveTargetDurationMs` nhận đúng `INT8`, tự động đưa mức pre-buffer về ngưỡng tối ưu 2000ms – 2500ms, giảm ngay 5 giây chờ đợi ban đầu cho người dùng.
+| Mã lỗi | Mức độ | Vấn đề lâm sàng | Mục tiêu sau khi sửa |
+| :--- | :--- | :--- | :--- |
+| **AUD-001** | 🔴 **Critical** | Bấm Stop / Đổi truyện / Seek nhưng CPU vẫn cày AI ngầm 3s–7.5s, làm khóa cứng lệnh phát truyện mới | Ngắt nhịp suy luận tức thì trong **< 20ms**, giải phóng lock ngay lập tức, triệt tiêu hoàn toàn độ trễ khi đổi truyện. |
+| **AUD-002** | 🟠 **High** | Nhận diện sai model FP32 thành INT8 do file `vieneu_backbone_shared.data`, làm tụt buffer từ 7.5s xuống 2s gây vấp đĩa | Nhận diện chính xác 100% FP32 vs INT8; khôi phục prebuffer 7,500ms cho FP32 để phát mượt không khựng. |
+| **AUD-003** | 🟡 **Medium** | Cấp phát 9,000 JNI `OnnxTensor` vô nghĩa trong vòng lặp 15-channel/frame của mỗi câu văn | Tái sử dụng mảng tensor vị trí tĩnh (15 tensors), giảm 9,000 lần JNI allocation/chunk, hạ CPU RTF. |
+| **AUD-004** | 🟡 **Medium** | `ReadingService` giữ strong reference callback làm rò rỉ `StoryDetailActivity` và View hierarchy | Tự động dọn sạch callback trong `onDestroy()`, kết hợp `WeakReference` phòng thủ chống leak RAM. |
+| **AUD-005/006** | 🔵 **Low** | Thứ tự guard `isClosed` và lỗi đọc scalar 0-D trong `NpzReader.kt` làm rớt unit tests | Đảo thứ tự guard và fix parser scalar để khôi phục 100% test pass. |
 
 ---
 
-## 3. PHẠM VI & DANH SÁCH TÍNH NĂNG (SCOPE)
+## 2. NGHIÊN CỨU BEST PRACTICES TỪ THẾ GIỚI (ONLINE RESEARCH FINDINGS)
 
-### 🚀 MVP Đợt 1 (Bắt buộc hoàn thành trong gói này):
-- [ ] **Feature P2:** Sửa cơ chế Prewarm trong `VieNeuTTSManager.kt` và `TTSAudioPipeline.kt`. Đảm bảo chunk đã tính không bị vứt bỏ, Play bấm là ăn ngay từ Cache.
-- [ ] **Feature P1:** Refactor cơ chế Pause/Resume trong `TTSAudioPipeline.kt` & `AudioPlayer.kt`. Không xả rỗng channel khi Pause, không lặp lại âm thanh khi Resume.
-- [ ] **Feature P3:** Di chuyển toàn bộ teardown/shutdown/close của `ReadingService.kt`, `VieNeuTTSManager.kt` và `VieNeuOnnxEngine.kt` sang Coroutine Background Dispatcher (`Dispatchers.IO`).
-- [ ] **Feature P7:** Bổ sung logic nhận diện op INT8 thông minh trong `OnnxSessionManager.kt`. Cấu hình đúng `targetPrebufferMs` tối ưu (2000ms).
-- [ ] **Unit Tests:** Viết bộ kiểm thử tự động (Unit Test Suite) xác minh tính đúng đắn của 4 lỗi logic trên trước khi đóng gói.
+### A. ONNX Runtime Android: Cơ chế ngắt suy luận an toàn (Safe Cancellation)
+- **Cảnh báo từ ONNX Runtime Team:** Tuyệt đối không được gọi `session.close()` hoặc ngắt luồng thô bạo bằng `Thread.interrupt()` khi `session.run()` đang thực thi trong C++ native layer — hành vi này sẽ gây lỗi bộ nhớ **`SIGSEGV (Segmentation Fault)`** làm crash app ngay lập tức.
+- **Best Practice chuẩn mực:**
+  1. Sử dụng cờ ngắt hợp tác (Cooperative Cancellation Flag) tại các mốc checkpoint giữa các khung hình (frames).
+  2. Bỏ `withContext(NonCancellable)` khỏi vòng lặp phát nhạc thông thường (chỉ giữ cho tác vụ prewarm chunk 0 nếu cần).
+  3. Bổ sung hàm `resetCancel()` trong Engine để sẵn sàng nhận lệnh phát mới ngay khi chunk cũ bị hủy.
 
-### 🎁 Phase Tiếp Theo (Đợt 2 - Làm sau):
-- [ ] **P4:** Đưa việc parse HTML, Regex và chuẩn bị text sang Background thread (`Dispatchers.Default`), chia nhỏ TextView / RecyclerView.
-- [ ] **M13:** Chuyển ProgressBar từ `indeterminate="true"` sang chế độ determinate hiển thị phần trăm thật.
-- [ ] **M8 & M12:** Khắc phục rò rỉ WebView trong `HostingVerifier.kt` và WakeLock timeout trong `ReadingService.kt`.
+### B. ONNX Runtime Java API: Tối ưu bộ nhớ JNI & Tensor Pooling
+- **Vấn đề hiệu năng JNI:** Hàm `OnnxTensor.createTensor()` mỗi lần gọi đều tạo một native peer structure và sao chép dữ liệu qua ranh giới JNI.
+- **Best Practice chuẩn mực:**
+  - Với các tensor input có kích thước và giá trị bất biến (như `position_ids` của 15 channels: $ch \in [1..15]$ với giá trị tĩnh $ch + 1$), tạo sẵn 1 mảng tĩnh `Array(16) { ... }` khi khởi tạo Engine và tái sử dụng cho toàn bộ 600 frames.
 
----
-
-## 4. ƯỚC TÍNH RỦI RO & PHÂN TÍCH KỸ THUẬT
-
-- **Độ phức tạp:** Trung bình (Code logic Kotlin Coroutines & Threading). Không đụng vào model nhị phân ONNX gốc hay viết lại JNI C++/Rust.
-- **Rủi ro kỹ thuật:**
-  - *Race condition khi Resume/Pause:* Cần quản lý state giữa `AudioTrack` và Coroutine Channel một cách thread-safe (dùng Mutex hoặc Atomic state).
-  - *Backpressure của Channel:* Cần đảm bảo dung lượng Channel (capacity) hợp lý (ví dụ: 3–4 chunks) để không gây tràn RAM khi tạm dừng lâu.
-- **Lợi ích dự kiến:**
-  - TTFT giảm từ ~5.0–7.5 giây xuống **~1.5–2.5 giây**.
-  - Không còn hiện tượng đơ ứng dụng (ANR) khi thoát app hoặc đổi giọng/đổi độ chính xác.
-  - Thao tác Pause / Resume mượt mà tức thì, không gây nóng máy.
+### C. Android Foreground Service & Activity Callbacks
+- **Best Practice từ Android Architecture Guides:**
+  - Không bao giờ để Service dài hạn (Foreground Service) giữ Strong Reference tới lambda closure của Activity ngắn hạn.
+  - Phải thực hiện **Deterministic Cleanup**: Đảm bảo `onDestroy()` của Activity gọi lệnh hủy đăng ký callback (`removeStateCallback()`), kết hợp dọn dẹp `progressCallback = null`.
 
 ---
 
-## 5. BƯỚC TIẾP THEO
+## 3. PHÂN TÍCH CÁC PHƯƠNG ÁN ĐIỀU TRỊ (BRAINSTORMING OPTIONS)
 
-→ Chuyển giao sang workflow `/plan` để phân rã chi tiết thành các Phase thực thi code và kịch bản Test tự động.
+### Ca bệnh 1: AUD-001 (Ngắt suy luận tức thì khi Stop / Đổi truyện)
+
+* **Phương án A (Tối giản):** Chỉ bỏ `withContext(NonCancellable)` trong `TTSAudioPipeline`.
+  - *Ưu điểm:* Dễ làm.
+  - *Nhược điểm:* Khi coroutine bị cancel, lệnh `engine.inferWithTiming` vẫn đang chạy trong thread background cho đến hết frame hiện tại nếu không có cờ `cancelRequested` chủ động.
+* **Phương án B (Toàn diện - ⭐ KHUYÊN DÙNG):**
+  1. Bỏ `withContext(NonCancellable)` trong vòng lặp phát của `TTSAudioPipeline`.
+  2. Thêm `fun resetCancel()` vào `VieNeuOnnxEngine`.
+  3. Trong `TTSAudioPipeline.stopInternal()`, gọi ngay `engine.requestCancel()` để vòng lặp 600 frames ném `InterruptedException` và thoát ngay trong < 10ms.
+  4. Trong `startPipeline()`, gọi `engine.resetCancel()` để chuẩn bị cho truyện mới.
+  - *Đánh giá:* Triệt tiêu 100% độ trễ 7.5s, chuyển bài tức thì (<20ms), không lo crash.
+
+---
+
+### Ca bệnh 2: AUD-002 (Nhận diện lượng tử hóa chính xác FP32 vs INT8)
+
+* **Phương án A:** Dựa vào đường dẫn thư mục: `parent.name.contains("backbone_int8")`.
+* **Phương án B (Kết hợp - ⭐ KHUYÊN DÙNG):**
+  - Xóa bỏ hoàn toàn điều kiện sai lầm `if (sharedData.exists()) return INT8`.
+  - Kiểm tra `parent.name.contains("backbone_int8")` HOẶC quét bytecode tìm toán tử (`MatMulInteger`, `DynamicQuantizeLinear`, `QLinearMatMul`).
+  - Nếu ở trong thư mục `backbone` và không có toán tử int8 $\rightarrow$ trả về `QuantizationType.FP32`.
+  - *Đánh giá:* Sửa dứt điểm lỗi vấp âm thanh, đưa pre-buffer FP32 về đúng 7,500ms, giúp 4 unit tests pass ngay lập tức.
+
+---
+
+### Ca bệnh 3: AUD-003 (Tối ưu 9,000 JNI allocations/chunk)
+
+* **Phương án A:** Giữ nguyên tạo mới từng frame.
+* **Phương án B (Tạo Pool Tensor tĩnh - ⭐ KHUYÊN DÙNG):**
+  - Trong `VieNeuOnnxEngine`, khai báo `cachedPosTensors = Array(16) { ch -> OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(ch.toLong())), longArrayOf(1, 1)) }`.
+  - Trong vòng lặp channel $ch$: truyền `cachedPosTensors[ch + 1]` mà không cần `createTensor` và `close()`.
+  - Giải phóng 15 tensors này trong `performResourceTeardown()`.
+  - *Đánh giá:* Tiết kiệm 9,000 lần JNI alloc/dealloc mỗi câu, giảm tải bộ nhớ native và hạ nhiệt độ máy.
+
+---
+
+### Ca bệnh 4: AUD-004 (Chống rò rỉ Activity RAM trong Service)
+
+* **Giải pháp chuẩn:**
+  - Bổ sung `override fun onDestroy()` trong `StoryDetailActivity` gọi dọn dẹp `readingService?.removeStateCallback()`.
+  - Trong `ReadingService`, sửa `removeStateCallback()` để xóa cả `stateCallback = null` và `progressCallback = null`.
+
+---
+
+## 4. BƯỚC TIẾP THEO
+
+1. **Chuyển sang `/plan`** để lập kế hoạch chi tiết từng file cần sửa và các unit test kiểm chứng đi kèm.
+2. **Triển khai code (`/code`)** theo phác đồ an toàn, kiểm tra regression và chạy lại bộ test suite lâm sàng.

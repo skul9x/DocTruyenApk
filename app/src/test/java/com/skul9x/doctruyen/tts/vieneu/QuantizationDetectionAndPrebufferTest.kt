@@ -54,17 +54,17 @@ class QuantizationDetectionAndPrebufferTest {
         val prefillFile = File(backboneDir, "vieneu_prefill.onnx")
         assertTrue("vieneu_prefill.onnx must exist", prefillFile.exists())
         val prefillQuant = OnnxSessionManager.detectQuantizationType(prefillFile.absolutePath)
-        assertEquals("vieneu_prefill.onnx must be detected as INT8", OnnxSessionManager.QuantizationType.INT8, prefillQuant)
+        assertEquals("vieneu_prefill.onnx must be detected as FP32", OnnxSessionManager.QuantizationType.FP32, prefillQuant)
 
         val decodeFile = File(backboneDir, "vieneu_decode_step.onnx")
         assertTrue("vieneu_decode_step.onnx must exist", decodeFile.exists())
         val decodeQuant = OnnxSessionManager.detectQuantizationType(decodeFile.absolutePath)
-        assertEquals("vieneu_decode_step.onnx must be detected as INT8", OnnxSessionManager.QuantizationType.INT8, decodeQuant)
+        assertEquals("vieneu_decode_step.onnx must be detected as FP32", OnnxSessionManager.QuantizationType.FP32, decodeQuant)
 
         val acousticFile = File(backboneDir, "vieneu_acoustic_cached.onnx")
         assertTrue("vieneu_acoustic_cached.onnx must exist", acousticFile.exists())
         val acousticQuant = OnnxSessionManager.detectQuantizationType(acousticFile.absolutePath)
-        assertEquals("vieneu_acoustic_cached.onnx must be detected as INT8", OnnxSessionManager.QuantizationType.INT8, acousticQuant)
+        assertEquals("vieneu_acoustic_cached.onnx must be detected as FP32", OnnxSessionManager.QuantizationType.FP32, acousticQuant)
     }
 
     /**
@@ -177,8 +177,8 @@ class QuantizationDetectionAndPrebufferTest {
         companionFile.writeBytes(ByteArray(32))
 
         assertEquals(
-            "Directory containing vieneu_backbone_shared.data must default companion models to INT8",
-            OnnxSessionManager.QuantizationType.INT8,
+            "Directory containing vieneu_backbone_shared.data must default companion models to FP32",
+            OnnxSessionManager.QuantizationType.FP32,
             OnnxSessionManager.detectQuantizationType(companionFile.absolutePath)
         )
     }

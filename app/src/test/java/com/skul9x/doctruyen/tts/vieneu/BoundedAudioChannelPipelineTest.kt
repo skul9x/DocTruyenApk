@@ -209,12 +209,12 @@ class BoundedAudioChannelPipelineTest {
         val totalStoryChunks = 150
         val maxMemoryBytesObserved = AtomicLong(0L)
         val maxQueueSizeObserved = AtomicInteger(0)
-        val chunksConsumed = AtomicInteger(0)
+        val totalSamplesConsumed = AtomicLong(0L)
 
         // Mock fast non-blocking audio player that simulates realistic AudioTrack consumption
         val fastPlayer = object : AudioPlayer() {
             override fun write(pcm16: ShortArray, offset: Int, size: Int): Int {
-                chunksConsumed.incrementAndGet()
+                totalSamplesConsumed.addAndGet(size.toLong())
                 return size
             }
         }
@@ -250,7 +250,7 @@ class BoundedAudioChannelPipelineTest {
 
             // Monitor execution until all 150 chunks are played
             withTimeout(15000L) {
-                while (pipeline.currentState !is TTSAudioPipeline.PipelineState.Idle || chunksConsumed.get() < totalStoryChunks) {
+                while (pipeline.currentState !is TTSAudioPipeline.PipelineState.Idle || totalSamplesConsumed.get() < totalStoryChunks.toLong() * 48000L) {
                     val mem = pipeline.queuedMemoryBytes
                     val qSize = pipeline.queuedChunkCount
                     maxMemoryBytesObserved.updateAndGet { prev -> maxOf(prev, mem) }
@@ -275,7 +275,7 @@ class BoundedAudioChannelPipelineTest {
                 maxQueue <= 4
             )
 
-            assertEquals("All 150 chunks must be consumed", totalStoryChunks, chunksConsumed.get())
+            assertEquals("All samples must be consumed", totalStoryChunks.toLong() * 48000L, totalSamplesConsumed.get())
         } finally {
             pipeline.release()
         }

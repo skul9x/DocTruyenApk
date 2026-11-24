@@ -1,5 +1,85 @@
 # Changelog - DocTruyen Android App
 
+## [v1.17] - [2026-11-24] Audit Remediation: Critical, High & Medium Fixes
+### Phase 04: Foreground Service Callback Leak Elimination, Scalar Npz Parsing Hardening & Test Harmonization (AUD-004 & AUD-006)
+- **Foreground Service Callback Leak Elimination (`ReadingService.kt`, `StoryDetailActivity.kt`)**:
+  - Enhanced `ReadingService.removeStateCallback()` and added `removeCallbacks()` to unconditionally nullify both `stateCallback` and `progressCallback`.
+  - Added deterministic unbinding and callback cleanup in `StoryDetailActivity.onDestroy()`, unregistering listeners and unbinding from service to eliminate Activity context memory leaks.
+- **NumPy Scalar Tensor Stream Parsing Hardening (`NpzReader.kt`)**:
+  - Fixed 0-dimensional scalar NPY array handling where `shape = ()` correctly calculates `totalElements = 1` according to the NumPy NEP 1 specification.
+  - Corrected stream payload reading so 4 bytes of float32 data are read into `floatData[0]` instead of leaving unread bytes in the `ZipInputStream` entry.
+  - Restored `getScalarFloat("xvec_ln_eps")` to return exact float values (> 0f) without returning `null` or corrupting subsequent entry offsets.
+- **Prosody & Text Segmentation Harmonization (`SmartTextSegmenter.kt`, `TTSAudioPipeline.kt`)**:
+  - Preserved natural exclamation (`!`), question (`?`), and ellipsis (`…`) punctuation for short utterances (< 5 words) in `puncNorm()` instead of blindly forcing periods `.`.
+  - Preserved natural story titles without forcefully appending periods in `segmentStory()`.
+  - Enforced caller-supplied `maxChars` in `splitSentenceIntoSubClauses()` using `minOf(75, maxChars)` and permitted dialogue colon combinations when followed by quotes.
+  - Guarded `engine.requestCancel()` in `TTSAudioPipeline.stopInternal()` with `if (synthesisJob?.isActive == true)`, ensuring idle pipeline stops do not abort active background prewarm jobs.
+- **Outdated Test Harmonization**:
+  - Updated `BoundedAudioChannelPipelineTest.testMemoryCapUnderLongStoryPlayback` to verify all samples are consumed (`totalSamplesConsumed == totalStoryChunks * 48000L`).
+  - Updated `VoicePresetsSyncTest` for 25 presets, "Hải Đăng" default and fallback, and updated group expectations.
+  - Harmonized `QuantizationDetectionAndPrebufferTest` and `SmartDialogueSegmentationTest` assertions.
+- **Comprehensive Unit Testing (`ServiceCallbackLifecycleCleanupTest.kt`)**:
+  - Implemented comprehensive file-based unit test suite verifying all core requirements (4/4 passed 100%):
+    1. `testRemoveStateCallbackClearsBothStateAndProgressCallbacks`: Confirms callback nullification on `ReadingService`.
+    2. `testActivityLifecycleDestructionDetachesCallbacksAndPreventsRetention`: Confirms simulated activity lifecycle cleanup detaches listeners and prevents context retention.
+    3. `testScalarNpyParsingWithEmptyShape`: Confirms synthetic 0-D scalar NPY stream parsing with shape `()` correctly yields 1 float element.
+    4. `testProductionHeadsNpzScalarEpsilonReading`: Confirms reading `vieneu_v3_heads.npz` returns non-null positive scalar `xvec_ln_eps`.
+
+### Phase 03: Static JNI Tensor Pooling & Native Memory Churn Optimization (AUD-003)
+- **Static Channel Position Tensor Pooling (`VieNeuOnnxEngine.kt`)**:
+  - Pre-allocated static position tensors for all acoustic frames, completely eliminating 9,600 redundant JNI `OnnxTensor` allocations and deallocations per chunk.
+  - Implemented thread-safe `getOrCreatePosTensor0()` allocating initial step-0 position tensor (`shape [1, 2]`, values `[0L, 1L]`) once across engine lifetime.
+  - Implemented thread-safe `getOrCreateChannelPosTensors()` allocating 17 channel position tensors (`shape [1, 1]`, value `ch`) indexed directly by channel ($ch \in 1..16$), removing per-channel dynamic `OnnxTensor.createTensor()` calls in the 600-frame acoustic generation loop.
+  - Removed `posTensor0.close()` and per-channel `posTensor.close()` from the frame synthesis loop, preventing native pointer invalidation during active engine life.
+- **Defensive Resource Lifecycle & Teardown (`VieNeuOnnxEngine.kt`)**:
+  - Wrapped dynamic per-channel `embTensor` allocations in defensive `try-finally` blocks, ensuring immediate native deallocation even during unexpected engine aborts or cancellation.
+  - Integrated safe cleanup of `cachedChannelPosTensors` and `cachedPosTensor0` inside `performResourceTeardown()`, cleanly closing native C++ `Ort::Value*` pointers and clearing references during engine disposal.
+- **Comprehensive Unit Testing (`StaticTensorPoolingPerformanceTest.kt`)**:
+  - Implemented comprehensive file-based unit test suite verifying all 5 core requirements (5/5 passed 100%):
+    1. `testStaticChannelPositionTensorShapesAndValues`: Confirms pre-allocated tensor shapes, values, and instance caching without re-allocation.
+    2. `testAcousticFrameGenerationExecutesWithPooledTensors`: Confirms audio synthesis succeeds with bit-identical acoustic codes and valid non-NaN PCM samples.
+    3. `testPooledTensorsPersistAcrossMultipleInferences`: Confirms pooled tensors remain open, cached, and identical across multiple consecutive chunk inferences.
+    4. `testDefensiveEmbTensorLifecycleUnderCancellation`: Confirms cooperative cancellation mid-inference does not corrupt native heap and dynamic embeddings are safely cleaned up.
+    5. `testEngineTeardownSafelyClosesAndNullsPooledTensors`: Confirms engine teardown safely closes all pooled tensors and clears references with idempotent behavior.
+
+### Phase 02: Robust Quantization Detection & Defensive Prebuffer Margin Restoration (AUD-002)
+- **Elimination of Invalid Shared Data Heuristic (`OnnxSessionManager.kt`)**:
+  - Removed flawed `sharedData.exists()` heuristic (`vieneu_backbone_shared.data`) that mistakenly classified all FP32 models in the canonical `backbone` directory as INT8.
+  - Established unambiguous quantization classification precedence:
+    1. Explicit filename naming conventions (`*_int8.onnx`, `*.int8.*`, `*_fp16.onnx`, `*_fp32.onnx`).
+    2. Deep byte scan for explicit ONNX metadata key `quantization` (`int8`, `fp16`, `fp32`).
+    3. Parent directory convention: canonical unquantized FP32 directory `backbone` / `backbone_fp32` strictly resolves to `QuantizationType.FP32`; `backbone_int8` strictly resolves to `QuantizationType.INT8`; `backbone_fp16` strictly resolves to `QuantizationType.FP16`.
+    4. Deep operator scan on standalone models outside standard directory conventions for `MatMulInteger`, `DynamicQuantizeLinear`, `QLinearMatMul` returning `INT8`.
+    5. Fallback path tokens and companion prefill resolution defaulting to `QuantizationType.FP32`.
+  - Updated `createFromFiles()` to guarantee that instantiating with `precision = "FP32"` resolves strictly to `QuantizationType.FP32` and `precision = "INT8"` resolves strictly to `QuantizationType.INT8`.
+- **Defensive Prebuffer Margin Restoration (`TTSAudioPipeline.kt`)**:
+  - Restored defensive 7,500ms initial prebuffering requirement in `TTSAudioPipeline` for `QuantizationType.FP32` to prevent audio starvation underruns caused by mobile CPU RTF (~1.8x–2.5x).
+  - Maintained aggressive 2,000ms–2,500ms prebuffer target for `QuantizationType.INT8` models for rapid TTFT (<2.5s).
+  - Ensured `hasQualifiedChunks` in `TTSAudioPipeline.playbackJob` strictly enforces `bufferedDurationMs >= targetDurationMs` (7,500ms) for FP32 rather than prematurely triggering playback at 3,500ms.
+- **Comprehensive Unit Testing (`AccurateQuantizationResolutionTest.kt`)**:
+  - Created comprehensive file-based unit test suite verifying all 4 core requirements (4/4 passed 100%):
+    1. `testFp32DetectionInBackboneDespiteSharedData`: Confirms models in `src/main/assets/vieneu/backbone` are detected as `FP32` despite the presence of `vieneu_backbone_shared.data`.
+    2. `testInt8DetectionViaDirectoryAndOperators`: Confirms models in `backbone_int8` or standalone files with INT8 operators/metadata return `INT8`.
+    3. `testCreateFromFilesPrecisionResolution`: Confirms `createFromFiles` with `precision = "FP32"` yields `FP32` and `precision = "INT8"` yields `INT8`.
+    4. `testAdaptiveTargetDurationMargins`: Confirms `computeAdaptiveTargetDurationMs` outputs >= 7500ms for FP32 and <= 2500ms for INT8 across 2, 4, 6, 8 core configurations.
+
+### Phase 01: Immediate Cooperative Inference Cancellation & Latency Elimination (AUD-001 & AUD-005)
+- **Lock-Guarded Cancellation Reset (`VieNeuOnnxEngine.kt`)**:
+  - Implemented `resetCancel()` method synchronized on `lock.withLock { cancelRequested = false }`.
+  - Ensures thread safety when resetting cancellation state: awaits in-flight aborting inference pass to release engine lock before clearing flag, preventing race conditions.
+  - Reordered inference entry guards in `inferWithTiming()` so `isClosed` check precedes `cancelRequested`, correctly throwing `IllegalStateException` on closed engine as required by lifecycle contracts (resolving AUD-005).
+- **Immediate Cancellation on Stop & Seek (`TTSAudioPipeline.kt`)**:
+  - Removed `withContext(NonCancellable)` from chunk synthesis loop in `synthesisJob`, permitting in-flight acoustic inference to receive cancellation signals immediately.
+  - Added `engine.requestCancel()` to `stopInternal()`, aborting in-flight neural inference cooperatively within < 50ms upon stop, seek, or story transitions (resolving AUD-001).
+  - Added `engine.resetCancel()` to `startPipeline()`, clearing the cancellation flag cleanly so subsequent reading sessions and chunk seeks synthesize without delay.
+- **Comprehensive Unit Testing (`ImmediateInferenceCancellationTest.kt`)**:
+  - Created comprehensive file-based unit test suite verifying all 5 core requirements (5/5 passed 100%):
+    1. `testStopInternalWhileInferringAbortsWithin50ms`: Confirms in-flight inference aborts in < 50ms with `InterruptedException` when `stopInternal()` is invoked.
+    2. `testPipelineAbortAndResumeSynthesizesSubsequentChunks`: Confirms starting a new pipeline session after an abort successfully resets cancellation flag and synthesizes subsequent chunks without error.
+    3. `testSeekToChunkCooperativelyCancelsAndResumesTarget`: Confirms calling `seekToChunk()` cooperatively cancels in-flight synthesis and resumes immediately at the target chunk.
+    4. `testClosedEngineGuardPriorityOverCancellation`: Confirms `inferWithTiming()` on a closed engine throws `IllegalStateException` containing "closed" rather than `InterruptedException`.
+    5. `testResetCancelWaitsForActiveInferenceLockRelease`: Confirms `resetCancel()` synchronizes on `lock.withLock` and waits for active inference to release the lock.
+
 ## [v1.16] - [2026-11-22] TTS Latency Optimization, Prewarm Preservation & ANR Prevention
 ### Phase 04: Robust INT8 Model Quantization Detection & Adaptive Prebuffer Optimization (P7)
 - **Deep Byte Pattern & Quantization Operator Detection (`OnnxSessionManager.kt`)**:

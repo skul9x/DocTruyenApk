@@ -88,7 +88,7 @@ class PunctuationFirstPipelineIntegrationTest {
 
         // 1. Title chunk must have PauseType.TITLE_BREAK with 1000ms duration
         val titleChunk = storyChunks[0]
-        assertEquals("$SAMPLE_STORY_TITLE.", titleChunk.text)
+        assertEquals(SAMPLE_STORY_TITLE, titleChunk.text)
         assertEquals(PauseType.TITLE_BREAK, titleChunk.pauseType)
         assertEquals(1000, titleChunk.pauseDurationMs)
         assertTrue(titleChunk.isParagraphEnd)

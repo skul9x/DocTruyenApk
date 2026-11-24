@@ -551,10 +551,17 @@ class StoryDetailActivity : AppCompatActivity() {
     }
     
     override fun onDestroy() {
+        if (isBound) {
+            try {
+                readingService?.removeStateCallback()
+                unbindService(serviceConnection)
+            } catch (_: Throwable) {}
+            isBound = false
+        }
         super.onDestroy()
         // Promptly cancel background pre-warming job if active and service is not currently playing
         val service = readingService
-        if (service != null && isBound && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
+        if (service != null && service.currentState != com.skul9x.doctruyen.tts.ITTSManager.TTSState.PLAYING) {
             DebugLogger.log(TAG, "🧹 onDestroy: Cancelling active pre-warm", LogType.INFO)
             service.cancelPrewarm()
         }

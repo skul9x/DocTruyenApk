@@ -424,9 +424,13 @@ class ReadingService : Service() {
         progressCallback = callback
     }
     
-    fun removeStateCallback() {
+    fun removeCallbacks() {
         stateCallback = null
         progressCallback = null
+    }
+
+    fun removeStateCallback() {
+        removeCallbacks()
     }
 
     fun prepareStory(storyId: Int, title: String, content: String, voice: String? = null) {

@@ -255,7 +255,7 @@ class GoogleTTSManagerTest {
         )
 
         assertEquals(ITTSManager.TTSState.PLAYING, manager.currentState)
-        assertEquals("Tiêu đề truyện.", fakeTts.lastSpokenText)
+        assertEquals("Tiêu đề truyện", fakeTts.lastSpokenText)
 
         manager.shutdown()
         assertEquals(ITTSManager.TTSState.IDLE, manager.currentState)

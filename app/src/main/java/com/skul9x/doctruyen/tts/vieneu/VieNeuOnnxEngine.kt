@@ -88,6 +88,12 @@ class VieNeuOnnxEngine(
         cancelRequested = true
     }
 
+    fun resetCancel() {
+        lock.withLock {
+            cancelRequested = false
+        }
+    }
+
     private val teardownScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     @Volatile
     internal var teardownJob: kotlinx.coroutines.Job? = null
@@ -172,6 +178,8 @@ class VieNeuOnnxEngine(
 
     private var cachedEmptyPastK: OnnxTensor? = null
     private var cachedEmptyPastV: OnnxTensor? = null
+    private var cachedChannelPosTensors: Array<OnnxTensor>? = null
+    private var cachedPosTensor0: OnnxTensor? = null
 
     @Synchronized
     fun getOrCreateEmptyPastK(): OnnxTensor {
@@ -202,6 +210,30 @@ class VieNeuOnnxEngine(
         cachedEmptyPastV = newTensor
         return newTensor
     }
+
+    @Synchronized
+    fun getOrCreateChannelPosTensors(): Array<OnnxTensor> {
+        val existing = cachedChannelPosTensors
+        if (existing != null) return existing
+        val nVq = config.nVq // 16
+        val tensors = Array(nVq + 1) { ch ->
+            OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(ch.toLong())), longArrayOf(1, 1))
+        }
+        cachedChannelPosTensors = tensors
+        return tensors
+    }
+
+    @Synchronized
+    fun getOrCreatePosTensor0(): OnnxTensor {
+        val existing = cachedPosTensor0
+        if (existing != null) return existing
+        val tensor = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(0L, 1L)), longArrayOf(1, 2))
+        cachedPosTensor0 = tensor
+        return tensor
+    }
+
+    internal fun getCachedChannelPosTensorsForTesting(): Array<OnnxTensor>? = cachedChannelPosTensors
+    internal fun getCachedPosTensor0ForTesting(): OnnxTensor? = cachedPosTensor0
 
     data class InferenceTiming(
         val backboneDurationMs: Long,
@@ -451,11 +483,11 @@ class VieNeuOnnxEngine(
         maxNewFrames: Int = 600,
         repetitionPenalty: Float = 1.2f
     ): EngineInferenceResult = lock.withLock {
-        if (cancelRequested) {
-            throw InterruptedException("Synthesis cancelled")
-        }
         if (isClosed) {
             throw IllegalStateException("VieNeuOnnxEngine is closed")
+        }
+        if (cancelRequested) {
+            throw InterruptedException("Synthesis cancelled")
         }
 
         val syllableCount = BabbleGuard.countSyllables(phonemes)
@@ -580,7 +612,7 @@ class VieNeuOnnxEngine(
 
         val feed0 = HashMap<String, OnnxTensor>()
         val tokTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(tok), longArrayOf(1, 2, H.toLong()))
-        val posTensor0 = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(0L, 1L)), longArrayOf(1, 2))
+        val posTensor0 = getOrCreatePosTensor0()
         val emptyPastK = getOrCreateEmptyPastK()
         val emptyPastV = getOrCreateEmptyPastV()
 
@@ -598,7 +630,6 @@ class VieNeuOnnxEngine(
         try {
             val out0 = sessionManager.acousticSession.run(feed0)
             tokTensor.close()
-            posTensor0.close()
             initialTensorsClosed = true
 
             val hiddenTensor0 = out0.get(0) as OnnxTensor
@@ -616,6 +647,7 @@ class VieNeuOnnxEngine(
             prevOut = out0
 
             // Subsequent channels 1..15
+            val channelPosTensors = getOrCreateChannelPosTensors()
             val feed = HashMap<String, OnnxTensor>(8)
             for (ch in 1 until config.nVq) {
                 if (cancelRequested || Thread.currentThread().isInterrupted) {
@@ -630,26 +662,26 @@ class VieNeuOnnxEngine(
                     FloatBuffer.wrap(flatEmb, prevCode * H, H),
                     longArrayOf(1, 1, H.toLong())
                 )
-                val posTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf((ch + 1).toLong())), longArrayOf(1, 1))
+                try {
+                    feed.clear()
+                    feed["token_emb"] = embTensor
+                    feed["position_ids"] = channelPosTensors[ch + 1]
+                    feed["past_k_0"] = prevOut!!.get(1) as OnnxTensor
+                    feed["past_v_0"] = prevOut!!.get(2) as OnnxTensor
 
-                feed.clear()
-                feed["token_emb"] = embTensor
-                feed["position_ids"] = posTensor
-                feed["past_k_0"] = prevOut!!.get(1) as OnnxTensor
-                feed["past_v_0"] = prevOut!!.get(2) as OnnxTensor
+                    val out = sessionManager.acousticSession.run(feed)
 
-                val out = sessionManager.acousticSession.run(feed)
-                embTensor.close()
-                posTensor.close()
+                    val hiddenTensorCh = out.get(0) as OnnxTensor
+                    val hiddenFbCh = hiddenTensorCh.floatBuffer
+                    hiddenFbCh.position(0)
+                    hiddenFbCh.get(vec)
 
-                val hiddenTensorCh = out.get(0) as OnnxTensor
-                val hiddenFbCh = hiddenTensorCh.floatBuffer
-                hiddenFbCh.position(0)
-                hiddenFbCh.get(vec)
-
-                // Handover: close old previous result and retain current result natively
-                prevOut!!.close()
-                prevOut = out
+                    // Handover: close old previous result and retain current result natively
+                    prevOut!!.close()
+                    prevOut = out
+                } finally {
+                    embTensor.close()
+                }
 
                 codes[ch] = sampleCode(ch, vec, temperature, topK, topP, repetitionPenalty, hist)
                 hist?.add(ch, codes[ch])
@@ -658,7 +690,6 @@ class VieNeuOnnxEngine(
             if (!initialTensorsClosed) {
                 try {
                     tokTensor.close()
-                    posTensor0.close()
                 } catch (_: Throwable) {}
             }
             prevOut?.close()
@@ -1086,6 +1117,14 @@ class VieNeuOnnxEngine(
             cachedEmptyPastV?.close()
             cachedEmptyPastV = null
         } catch (_: Exception) {}
+        cachedChannelPosTensors?.forEach { tensor ->
+            try { tensor.close() } catch (_: Throwable) {}
+        }
+        cachedChannelPosTensors = null
+        try {
+            cachedPosTensor0?.close()
+        } catch (_: Throwable) {}
+        cachedPosTensor0 = null
         try {
             sessionManager.close()
         } catch (_: Exception) {}
