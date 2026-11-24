@@ -1,5 +1,47 @@
 # Changelog - DocTruyen Android App
 
+## [v1.18] - [2026-11-24] GitHub Release FP32 & 64-Bit ARM APK Optimization
+### Phase 02: GitHub Actions CI/CD Workflow Streamlining (FP32 Release)
+- **Elimination of Runtime INT8 Quantization Pass (`.github/workflows/android.yml`)**:
+  - Removed `Set up Python 3.10` (`actions/setup-python@v5`), pip dependency installation (`tools/requirements.txt`), and `tools/quantize_models.py` execution.
+  - Eliminated `Verify Quantized Assets` step and all runtime generation of `backbone_int8` models.
+  - Reduced GitHub Actions CI pipeline execution time by ~3-5 minutes, saving runner compute and network bandwidth.
+- **Single Deterministic Release APK Artifact Resolution (`.github/workflows/android.yml`)**:
+  - Replaced ambiguous wildcard search (`find "$RELEASE_DIR" -name "*.apk"`) with direct resolution of `${RELEASE_DIR}/app-release.apk`.
+  - Added fail-fast validation with GitHub Actions error annotation (`::error::Release APK not found at $SOURCE_APK`).
+  - Prepares and renames single unified ~250-254 MB `arm64-v8a` FP32 release APK to `${APP_NAME}-${VERSION}.apk`.
+- **Preservation of Signing, Smart Versioning & Release Idempotency (`.github/workflows/android.yml`)**:
+  - Preserved base64 keystore decoding (`KEYSTORE_BASE64`) to `app/skul9x.jks` and `skul9x.jks`.
+  - Maintained signing environment variables (`STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) for `./gradlew :app:assembleRelease`.
+  - Retained smart versioning and tag incrementing logic (`Determine Next Release Version`).
+  - Retained GitHub CLI release creation (`gh release create --generate-notes`) and idempotent clobber upload (`gh release upload --clobber`).
+- **Comprehensive Unit Testing (`ReleaseWorkflowPipelineTest.kt`)**:
+  - Created comprehensive test suite verifying all 6 core pipeline requirements (6/6 passed 100%):
+    1. `testWorkflowStructureAndTriggers`: Validates workflow triggers, permissions, and Temurin JDK 17 setup.
+    2. `testPythonSetupAndQuantizationStepsCompletelyEliminated`: Verifies complete removal of Python setup, pip dependencies, quantization script, and INT8 directory references.
+    3. `testKeystoreDecodingAndSigningIntegrityIntact`: Verifies keystore decoding, signing credentials, and `assembleRelease` task invocation.
+    4. `testSmartVersioningAndSlugificationRetained`: Verifies slugification, git tag matching, and version output exports.
+    5. `testApkPreparationTargetsSingleUnifiedReleaseApkDirectly`: Verifies direct resolution of `app-release.apk`, fail-fast verification, and elimination of ambiguous wildcard find.
+    6. `testGitHubReleaseCreationAndUploadPreserved`: Verifies GitHub CLI release creation, release notes generation, and idempotent clobber asset uploading.
+
+### Phase 01: Gradle Architecture & Packaging Alignment (arm64-v8a only)
+- **NDK Packaging Filter Alignment (`app/build.gradle.kts`)**:
+  - Restricted `ndk.abiFilters` exclusively to `arm64-v8a`, eliminating 32-bit (`armeabi-v7a`) and x86 (`x86_64`, `x86`) native binaries from the output artifact.
+  - Reduced native binary packaging footprint by ~80-90 MB.
+- **Single Unified APK Configuration (`app/build.gradle.kts`)**:
+  - Disabled multi-APK generation by configuring `splits.abi.isEnable = false` and `isUniversalApk = false`.
+  - Configured `:app:assembleDebug` and `:app:assembleRelease` to produce single primary APK artifacts (`app-debug.apk` and `app-release.apk`) containing only `lib/arm64-v8a/`.
+  - Retained critical zero-copy mmap uncompressed asset extensions (`noCompress += listOf("onnx", "data", "npz", "json")`).
+- **Build Validation Harmonization (`ReleaseBuildValidationTest.kt`)**:
+  - Harmonized release build verification to enforce `arm64-v8a` as the unified target and prohibit legacy multi-ABI splits.
+- **Comprehensive Unit Testing (`GradleArm64PackagingConfigurationTest.kt`)**:
+  - Created comprehensive test suite verifying all 5 core requirements (5/5 passed 100%):
+    1. `testNdkAbiFiltersSolelyTargetArm64V8a`: Verifies `arm64-v8a` is the sole targeted NDK ABI filter.
+    2. `testLegacyAndRedundantAbisExcludedFromBuildTargets`: Verifies `armeabi-v7a`, `x86_64`, and `x86` are completely excluded from build targets.
+    3. `testAbiSplitsConfiguredForSingleUnifiedApkOutput`: Verifies `splits.abi.isEnable = false` and `isUniversalApk = false`.
+    4. `testCriticalAssetNoCompressExclusionsPreserved`: Verifies uncompressed asset settings for `.onnx`, `.data`, `.npz`, and `.json`.
+    5. `testPackagingAndBuildTypeIntegrity`: Verifies ProGuard/R8 minification, packaging rules, and release signing configurations.
+
 ## [v1.17] - [2026-11-24] Audit Remediation: Critical, High & Medium Fixes
 ### Phase 04: Foreground Service Callback Leak Elimination, Scalar Npz Parsing Hardening & Test Harmonization (AUD-004 & AUD-006)
 - **Foreground Service Callback Leak Elimination (`ReadingService.kt`, `StoryDetailActivity.kt`)**:

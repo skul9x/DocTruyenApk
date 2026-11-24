@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-24T20:07:00+07:00",
+  "updated_at": "2026-11-24T23:21:00+07:00",
   "last_audit": {
     "timestamp": "2026-11-24T17:41:00+07:00",
     "commit": "3bb8a027aed254d2c0a4edf5cb7d7e5c2a557d43",
@@ -21,29 +21,46 @@
     "scope": "PERFORMANCE"
   },
   "working_on": {
-    "feature": "Audit Remediation - Phase 04: Foreground Service Callback Leak Elimination & Scalar Npz Parsing Hardening (AUD-004 & AUD-006)",
-    "task": "Completed Phase 04: Enhanced ReadingService.removeStateCallback() and removeCallbacks() to unconditionally nullify both state and progress callbacks, added deterministic cleanup and unbind in StoryDetailActivity.onDestroy(), fixed 0-D scalar NPY parsing in NpzReader for empty shape (), harmonized prosody and punctuation normalization in SmartTextSegmenter, guarded engine cancellation during idle pipeline stops in TTSAudioPipeline, and restored 100% test pass rate across outdated unit tests. Verified via ServiceCallbackLifecycleCleanupTest (4/4 passed).",
+    "feature": "GitHub Release FP32 & 64-Bit ARM APK Optimization - Phase 02: GitHub Actions CI/CD Workflow Streamlining (FP32 Release)",
+    "task": "Completed Phase 02: Streamlined .github/workflows/android.yml to eliminate runtime INT8 model quantization pass and dependencies, resolved single unified arm64-v8a FP32 release APK directly, and verified release upload idempotency. Verified via ReleaseWorkflowPipelineTest.kt (6/6 passed). All phases in optimization plan completed.",
     "status": "completed",
     "files": [
-      "app/src/main/java/com/skul9x/doctruyen/service/ReadingService.kt",
-      "app/src/main/java/com/skul9x/doctruyen/StoryDetailActivity.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/NpzReader.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/SmartTextSegmenter.kt",
-      "app/src/main/java/com/skul9x/doctruyen/tts/vieneu/TTSAudioPipeline.kt",
-      "app/src/test/java/com/skul9x/doctruyen/service/ServiceCallbackLifecycleCleanupTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/BoundedAudioChannelPipelineTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/VoicePresetsSyncTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/QuantizationDetectionAndPrebufferTest.kt",
-      "app/src/test/java/com/skul9x/doctruyen/tts/vieneu/SmartDialogueSegmentationTest.kt",
-      "plans/261124-1845-audit-critical-high-medium-fix/phase-04-service-callback-memory-leak-and-parser-hardening.md",
-      "plans/261124-1845-audit-critical-high-medium-fix/plan.md",
+      ".github/workflows/android.yml",
+      "app/src/test/java/com/skul9x/doctruyen/ci/ReleaseWorkflowPipelineTest.kt",
+      "plans/261124-2315-github-release-arm64-fp32-optimization/phase-02-ci-workflow-fp32-release.md",
+      "plans/261124-2315-github-release-arm64-fp32-optimization/plan.md",
       "CHANGELOG.md"
     ],
     "blockers": [],
-    "notes": "All 4 audit remediation phases (AUD-001 through AUD-006) successfully implemented and verified."
+    "notes": "All phases in plan 261124-2315-github-release-arm64-fp32-optimization completed. GitHub Release APK footprint reduced to ~250-254 MB FP32 arm64-v8a."
   },
   "pending_tasks": [],
   "recent_changes": [
+    {
+      "timestamp": "2026-11-24T23:21:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 02: GitHub Actions CI/CD Workflow Streamlining (FP32 Release). Removed Python setup, pip dependencies, and tools/quantize_models.py runtime quantization from .github/workflows/android.yml; eliminated backbone_int8 verification; resolved single unified release APK app-release.apk directly with fail-fast check; preserved keystore signing, smart versioning, and gh release clobber upload. Verified via ReleaseWorkflowPipelineTest.kt (6/6 passed).",
+      "files": [
+        ".github/workflows/android.yml",
+        "app/src/test/java/com/skul9x/doctruyen/ci/ReleaseWorkflowPipelineTest.kt",
+        "plans/261124-2315-github-release-arm64-fp32-optimization/phase-02-ci-workflow-fp32-release.md",
+        "plans/261124-2315-github-release-arm64-fp32-optimization/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
+    {
+      "timestamp": "2026-11-24T23:16:00+07:00",
+      "type": "feature",
+      "description": "Implemented Phase 01: Gradle Architecture & Packaging Alignment (arm64-v8a only). Restricted ndk.abiFilters to arm64-v8a, disabled ABI splits (isEnable = false, isUniversalApk = false), preserved uncompressed asset exclusions for onnx, data, npz, json, and harmonized tests. Verified via GradleArm64PackagingConfigurationTest (5/5 passed).",
+      "files": [
+        "app/build.gradle.kts",
+        "app/src/test/java/com/skul9x/doctruyen/packaging/GradleArm64PackagingConfigurationTest.kt",
+        "app/src/test/java/com/skul9x/doctruyen/network/ReleaseBuildValidationTest.kt",
+        "plans/261124-2315-github-release-arm64-fp32-optimization/phase-01-gradle-arm64-packaging.md",
+        "plans/261124-2315-github-release-arm64-fp32-optimization/plan.md",
+        "CHANGELOG.md"
+      ]
+    },
     {
       "timestamp": "2026-11-24T20:06:00+07:00",
       "type": "feature",
@@ -136,6 +153,14 @@
     }
   ],
   "decisions_made": [
+    {
+      "decision": "Eliminate runtime INT8 quantization pass and directly publish single unified FP32 arm64-v8a release APK",
+      "reason": "Avoid ~495.7MB bloated APK caused by dual FP32 and INT8 asset bundling, cut 3-5 min CI overhead, and align release artifact footprint with local ~254MB build."
+    },
+    {
+      "decision": "Restrict NDK packaging filters exclusively to arm64-v8a and disable ABI splits (isEnable = false)",
+      "reason": "Targeting only 64-bit ARM removes 32-bit (armeabi-v7a) and x86_64 native binaries, eliminating ~80-90 MB of APK overhead. Disabling ABI splits produces a single unified APK directly suitable for GitHub Releases without universal APK bloat or multi-file fragmentation."
+    },
     {
       "decision": "Unconditional callback nullification in ReadingService and unbinding in StoryDetailActivity.onDestroy()",
       "reason": "Guarantees that destroyed activities and their view hierarchies are immediately unreferenced by long-running background services, completely eliminating context leaks without relying on fragile WeakReferences."

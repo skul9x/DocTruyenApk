@@ -1,91 +1,82 @@
-# 💡 TECHNICAL BRIEF: KHẮC PHỤC TRIỆT ĐỂ LỖI CRITICAL, HIGH & MEDIUM (TTS PERFORMANCE & STABILITY)
+# 💡 BRIEF: TỐI ƯU HÓA BẢN RELEASE GITHUB (CHỈ CHỨA FP32 & ARM64-V8A)
 
-**Ngày lập:** 2026-11-24  
-**Chủ đề:** Tối ưu hóa hiệu năng suy luận ONNX, triệt tiêu độ trễ chuyển truyện (7.5s -> <50ms), sửa lỗi lượng tử hóa và dọn rò rỉ bộ nhớ.  
-**Tham chiếu bệnh án:** `docs/reports/audit_20261124_1741.md`  
+**Ngày tạo:** 2026-11-24  
+**Chủ đề:** Tinh gọn bản phát hành GitHub Actions Release — Đồng bộ dung lượng nhẹ như bản Debug (~254 MB), loại bỏ mô hình INT8 dư thừa và loại bỏ các kiến trúc 32-bit / x86.  
 
 ---
 
 ## 1. VẤN ĐỀ CẦN GIẢI QUYẾT & MỤC TIÊU CỐT LÕI
 
-| Mã lỗi | Mức độ | Vấn đề lâm sàng | Mục tiêu sau khi sửa |
-| :--- | :--- | :--- | :--- |
-| **AUD-001** | 🔴 **Critical** | Bấm Stop / Đổi truyện / Seek nhưng CPU vẫn cày AI ngầm 3s–7.5s, làm khóa cứng lệnh phát truyện mới | Ngắt nhịp suy luận tức thì trong **< 20ms**, giải phóng lock ngay lập tức, triệt tiêu hoàn toàn độ trễ khi đổi truyện. |
-| **AUD-002** | 🟠 **High** | Nhận diện sai model FP32 thành INT8 do file `vieneu_backbone_shared.data`, làm tụt buffer từ 7.5s xuống 2s gây vấp đĩa | Nhận diện chính xác 100% FP32 vs INT8; khôi phục prebuffer 7,500ms cho FP32 để phát mượt không khựng. |
-| **AUD-003** | 🟡 **Medium** | Cấp phát 9,000 JNI `OnnxTensor` vô nghĩa trong vòng lặp 15-channel/frame của mỗi câu văn | Tái sử dụng mảng tensor vị trí tĩnh (15 tensors), giảm 9,000 lần JNI allocation/chunk, hạ CPU RTF. |
-| **AUD-004** | 🟡 **Medium** | `ReadingService` giữ strong reference callback làm rò rỉ `StoryDetailActivity` và View hierarchy | Tự động dọn sạch callback trong `onDestroy()`, kết hợp `WeakReference` phòng thủ chống leak RAM. |
-| **AUD-005/006** | 🔵 **Low** | Thứ tự guard `isClosed` và lỗi đọc scalar 0-D trong `NpzReader.kt` làm rớt unit tests | Đảo thứ tự guard và fix parser scalar để khôi phục 100% test pass. |
+| Vấn đề hiện tại | Nguyên nhân kỹ thuật | Mục tiêu mong muốn |
+| :--- | :--- | :--- |
+| **File APK Release quá nặng (~495.7 MB)** | Pipeline GitHub Actions chạy `tools/quantize_models.py` sinh thêm thư mục `backbone_int8` (~150 MB) và đóng gói **cả 2 bộ model (FP32 + INT8)** cùng lúc vào APK. | **Loại bỏ mô hình INT8**, chỉ giữ lại duy nhất mô hình **FP32** nguyên bản chất lượng cao. |
+| **Đóng gói đa kiến trúc (Universal APK)** | Build release đóng gói toàn bộ thư viện `.so` cho cả 3 kiến trúc: `arm64-v8a`, `armeabi-v7a`, `x86_64` (mỗi kiến trúc tốn ~40-50MB thư viện ONNX + SeaG2P). | **Chỉ nhúng thư viện 64-bit (`arm64-v8a`)**, giảm dung lượng, phù hợp với 99% smartphone Android hiện đại. |
+| **Dung lượng mục tiêu** | Bản Release cũ: ~496 MB | **Hạ xuống ~250 MB - 254 MB** (tương đương bản `app-arm64-v8a-debug.apk`). |
+| **Thời gian chạy GitHub Actions** | Tốn thời gian setup Python, cài dependencies và chạy script quantize ONNX (~3-5 phút). | Rút ngắn quy trình CI/CD đi 3-5 phút mỗi lần push code. |
 
 ---
 
-## 2. NGHIÊN CỨU BEST PRACTICES TỪ THẾ GIỚI (ONLINE RESEARCH FINDINGS)
+## 2. PHÂN TÍCH KỸ THUẬT & KHẢ THI (TECHNICAL FEASIBILITY)
 
-### A. ONNX Runtime Android: Cơ chế ngắt suy luận an toàn (Safe Cancellation)
-- **Cảnh báo từ ONNX Runtime Team:** Tuyệt đối không được gọi `session.close()` hoặc ngắt luồng thô bạo bằng `Thread.interrupt()` khi `session.run()` đang thực thi trong C++ native layer — hành vi này sẽ gây lỗi bộ nhớ **`SIGSEGV (Segmentation Fault)`** làm crash app ngay lập tức.
-- **Best Practice chuẩn mực:**
-  1. Sử dụng cờ ngắt hợp tác (Cooperative Cancellation Flag) tại các mốc checkpoint giữa các khung hình (frames).
-  2. Bỏ `withContext(NonCancellable)` khỏi vòng lặp phát nhạc thông thường (chỉ giữ cho tác vụ prewarm chunk 0 nếu cần).
-  3. Bổ sung hàm `resetCancel()` trong Engine để sẵn sàng nhận lệnh phát mới ngay khi chunk cũ bị hủy.
+### A. Kiểm tra tính tương thích của App khi bỏ INT8:
+- **Cơ chế tải model của `OnnxSessionManager.kt`:**
+  App đã được lập trình sẵn cơ chế: Kiểm tra thư mục `backbone_int8`, nếu không tìm thấy sẽ tự động fallback về thư mục chuẩn `backbone` (FP32).
+- **Trải nghiệm âm thanh (TTS Audio Pipeline):**
+  Khi chạy FP32 trên chip 64-bit, hệ thống tự động kích hoạt prebuffer chuẩn 7,500ms, đảm bảo chất lượng giọng đọc tự nhiên nhất, không bị suy giảm chất lượng âm thanh như INT8.
+- **Kết luận:** Hoàn toàn an toàn, không gây crash hay lỗi runtime.
 
-### B. ONNX Runtime Java API: Tối ưu bộ nhớ JNI & Tensor Pooling
-- **Vấn đề hiệu năng JNI:** Hàm `OnnxTensor.createTensor()` mỗi lần gọi đều tạo một native peer structure và sao chép dữ liệu qua ranh giới JNI.
-- **Best Practice chuẩn mực:**
-  - Với các tensor input có kích thước và giá trị bất biến (như `position_ids` của 15 channels: $ch \in [1..15]$ với giá trị tĩnh $ch + 1$), tạo sẵn 1 mảng tĩnh `Array(16) { ... }` khi khởi tạo Engine và tái sử dụng cho toàn bộ 600 frames.
-
-### C. Android Foreground Service & Activity Callbacks
-- **Best Practice từ Android Architecture Guides:**
-  - Không bao giờ để Service dài hạn (Foreground Service) giữ Strong Reference tới lambda closure của Activity ngắn hạn.
-  - Phải thực hiện **Deterministic Cleanup**: Đảm bảo `onDestroy()` của Activity gọi lệnh hủy đăng ký callback (`removeStateCallback()`), kết hợp dọn dẹp `progressCallback = null`.
+### B. Kiểm tra tính tương thích khi chỉ hỗ trợ ARM64 (`arm64-v8a`):
+- Toàn bộ thiết bị Android chạy từ Android 8.0 trở lên và có cấu hình chạy được mô hình AI giọng nói VieNeu ONNX thực tế đều là chip 64-bit (ARMv8 trở lên).
+- Việc bỏ 32-bit (`armeabi-v7a`) và `x86_64` (chỉ dùng cho giả lập PC) giúp APK nhẹ hơn ~80MB - 90MB native binaries.
 
 ---
 
-## 3. PHÂN TÍCH CÁC PHƯƠNG ÁN ĐIỀU TRỊ (BRAINSTORMING OPTIONS)
+## 3. CÁC PHƯƠNG ÁN THỰC HIỆN (BRAINSTORMING OPTIONS)
 
-### Ca bệnh 1: AUD-001 (Ngắt suy luận tức thì khi Stop / Đổi truyện)
-
-* **Phương án A (Tối giản):** Chỉ bỏ `withContext(NonCancellable)` trong `TTSAudioPipeline`.
-  - *Ưu điểm:* Dễ làm.
-  - *Nhược điểm:* Khi coroutine bị cancel, lệnh `engine.inferWithTiming` vẫn đang chạy trong thread background cho đến hết frame hiện tại nếu không có cờ `cancelRequested` chủ động.
-* **Phương án B (Toàn diện - ⭐ KHUYÊN DÙNG):**
-  1. Bỏ `withContext(NonCancellable)` trong vòng lặp phát của `TTSAudioPipeline`.
-  2. Thêm `fun resetCancel()` vào `VieNeuOnnxEngine`.
-  3. Trong `TTSAudioPipeline.stopInternal()`, gọi ngay `engine.requestCancel()` để vòng lặp 600 frames ném `InterruptedException` và thoát ngay trong < 10ms.
-  4. Trong `startPipeline()`, gọi `engine.resetCancel()` để chuẩn bị cho truyện mới.
-  - *Đánh giá:* Triệt tiêu 100% độ trễ 7.5s, chuyển bài tức thì (<20ms), không lo crash.
-
----
-
-### Ca bệnh 2: AUD-002 (Nhận diện lượng tử hóa chính xác FP32 vs INT8)
-
-* **Phương án A:** Dựa vào đường dẫn thư mục: `parent.name.contains("backbone_int8")`.
-* **Phương án B (Kết hợp - ⭐ KHUYÊN DÙNG):**
-  - Xóa bỏ hoàn toàn điều kiện sai lầm `if (sharedData.exists()) return INT8`.
-  - Kiểm tra `parent.name.contains("backbone_int8")` HOẶC quét bytecode tìm toán tử (`MatMulInteger`, `DynamicQuantizeLinear`, `QLinearMatMul`).
-  - Nếu ở trong thư mục `backbone` và không có toán tử int8 $\rightarrow$ trả về `QuantizationType.FP32`.
-  - *Đánh giá:* Sửa dứt điểm lỗi vấp âm thanh, đưa pre-buffer FP32 về đúng 7,500ms, giúp 4 unit tests pass ngay lập tức.
+### 🔹 Phương án 1: Cấu hình tinh gọn triệt để từ Gradle + GitHub Actions (Khuyên dùng ⭐)
+- **Trong `app/build.gradle.kts`:**
+  - Đặt `ndk { abiFilters += listOf("arm64-v8a") }` (chỉ build duy nhất arm64-v8a).
+  - Tắt `splits.abi` hoặc đặt mặc định cho arm64-v8a, giúp cả bản Debug lẫn Release xuất ra 1 file APK chuẩn, không phân mảnh.
+- **Trong `.github/workflows/android.yml`:**
+  - Xóa bỏ hoàn toàn các bước:
+    - `Set up Python 3.10`
+    - `Install Quantization Dependencies`
+    - `Quantize VieNeu ONNX Models to Dynamic INT8`
+    - `Verify Quantized Assets`
+  - Giữ lại các bước chuẩn: Decode keystore, assembleRelease, đổi tên và upload lên GitHub Release.
+- **Ưu điểm:**
+  - Sạch sẽ, nhất quán giữa môi trường Local và CI/CD.
+  - File xuất ra chuẩn `doctruyenapk-<version>.apk` dung lượng chỉ **~254 MB**.
+  - Tối ưu tốc độ build CI/CD nhanh nhất (tiết kiệm tài nguyên GitHub Actions).
 
 ---
 
-### Ca bệnh 3: AUD-003 (Tối ưu 9,000 JNI allocations/chunk)
-
-* **Phương án A:** Giữ nguyên tạo mới từng frame.
-* **Phương án B (Tạo Pool Tensor tĩnh - ⭐ KHUYÊN DÙNG):**
-  - Trong `VieNeuOnnxEngine`, khai báo `cachedPosTensors = Array(16) { ch -> OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(ch.toLong())), longArrayOf(1, 1)) }`.
-  - Trong vòng lặp channel $ch$: truyền `cachedPosTensors[ch + 1]` mà không cần `createTensor` và `close()`.
-  - Giải phóng 15 tensors này trong `performResourceTeardown()`.
-  - *Đánh giá:* Tiết kiệm 9,000 lần JNI alloc/dealloc mỗi câu, giảm tải bộ nhớ native và hạ nhiệt độ máy.
-
----
-
-### Ca bệnh 4: AUD-004 (Chống rò rỉ Activity RAM trong Service)
-
-* **Giải pháp chuẩn:**
-  - Bổ sung `override fun onDestroy()` trong `StoryDetailActivity` gọi dọn dẹp `readingService?.removeStateCallback()`.
-  - Trong `ReadingService`, sửa `removeStateCallback()` để xóa cả `stateCallback = null` và `progressCallback = null`.
+### 🔹 Phương án 2: Chỉ sửa GitHub Actions Workflow (Giữ nguyên cấu hình Gradle)
+- **Trong `app/build.gradle.kts`:** Giữ nguyên cấu hình `splits.abi` hiện tại (build cả arm64, armv7, x86_64, universal).
+- **Trong `.github/workflows/android.yml`:**
+  - Xóa các bước quantize INT8.
+  - Sửa bước `Prepare and Rename APK`: Chọn file `app-arm64-v8a-release.apk` để đổi tên và phát hành (bỏ qua bản universal và 32-bit).
+- **Ưu điểm:** Vẫn cho phép local build ra file cho giả lập nếu cần.
+- **Nhược điểm:** CI vẫn phải build và ký cả 4 file APK rồi mới chọn 1 file, tốn thêm thời gian build không cần thiết.
 
 ---
 
-## 4. BƯỚC TIẾP THEO
+## 4. TỔNG KẾT PHẠM VI CÔNG VIỆC (SCOPE & TASKS)
 
-1. **Chuyển sang `/plan`** để lập kế hoạch chi tiết từng file cần sửa và các unit test kiểm chứng đi kèm.
-2. **Triển khai code (`/code`)** theo phác đồ an toàn, kiểm tra regression và chạy lại bộ test suite lâm sàng.
+### 🚀 MVP Tasks:
+- [ ] Xóa các bước setup Python và quantize INT8 trong `.github/workflows/android.yml`.
+- [ ] Cập nhật target APK trong `.github/workflows/android.yml` để chọn bản `arm64-v8a` (hoặc cấu hình `app/build.gradle.kts` tinh gọn chỉ target `arm64-v8a`).
+- [ ] Kiểm tra build thử nghiệm local để đảm bảo assembleRelease/assembleDebug ra đúng file APK 64-bit nhẹ ~254 MB.
+- [ ] Kiểm tra toàn bộ Unit Tests của project để đảm bảo không bị ảnh hưởng.
+
+---
+
+## 5. ƯỚC TÍNH SƠ BỘ
+- **Độ phức tạp:** Đơn giản (Chỉ tinh chỉnh workflow CI/CD và cấu hình build).
+- **Rủi ro:** Không có rủi ro về mã nguồn hay logic suy luận TTS.
+- **Kết quả đầu ra:** File APK Release tải từ GitHub sẽ có dung lượng ~254 MB (giống hệt bản Debug ARM64 bạn vừa build).
+
+---
+
+## 6. BƯỚC TIẾP THEO
+→ Chuyển sang `/plan` để lên kế hoạch sửa đổi chi tiết các file và kiểm thử.

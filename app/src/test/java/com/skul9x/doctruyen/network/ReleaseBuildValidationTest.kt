@@ -38,12 +38,14 @@ class ReleaseBuildValidationTest {
         assertTrue("Release build must reference proguard-rules.pro",
             gradleContent.contains("\"proguard-rules.pro\""))
 
-        // 2. ABI Splits and Universal APK
-        assertTrue("ABI splits must be enabled", gradleContent.contains("isEnable = true"))
-        assertTrue("ABI splits must include arm64-v8a", gradleContent.contains("\"arm64-v8a\""))
-        assertTrue("ABI splits must include armeabi-v7a", gradleContent.contains("\"armeabi-v7a\""))
-        assertTrue("ABI splits must include x86_64", gradleContent.contains("\"x86_64\""))
-        assertTrue("Universal APK must be generated", gradleContent.contains("isUniversalApk = true"))
+        // 2. ABI Architecture & Packaging Integrity (arm64-v8a unified)
+        assertTrue("ABI target must include arm64-v8a", gradleContent.contains("\"arm64-v8a\""))
+        assertFalse("Legacy armeabi-v7a must be excluded from build targets",
+            gradleContent.contains("\"armeabi-v7a\""))
+        assertFalse("Legacy x86_64 must be excluded from build targets",
+            gradleContent.contains("\"x86_64\""))
+        assertTrue("ABI splits multi-APK generation must be disabled for single unified APK",
+            gradleContent.contains("isEnable = false"))
 
         // 3. Check gradle.properties for R8 safety flag
         val propertiesFile = resolveFile("gradle.properties")
